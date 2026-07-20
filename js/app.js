@@ -1,4 +1,4 @@
-﻿class App {
+class App {
     constructor() {
         this.checkAuth();
         this.bindEvents();
@@ -103,4 +103,27 @@
 
 document.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
+    
+    // Listener Global para atualização em tempo real do Firebase
+    window.addEventListener('fluxo:dataChanged', (e) => {
+        // Tenta recarregar a tela atual se as classes existirem
+        if (window.UsersApp && typeof window.UsersApp.loadUsers === 'function') {
+            window.UsersApp.loadUsers();
+            if (typeof window.UsersApp.renderUsers === 'function') window.UsersApp.renderUsers();
+        }
+        if (window.FinanceApp && typeof window.FinanceApp.loadData === 'function') {
+            window.FinanceApp.loadData();
+            if (typeof window.FinanceApp.renderCards === 'function') window.FinanceApp.renderCards();
+            if (typeof window.FinanceApp.renderTransactions === 'function') window.FinanceApp.renderTransactions();
+        }
+        if (window.CardsApp && typeof window.CardsApp.init === 'function') {
+            window.CardsApp.init();
+        }
+        if (window.AccountsApp && typeof window.AccountsApp.init === 'function') {
+            window.AccountsApp.init();
+        }
+        if (window.TransactionsApp && typeof window.TransactionsApp.init === 'function') {
+            window.TransactionsApp.init();
+        }
+    });
 });
