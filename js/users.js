@@ -161,6 +161,7 @@ class UsersApp {
         this.editingUserId = id;
         document.getElementById('userId').value = user.id;
         document.getElementById('userNameInput').value = user.name || '';
+        document.getElementById('userCpfInput').value = user.cpf || '';
         document.getElementById('userAvatarInput').value = user.avatar || '';
         document.getElementById('userEmailInput').value = user.email || '';
         document.getElementById('userRoleInput').value = user.role || 'usuario';
@@ -187,6 +188,7 @@ class UsersApp {
         e.preventDefault();
         
         const name = document.getElementById('userNameInput').value.trim();
+        const cpf = document.getElementById('userCpfInput').value.trim();
         const email = document.getElementById('userEmailInput').value.trim();
         let avatar = document.getElementById('userAvatarInput').value.trim();
         const password = document.getElementById('userPasswordInput').value;
@@ -222,6 +224,7 @@ class UsersApp {
             if (userIndex !== -1) {
                 const user = this.users[userIndex];
                 user.name = name;
+                user.cpf = cpf;
                 user.email = email;
                 user.avatar = avatar;
                 if (password) user.password = password; // Only update if typed
@@ -246,6 +249,7 @@ class UsersApp {
             const newUser = {
                 id: window.Utils.generateId(),
                 name,
+                cpf,
                 email,
                 password,
                 avatar,

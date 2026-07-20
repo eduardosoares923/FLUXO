@@ -1,4 +1,4 @@
-﻿// auth.js
+// auth.js
 
 class AuthManager {
     constructor() {
@@ -93,7 +93,7 @@ class AuthManager {
 
     handleLogin(e) {
         e.preventDefault();
-        const email = document.getElementById('email').value.trim();
+        const loginId = document.getElementById('email').value.trim().toLowerCase();
         const password = document.getElementById('password').value;
         const rememberMe = document.getElementById('rememberMe').checked;
         const btn = document.getElementById('loginBtn');
@@ -103,7 +103,14 @@ class AuthManager {
 
         setTimeout(() => {
             const users = Storage.get('users') || [];
-            const user = users.find(u => u.email === email && u.password === password);
+            const user = users.find(u => 
+                (
+                    (u.email && u.email.toLowerCase() === loginId) || 
+                    (u.name && u.name.toLowerCase() === loginId) || 
+                    (u.cpf && u.cpf === loginId)
+                ) && 
+                u.password === password
+            );
 
             if (user) {
                 if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
