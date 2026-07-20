@@ -1,0 +1,252 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluxo de Caixa | Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
+</head>
+<body>
+
+    <div class="dashboard-layout">
+                        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-wallet"></i>
+                    <span>FluxoPro</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="nav-item ">
+                    <i class="fa-solid fa-chart-pie"></i> Dashboard
+                </a>
+                <a href="transactions.html" class="nav-item ">
+                    <i class="fa-solid fa-money-bill-transfer"></i> Lançamentos
+                </a>
+                <a href="cards.html" class="nav-item ">
+                    <i class="fa-solid fa-credit-card"></i> Cartões
+                </a>
+                <a href="accounts.html" class="nav-item ">
+                    <i class="fa-solid fa-users"></i> Contas & Perfis
+                </a>
+                <a href="reports.html" class="nav-item ">
+                    <i class="fa-solid fa-chart-line"></i> Relatórios
+                </a>
+                <a href="users.html" class="nav-item active" id="navUsers" data-requires-role="admin">
+                    <i class="fa-solid fa-user-shield"></i> Usuários
+                </a>
+                <a href="settings.html" class="nav-item ">
+                    <i class="fa-solid fa-gear"></i> Configurações
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+                                    <!-- Header -->
+            <header class="top-header">
+                <div class="header-title">Gerenciar Usuários</div>
+                <div class="header-actions">
+                    
+                    <button id="themeToggle" class="btn btn-icon">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    
+                    <div class="user-profile-dropdown" style="position: relative;">
+                        <div class="user-profile" id="userProfileBtn">
+                            <div class="user-info">
+                                <div class="user-name" id="userName">Usuário</div>
+                                <div class="user-role" id="userRoleTitle">Administrador</div>
+                            </div>
+                            <img src="" alt="Avatar" class="user-avatar" id="userAvatar">
+                        </div>
+                        <div class="dropdown-menu glass-panel" id="userDropdown">
+                            <a href="#profile" class="dropdown-item"><i class="fa-solid fa-user"></i> Meu Perfil</a>
+                            <a href="#password" class="dropdown-item"><i class="fa-solid fa-key"></i> Alterar Senha</a>
+                            <a href="#" id="logoutBtn" class="dropdown-item"><i class="fa-solid fa-right-from-bracket"></i> Sair</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Users Content -->
+            <div class="dashboard-container" style="padding-top: 1rem;">
+                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                    <h2 class="section-title">Gerenciamento de Perfis</h2>
+                    <button class="btn btn-primary" onclick="window.UsersApp.openNewModal()">
+                        <i class="fa-solid fa-plus"></i> Novo Perfil
+                    </button>
+                </div>
+                
+                <div class="glass-panel" style="padding: 1.5rem; border-radius: var(--radius-lg);">
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 250px;">
+                            <input type="text" class="form-control" id="searchUser" placeholder="Pesquisar por nome ou email...">
+                        </div>
+                        <div class="form-group" style="width: 200px;">
+                            <select class="form-control" id="filterRole">
+                                <option value="all">Todos os Cargos</option>
+                                <option value="admin">Administrador</option>
+                                <option value="gerente">Gerente</option>
+                                <option value="Usuário">Usuário</option>
+                                <option value="visitante">Visitante</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="width: 150px;">
+                            <select class="form-control" id="filterStatus">
+                                <option value="all">Status</option>
+                                <option value="ativo">Ativo</option>
+                                <option value="inativo">Inativo</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--glass-border);">
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500;">Perfil</th>
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500;">Email</th>
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500;">Nível</th>
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500;">Status</th>
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500;">Último Acesso</th>
+                                    <th style="padding: 1rem; color: var(--text-secondary); font-weight: 500; text-align: right;">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- Users rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- User Modal -->
+            <div class="modal" id="userModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                <div class="modal-content glass-panel" style="width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto; padding: 2rem; border-radius: var(--radius-lg); position: relative;">
+                    <button class="modal-close" onclick="window.UsersApp.closeModal()" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                    <h2 class="modal-title" id="userModalTitle" style="margin-bottom: 1.5rem;">Novo Perfil</h2>
+                    
+                    <form id="userForm">
+                        <input type="hidden" id="userId">
+                        
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label">Nome Completo</label>
+                            <input type="text" class="form-control" id="userNameInput" required>
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label">URL da Foto (Avatar)</label>
+                            <input type="url" class="form-control" id="userAvatarInput" placeholder="https://...">
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 1rem;">
+                            <label class="form-label">E-mail</label>
+                            <input type="email" class="form-control" id="userEmailInput" required>
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Senha</label>
+                                <input type="password" class="form-control" id="userPasswordInput" minlength="6">
+                                <small style="color: var(--text-secondary); font-size: 0.75rem;" id="passwordHelp">Mínimo 6 caracteres.</small>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Confirmar Senha</label>
+                                <input type="password" class="form-control" id="userPasswordConfirmInput">
+                            </div>
+                        </div>
+
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Nível de Acesso</label>
+                                <select class="form-control" id="userRoleInput" required>
+                                    <option value="Usuário">Usuário</option>
+                                    <option value="gerente">Gerente</option>
+                                    <option value="admin">Administrador</option>
+                                    <option value="visitante">Visitante</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Status</label>
+                                <select class="form-control" id="userStatusInput" required>
+                                    <option value="ativo">Ativo</option>
+                                    <option value="inativo">Inativo</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group" style="margin-bottom: 1.5rem;">
+                            <label class="form-label">ObservAções</label>
+                            <textarea class="form-control" id="userNotesInput" rows="2"></textarea>
+                        </div>
+                        
+                        <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                            <button type="button" class="btn btn-secondary" onclick="window.UsersApp.closeModal()" style="background: var(--bg-secondary);">Cancelar</button>
+                            <button type="submit" class="btn btn-success">Salvar Perfil</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Excluir Usuário -->
+    <div class="modal" id="deleteUserModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content glass-panel" style="width: 100%; max-width: 500px; padding: 2rem; border-radius: var(--radius-lg); position: relative;">
+            <div class="modal-header">
+                <h3 class="modal-title" style="color: var(--danger);">Excluir Usuário</h3>
+                <button class="modal-close" id="closeDeleteUserModalBtn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="deleteUserContent">
+                <p style="margin-bottom: 1rem;">Tem certeza que deseja excluir o perfil de <strong id="deleteUserName"></strong>?</p>
+                <div class="alert danger" style="background: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger); padding: 1rem; border-radius: 4px; margin-bottom: 1rem; display: none;" id="deleteUserWarning">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: var(--danger); margin-right: 0.5rem;"></i>
+                    Este perfil possui <strong id="deleteUserTxCount">0</strong> vinculados a ele.
+                </div>
+                
+                <div id="deleteUserOptions" style="display: none; margin-bottom: 1.5rem;">
+                    <label class="form-label">O que fazer com os dados?</label>
+                    <div style="margin-bottom: 0.5rem;">
+                        <input type="radio" name="deleteUserAction" id="actionDeleteUserTx" value="delete" checked>
+                        <label for="actionDeleteUserTx">Excluir todos os dados (TransAções, Contas e Cartões)</label>
+                    </div>
+                    <div style="margin-bottom: 0.5rem;">
+                        <input type="radio" name="deleteUserAction" id="actionTransferUserTx" value="transfer">
+                        <label for="actionTransferUserTx">Transferir tudo para outro Usuário:</label>
+                    </div>
+                    <select class="form-control" id="deleteUserTransferSelect" style="margin-top: 0.5rem; display: none;">
+                        <!-- Usuários preenchidos via JS -->
+                    </select>
+                </div>
+                
+                <input type="hidden" id="deleteUserIdInput">
+                
+                <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                    <button class="btn btn-secondary" style="flex: 1; background: var(--bg-secondary); border: 1px solid var(--glass-border);" id="cancelDeleteUserBtn">Cancelar</button>
+                    <button class="btn btn-danger" style="flex: 1; background: var(--danger); box-shadow: none;" id="confirmDeleteUserBtn">Sim, Excluir</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/users.js"></script>
+</body>
+</html>
+
+
+

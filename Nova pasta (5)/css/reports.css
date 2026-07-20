@@ -1,0 +1,148 @@
+/* css/reports.css */
+.reports-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 900px) {
+    .reports-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.chart-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+}
+
+.chart-header {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.chart-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.chart-container {
+    position: relative;
+    flex: 1;
+    min-height: 300px;
+    width: 100%;
+}
+
+.summary-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.summary-box {
+    flex: 1;
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.summary-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.summary-value.income { color: var(--success); }
+.summary-value.expense { color: var(--danger); }
+
+/* Novas Classes para Tarefa 04 */
+.suggestion-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    transition: transform 0.2s;
+}
+
+.suggestion-card:hover {
+    transform: translateY(-2px);
+}
+
+.suggestion-icon {
+    font-size: 1.5rem;
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+}
+
+.suggestion-content {
+    flex: 1;
+}
+
+.suggestion-title {
+    font-weight: 600;
+    margin-bottom: 0.2rem;
+    color: var(--text-primary);
+}
+
+.suggestion-desc {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.comparison-card {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(0,0,0,0.1) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.comparison-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 4px;
+    background: var(--accent-primary);
+}
+
+.comparison-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 1rem;
+}
+
+.comparison-winner {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.comparison-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+}

@@ -1,0 +1,86 @@
+    <!-- Modal Nova Transação -->
+    <div class="modal-overlay" id="transactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Nova Transação</h3>
+                <button class="modal-close" id="closeModalBtn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="transactionForm">
+                <input type="hidden" id="editTxId" value="">
+                <div class="form-group">
+                    <label class="form-label">Tipo de Transação</label>
+                    <select class="form-control" id="txType" required>
+                        <option value="expense">Despesa (Saída)</option>
+                        <option value="income">Receitas (Entrada)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Descrição</label>
+                    <input type="text" class="form-control" id="txDesc" placeholder="Ex: Mercado, Salário, Energia" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Valor (R$)</label>
+                        <input type="number" step="0.01" class="form-control" id="txAmount" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" id="txDate" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Categoria</label>
+                        <select class="form-control" id="txCategory" required>
+                            <option value="Alimentação">Alimentação</option>
+                            <option value="Moradia">Moradia</option>
+                            <option value="Transporte">Transporte</option>
+                            <option value="Educação">Educação</option>
+                            <option value="Lazer">Lazer</option>
+                            <option value="Saúde">Saúde</option>
+                            <option value="Salário">Salário</option>
+                            <option value="Investimentos">Investimentos</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Forma de Pgto</label>
+                        <select class="form-control" id="txPaymentMethod" required>
+                            <option value="account">Conta Corrente</option>
+                            <!-- Cartões inseridos via JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quem Gastou?</label>
+                        <input type="text" class="form-control" id="txPerson" list="personList" placeholder="Ex: Eu, Mãe, João..." required>
+                        <datalist id="personList">
+                            <option value="Eu"></option>
+                            <!-- Pessoas inseridas via JS -->
+                        </datalist>
+                    </div>
+                </div>
+                
+                <div class="form-row" id="installmentsWrapper">
+                    <div class="form-group">
+                        <label class="form-label">Parcelado?</label>
+                        <select class="form-control" id="txInstallmentOption">
+                            <option value="no">Não (À vista)</option>
+                            <option value="yes">Sim (Parcelado)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="installmentsCountGroup" style="display: none;">
+                        <label class="form-label">Qtd. Parcelas</label>
+                        <input type="number" class="form-control" id="txInstallments" min="2" max="72" value="2">
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="window.UI.closeModal('transactionModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-success">Salvar Transação</button>
+                </div>
+            </form>
+        </div>
+    </div>

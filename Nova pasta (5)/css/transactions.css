@@ -1,0 +1,132 @@
+/* css/transactions.css */
+.filters-section {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 200px;
+}
+
+.filter-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.filter-input {
+    background: rgba(0,0,0,0.2);
+    border: 1px solid var(--glass-border);
+    color: var(--text-primary);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    outline: none;
+    transition: var(--transition);
+}
+
+[data-theme="light"] .filter-input {
+    background: #f8fafc;
+}
+
+.filter-input:focus {
+    border-color: var(--accent-primary);
+}
+
+.transactions-table-container {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    overflow-x: auto;
+}
+
+.transactions-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.transactions-table th {
+    background: rgba(0,0,0,0.2);
+    padding: 1rem 1.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+[data-theme="light"] .transactions-table th {
+    background: #e2e8f0;
+}
+
+.transactions-table td {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--glass-border);
+    vertical-align: middle;
+}
+
+.transactions-table tr:last-child td {
+    border-bottom: none;
+}
+
+.transactions-table tr:hover {
+    background: rgba(255,255,255,0.02);
+}
+
+[data-theme="light"] .transactions-table tr:hover {
+    background: rgba(0,0,0,0.02);
+}
+
+.tx-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 99px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.tx-badge.income {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--success);
+}
+
+.tx-badge.expense {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}
+
+.tx-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: var(--radius-md);
+    transition: var(--transition);
+}
+
+.btn-icon:hover {
+    background: rgba(255,255,255,0.1);
+    color: var(--text-primary);
+}
+
+.btn-icon.delete:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--danger);
+}

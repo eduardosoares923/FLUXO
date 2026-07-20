@@ -1,0 +1,114 @@
+/* css/accounts.css */
+.accounts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.account-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xl);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+}
+
+.account-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-3px);
+}
+
+.account-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.account-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    color: white;
+}
+
+.account-title-group {
+    flex: 1;
+}
+
+.account-name {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.2rem;
+}
+
+.account-owner {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.account-balance-group {
+    background: rgba(0,0,0,0.1);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
+}
+
+[data-theme="light"] .account-balance-group {
+    background: #f8fafc;
+}
+
+.balance-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+.balance-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.account-actions {
+    margin-top: auto;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.add-account-btn {
+    border: 2px dashed var(--glass-border);
+    border-radius: var(--radius-xl);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: transparent;
+    cursor: pointer;
+    transition: var(--transition);
+    min-height: 200px;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.add-account-btn:hover {
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.05);
+}
+
+.add-account-btn i {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}

@@ -1,0 +1,125 @@
+.login-body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 40%),
+              radial-gradient(circle at bottom left, rgba(16, 185, 129, 0.1), transparent 40%);
+  background-color: var(--bg-primary);
+}
+
+.login-container {
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem;
+  position: relative;
+  z-index: 10;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.login-logo {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-logo i {
+  color: var(--accent-primary);
+}
+
+.login-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.login-form .btn-primary {
+  width: 100%;
+  margin-top: 1rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-form .btn-primary .btn-text {
+  transition: opacity 0.2s;
+}
+
+.login-form .btn-primary.loading .btn-text {
+  opacity: 0;
+}
+
+.login-form .btn-primary.loading::after {
+  content: "";
+  position: absolute;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid white;
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.input-with-icon {
+  position: relative;
+}
+
+.input-with-icon i {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+}
+
+.input-with-icon .form-control {
+  padding-left: 2.75rem;
+}
+
+.input-with-icon i.password-toggle {
+  position: absolute;
+  left: auto;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.input-with-icon i.password-toggle:hover {
+  color: var(--text-primary);
+}
+
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
+
+.checkbox-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.checkbox-wrapper input {
+  accent-color: var(--accent-primary);
+  width: 1rem;
+  height: 1rem;
+}

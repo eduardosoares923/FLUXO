@@ -1,0 +1,223 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluxo de Caixa | Relatórios</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/reports.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF e AutoTable para Exportação PDF Profissional -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <!-- ExcelJS e FileSaver para Exportação Excel Avançada -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+<script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
+</head>
+<body>
+
+    <div class="dashboard-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-wallet"></i>
+                    <span>FluxoPro</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="nav-item ">
+                    <i class="fa-solid fa-chart-pie"></i> Dashboard
+                </a>
+                <a href="transactions.html" class="nav-item ">
+                    <i class="fa-solid fa-money-bill-transfer"></i> Lançamentos
+                </a>
+                <a href="cards.html" class="nav-item ">
+                    <i class="fa-solid fa-credit-card"></i> Cartões
+                </a>
+                <a href="accounts.html" class="nav-item ">
+                    <i class="fa-solid fa-users"></i> Contas & Perfis
+                </a>
+                <a href="reports.html" class="nav-item active">
+                    <i class="fa-solid fa-chart-line"></i> Relatórios
+                </a>
+                <a href="users.html" class="nav-item " id="navUsers" data-requires-role="admin">
+                    <i class="fa-solid fa-user-shield"></i> Usuários
+                </a>
+                <a href="settings.html" class="nav-item ">
+                    <i class="fa-solid fa-gear"></i> Configurações
+                </a>
+            </nav>
+        </aside>
+
+        <main class="main-content">
+            <!-- Header -->
+            <header class="top-header">
+                <div class="header-title">Análises e Gráficos</div>
+                <div class="header-actions">
+                    
+                    <button id="themeToggle" class="btn btn-icon">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    
+                    <div class="user-profile-dropdown" style="position: relative;">
+                        <div class="user-profile" id="userProfileBtn">
+                            <div class="user-info">
+                                <div class="user-name" id="userName">Usuário</div>
+                                <div class="user-role" id="userRoleTitle">Administrador</div>
+                            </div>
+                            <img src="" alt="Avatar" class="user-avatar" id="userAvatar">
+                        </div>
+                        <div class="dropdown-menu glass-panel" id="userDropdown">
+                            <a href="#profile" class="dropdown-item"><i class="fa-solid fa-user"></i> Meu Perfil</a>
+                            <a href="#password" class="dropdown-item"><i class="fa-solid fa-key"></i> Alterar Senha</a>
+                            <a href="#" id="logoutBtn" class="dropdown-item"><i class="fa-solid fa-right-from-bracket"></i> Sair</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- CONTAINER PARA EXPORTAÇÃO (tudo dentro daqui vai pro PDF) -->
+            <div class="dashboard-container" id="reportExportArea">
+                
+                <!-- FILTER AND EXPORT SECTION -->
+                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <h2 class="section-title" style="margin: 0;">Relatório Geral</h2>
+                        <select id="reportPersonFilter" class="form-control" style="width: auto; min-width: 200px; padding: 0.4rem 1rem;">
+                            <option value="todos">Todos (Consolidado)</option>
+                            <!-- Outros preenchidos dinamicamente -->
+                        </select>
+                    </div>
+                    
+                    <!-- Não aparecerão no PDF (escondidos via css na hora do print se necessário) -->
+                    <div class="export-actions" style="display: flex; gap: 0.5rem;" data-html2canvas-ignore="true">
+                        <button class="btn btn-primary" id="btnExportPDF"><i class="fa-solid fa-file-pdf"></i> PDF</button>
+                        <button class="btn btn-primary" id="btnExportExcel" style="background: var(--success);"><i class="fa-solid fa-file-excel"></i> Excel</button>
+                        <button class="btn btn-primary" id="btnExportCSV" style="background: #3b82f6;"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                    </div>
+                </div>
+
+                <!-- RESUMO PRINCIPAL -->
+                <div class="summary-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="summary-box">
+                        <div class="summary-label">Receitas Total</div>
+                        <div class="summary-value income" id="repIncome">R$ 0,00</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">Despesa Total</div>
+                        <div class="summary-value expense" id="repExpense">R$ 0,00</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">Economia no Período</div>
+                        <div class="summary-value" id="repEconomy">R$ 0,00</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">Patrimônio / Saldo Contas</div>
+                        <div class="summary-value" id="repEquity">R$ 0,00</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">Faturas de Cartões</div>
+                        <div class="summary-value" style="color: var(--warning);" id="repCards">R$ 0,00</div>
+                    </div>
+                    <div class="summary-box">
+                        <div class="summary-label">Comprometimento Renda</div>
+                        <div class="summary-value" id="repCommitment">0%</div>
+                    </div>
+                </div>
+
+                <!-- Sugestões INTELIGENTES -->
+                <div class="section-header" style="margin-top: 2rem;">
+                    <h3 class="section-title"><i class="fa-solid fa-lightbulb" style="color: var(--warning);"></i> Sugestões Inteligentes</h3>
+                </div>
+                <div id="aiSugGestãonsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+                    <!-- Preenchido via JS -->
+                </div>
+
+                <!-- Comparação ENTRE PESSOAS (Só exibe se filtro = Todos) -->
+                <div id="comparisonSection" style="display: none; margin-bottom: 2rem;">
+                    <div class="section-header" style="margin-top: 2rem;">
+                        <h3 class="section-title"><i class="fa-solid fa-users"></i> Comparação entre Pessoas</h3>
+                    </div>
+                    <div class="summary-row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;" id="comparisonCards">
+                        <!-- Preenchido via JS -->
+                    </div>
+                </div>
+
+                <!-- Gráficos (GRID LARGO) -->
+                <div class="reports-grid" style="grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));">
+                    
+                    <div class="chart-card">
+                        <div class="chart-header"><div class="chart-title">Receitas vs Despesa (Balanço Geral)</div></div>
+                        <div class="chart-container"><canvas id="chartIncomeVsExpense"></canvas></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header"><div class="chart-title">Gastos por Categoria</div></div>
+                        <div class="chart-container"><canvas id="chartCategory"></canvas></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header"><div class="chart-title">Fluxo de Caixa Mensal</div></div>
+                        <div class="chart-container"><canvas id="chartMonthlyFlow"></canvas></div>
+                    </div>
+                    
+                    <div class="chart-card" id="chartPersonContainer">
+                        <div class="chart-header"><div class="chart-title">Despesas por Pessoa</div></div>
+                        <div class="chart-container"><canvas id="chartPerson"></canvas></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header"><div class="chart-title">Gastos por Conta Bancária</div></div>
+                        <div class="chart-container"><canvas id="chartAccounts"></canvas></div>
+                    </div>
+
+                    <div class="chart-card">
+                        <div class="chart-header"><div class="chart-title">Gastos por Cartão de Crédito</div></div>
+                        <div class="chart-container"><canvas id="chartCards"></canvas></div>
+                    </div>
+                    
+                    <div class="chart-card" style="grid-column: 1 / -1;">
+                        <div class="chart-header"><div class="chart-title">Evolução Histórica do Saldo</div></div>
+                        <div class="chart-container"><canvas id="chartBalanceEvoluçãon"></canvas></div>
+                    </div>
+
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Excel Export Loading Overlay -->
+    <div id="excelLoadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; flex-direction: column; align-items: center; justify-content: center; color: white;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 3rem; margin-bottom: 1rem; color: var(--success);"></i>
+        <h2 style="margin: 0; font-family: 'Calibri', sans-serif;">Gerando Relatório Corporativo...</h2>
+        <p style="margin-top: 0.5rem; color: #9ca3af;">Processando dados, montando abas e renderizando Gráficos.</p>
+    </div>
+
+    <!-- Hidden Charts for Excel Export -->
+    <div id="hiddenChartsContainer" style="position: absolute; top: -9999px; left: -9999px; width: 800px;">
+        <canvas id="hiddenChartIncExp"></canvas>
+        <canvas id="hiddenChartMonthlyComp"></canvas>
+        <canvas id="hiddenChartInvest"></canvas>
+    </div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/reports.js"></script>
+</body>
+</html>
+
+
+

@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluxo de Caixa | Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
+</head>
+<body>
+
+    <div class="dashboard-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-wallet"></i>
+                    <span>FluxoPro</span>
+                </div>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="dashboard.html" class="nav-item active">
+                    <i class="fa-solid fa-chart-pie"></i> Dashboard
+                </a>
+                <a href="transactions.html" class="nav-item ">
+                    <i class="fa-solid fa-money-bill-transfer"></i> Lançamentos
+                </a>
+                <a href="cards.html" class="nav-item ">
+                    <i class="fa-solid fa-credit-card"></i> Cartões
+                </a>
+                <a href="accounts.html" class="nav-item ">
+                    <i class="fa-solid fa-users"></i> Contas & Perfis
+                </a>
+                <a href="reports.html" class="nav-item ">
+                    <i class="fa-solid fa-chart-line"></i> Relatórios
+                </a>
+                <a href="users.html" class="nav-item " id="navUsers" data-requires-role="admin">
+                    <i class="fa-solid fa-user-shield"></i> Usuários
+                </a>
+                <a href="settings.html" class="nav-item ">
+                    <i class="fa-solid fa-gear"></i> Configurações
+                </a>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+                                    <!-- Header -->
+            <header class="top-header">
+                <div class="header-title">Visão Geral</div>
+                <div class="header-actions">
+                    
+                    <button id="themeToggle" class="btn btn-icon">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    
+                    <div class="user-profile-dropdown" style="position: relative;">
+                        <div class="user-profile" id="userProfileBtn">
+                            <div class="user-info">
+                                <div class="user-name" id="userName">Usuário</div>
+                                <div class="user-role" id="userRoleTitle">Administrador</div>
+                            </div>
+                            <img src="" alt="Avatar" class="user-avatar" id="userAvatar">
+                        </div>
+                        <div class="dropdown-menu glass-panel" id="userDropdown">
+                            <a href="#profile" class="dropdown-item"><i class="fa-solid fa-user"></i> Meu Perfil</a>
+                            <a href="#password" class="dropdown-item"><i class="fa-solid fa-key"></i> Alterar Senha</a>
+                            <a href="#" id="logoutBtn" class="dropdown-item"><i class="fa-solid fa-right-from-bracket"></i> Sair</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dashboard Content -->
+            <div class="dashboard-container">
+                
+                <!-- Dashboard Control Panel -->
+                <div class="dashboard-controls glass-panel" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; padding: 1rem; border-radius: 12px;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <h2 style="margin: 0; font-size: 1.2rem;">Painel Executivo</h2>
+                        <select id="globalDateFilter" class="form-control" style="width: auto; min-width: 150px; font-weight: bold; background-color: var(--bg-color);">
+                            <option value="this_month">Este Mês</option>
+                            <option value="last_month">Mês Passado</option>
+                            <option value="this_quarter">Este Trimestre</option>
+                            <option value="this_year">Este Ano</option>
+                            <option value="all_time">Todo o Período</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn btn-outline" onclick="window.location.href='reports.html'">
+                            <i class="fa-solid fa-file-pdf"></i> Exportar Relatório
+                        </button>
+                        <button class="btn btn-primary" onclick="window.location.href='transactions.html'">
+                            <i class="fa-solid fa-plus"></i> Novo Lançamento
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary Cards -->
+                <div class="summary-grid">
+                    <div class="summary-card">
+                        <div class="card-title">
+                            Saldo Atual <i class="fa-solid fa-building-columns"></i>
+                        </div>
+                        <div class="card-value" id="currentBalance">R$ 0,00</div>
+                        <div class="trend-indicator" id="balanceTrend" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">
+                            <span>--</span> vs período anterior
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card success">
+                        <div class="card-title">
+                            Receitas <i class="fa-solid fa-arrow-trend-up"></i>
+                        </div>
+                        <div class="card-value" id="monthlyIncome">R$ 0,00</div>
+                        <div class="trend-indicator" id="incomeTrend" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">
+                            <span>--</span> vs período anterior
+                        </div>
+                    </div>
+                    
+                    <div class="summary-card danger">
+                        <div class="card-title">
+                            Despesas <i class="fa-solid fa-arrow-trend-down"></i>
+                        </div>
+                        <div class="card-value" id="monthlyExpense">R$ 0,00</div>
+                        <div class="trend-indicator" id="expenseTrend" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">
+                            <span>--</span> vs período anterior
+                        </div>
+                    </div>
+
+                    <div class="summary-card warning">
+                        <div class="card-title">
+                            Faturas de Cartões <i class="fa-solid fa-credit-card"></i>
+                        </div>
+                        <div class="card-value" id="creditCardTotal">R$ 0,00</div>
+                        <div class="trend-indicator" id="cardTrend" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">
+                            Próximos 30 dias
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Budget Tracking Section -->
+                <div class="data-section" id="budgetSection" style="margin-bottom: 2rem;">
+                    <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin: 0;"><i class="fa-solid fa-bullseye" style="color: var(--warning-color);"></i> Orçamento Mensal Consolidado</h3>
+                            <span id="budgetStatusText" style="font-weight: bold; color: var(--text-color);">R$ 0,00 / R$ 0,00</span>
+                        </div>
+                        <div style="width: 100%; height: 12px; background-color: var(--glass-border); border-radius: 6px; overflow: hidden; position: relative;">
+                            <div id="budgetProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, var(--success-color), var(--warning-color)); transition: width 1s ease-in-out;"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-secondary);">
+                            <span>0%</span>
+                            <span id="budgetPercentText">0% Comprometido</span>
+                            <span>100%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main Charts Grid -->
+                <div class="charts-grid" style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+                    <!-- Gráfico Principal: Fluxo Mensal e Projeção -->
+                    <div class="chart-container glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+                        <div class="section-header" style="margin-bottom: 1rem;">
+                            <h2 class="section-title">Receitas vs Despesas (Fluxo)</h2>
+                        </div>
+                        <div style="position: relative; height: 300px; width: 100%;">
+                            <canvas id="mainFlowChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Gráfico Secundário: Linha do Tempo / Despesas por Categoria -->
+                    <div class="chart-container glass-panel" style="padding: 1.5rem; border-radius: 12px;">
+                        <div class="section-header" style="margin-bottom: 1rem;">
+                            <h2 class="section-title">Despesas por Categoria</h2>
+                        </div>
+                        <div style="position: relative; height: 300px; width: 100%;">
+                            <canvas id="categoryPieChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card Summary Section -->
+                <div class="data-section" id="dashboardCardsSection" style="display: none;">
+                    <div class="section-header">
+                        <h2 class="section-title">Resumo dos Cartões</h2>
+                    </div>
+                    <div id="dashboardCardsList" style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem; scroll-snap-type: x mandatory; align-items: stretch; scrollbar-width: thin; scrollbar-color: var(--glass-border) transparent;">
+                        <!-- Cards inseridos via JS -->
+                    </div>
+                </div>
+
+                <!-- Accounts Summary Section -->
+                <div class="data-section" id="dashboardAccountsSection" style="display: none;">
+                    <div class="section-header">
+                        <h2 class="section-title">Minhas Contas</h2>
+                    </div>
+                    <div id="dashboardAccountsList" style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem; scroll-snap-type: x mandatory; align-items: stretch; scrollbar-width: thin; scrollbar-color: var(--glass-border) transparent;">
+                        <!-- Contas inseridas via JS -->
+                    </div>
+                </div>
+
+                <!-- Persons Summary Section -->
+                <div class="data-section" id="dashboardPersonsSection" style="display: none;">
+                    <div class="section-header">
+                        <h2 class="section-title">Resumo Financeiro por Pessoa</h2>
+                    </div>
+                    <div id="dashboardPersonsList" style="display: flex; overflow-x: auto; gap: 1rem; padding-bottom: 1rem; scroll-snap-type: x mandatory; align-items: stretch; scrollbar-width: thin; scrollbar-color: var(--glass-border) transparent;">
+                        <!-- Pessoas inseridas via JS -->
+                    </div>
+                </div>
+
+                <!-- Recent Transactions -->
+                <div class="data-section">
+                    <div class="section-header">
+                        <h2 class="section-title">TransAções Recentes</h2>
+                        <button class="btn btn-primary" id="btnNovaTransacao">
+                            <i class="fa-solid fa-plus"></i> Nova Transação
+                        </button>
+                    </div>
+                    
+                    <div class="transaction-list" id="transactionList">
+                        <!-- Items inseridos via JS -->
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Nova Transação -->
+    <div class="modal-overlay" id="transactionModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Nova Transação</h3>
+                <button class="modal-close" id="closeModalBtn"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form id="transactionForm">
+                <input type="hidden" id="editTxId" value="">
+                <div class="form-group">
+                    <label class="form-label">Tipo de Transação</label>
+                    <select class="form-control" id="txType" required>
+                        <option value="expense">Despesa (Saída)</option>
+                        <option value="income">Receitas (Entrada)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Descrição</label>
+                    <input type="text" class="form-control" id="txDesc" placeholder="Ex: Mercado, Salário, Energia" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Valor (R$)</label>
+                        <input type="number" step="0.01" class="form-control" id="txAmount" placeholder="0.00" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Data</label>
+                        <input type="date" class="form-control" id="txDate" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Categoria</label>
+                        <select class="form-control" id="txCategory" required>
+                            <option value="Alimentação">Alimentação</option>
+                            <option value="Moradia">Moradia</option>
+                            <option value="Transporte">Transporte</option>
+                            <option value="Educação">Educação</option>
+                            <option value="Lazer">Lazer</option>
+                            <option value="Saúde">Saúde</option>
+                            <option value="Salário">Salário</option>
+                            <option value="Investimentos">Investimentos</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Forma de Pgto</label>
+                        <select class="form-control" id="txPaymentMethod" required>
+                            <option value="account">Conta Corrente</option>
+                            <!-- Cartões inseridos via JS -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Quem Gastou?</label>
+                        <input type="text" class="form-control" id="txPerson" list="personList" placeholder="Ex: Eu, Mãe, João..." required>
+                        <datalist id="personList">
+                            <option value="Eu"></option>
+                            <!-- Pessoas inseridas via JS -->
+                        </datalist>
+                    </div>
+                </div>
+                
+                <div class="form-row" id="installmentsWrapper">
+                    <div class="form-group">
+                        <label class="form-label">Parcelado?</label>
+                        <select class="form-control" id="txInstallmentOption">
+                            <option value="no">Não (À vista)</option>
+                            <option value="yes">Sim (Parcelado)</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="installmentsCountGroup" style="display: none;">
+                        <label class="form-label">Qtd. Parcelas</label>
+                        <input type="number" class="form-control" id="txInstallments" min="2" max="72" value="2">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 1rem;">Salvar Transação</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/finance.js"></script>
+</body>
+</html>
+
+
+

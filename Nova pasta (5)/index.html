@@ -1,0 +1,60 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fluxo de Caixa | Login</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/login.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
+</head>
+<body class="login-body">
+
+    <div class="login-container glass-panel">
+        <div class="login-header">
+            <div class="login-logo">
+                <i class="fa-solid fa-wallet"></i> Finance
+            </div>
+            <p class="login-subtitle">Bem-vindo de volta! Acesse sua conta.</p>
+        </div>
+
+        <form id="loginForm" class="login-form">
+            <div class="form-group">
+                <label for="email" class="form-label">E-mail</label>
+                <div class="input-with-icon">
+                    <i class="fa-solid fa-envelope"></i>
+                    <input type="email" id="email" class="form-control" placeholder="seu@email.com" required autocomplete="email">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password" class="form-label">Senha</label>
+                <div class="input-with-icon">
+                    <i class="fa-solid fa-lock"></i>
+                    <input type="password" id="password" class="form-control" placeholder="Sua senha" required autocomplete="current-password">
+                    <i class="fa-regular fa-eye password-toggle" id="togglePassword"></i>
+                </div>
+            </div>
+
+            <div class="login-options">
+                <label class="checkbox-wrapper">
+                    <input type="checkbox" id="rememberMe">
+                    Lembrar-me
+                </label>
+                <a href="#" id="forgotPassword" class="forgot-password">Esqueceu a senha?</a>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="loginBtn">
+                <span class="btn-text">Entrar</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="js/storage.js"></script>
+    <script src="js/auth.js"></script>
+</body>
+</html>
