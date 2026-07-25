@@ -185,23 +185,23 @@ class UsersApp {
         const personSelect = document.getElementById('userPersonInput');
         if (!personSelect) return;
 
-        const personsSet = new Set(['Eduardo', 'Mãe', 'Rodrigo']);
-        const txs = window.Storage.get('transactions') || [];
-        txs.forEach(t => { if (t.person && t.person.trim()) personsSet.add(t.person.trim()); });
-        const accs = window.Storage.get('accounts') || [];
-        accs.forEach(a => { if (a.owner && a.owner.trim()) personsSet.add(a.owner.trim()); });
-        const cards = window.Storage.get('cards') || [];
-        cards.forEach(c => { if (c.holder && c.holder.trim()) personsSet.add(c.holder.trim()); });
-        this.users.forEach(u => { if (u.person && u.person.trim()) personsSet.add(u.person.trim()); });
+        let personsList = window.Storage.get('persons') || [];
+        let personNames = personsList.map(p => p.name.trim());
 
-        if (selectedPerson) personsSet.add(selectedPerson.trim());
+        if (personNames.length === 0) {
+            personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+        }
+
+        if (selectedPerson && !personNames.some(p => p.toLowerCase() === selectedPerson.trim().toLowerCase())) {
+            personNames.push(selectedPerson.trim());
+        }
 
         personSelect.innerHTML = '';
-        personsSet.forEach(p => {
+        personNames.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p;
             opt.textContent = p;
-            if (p.toLowerCase() === selectedPerson.toLowerCase()) opt.selected = true;
+            if (p.toLowerCase() === selectedPerson.trim().toLowerCase()) opt.selected = true;
             personSelect.appendChild(opt);
         });
     }
