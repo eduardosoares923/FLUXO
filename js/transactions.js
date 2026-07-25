@@ -1,4 +1,4 @@
-﻿class TransactionsController {
+class TransactionsController {
     constructor() {
         let globalTx = window.Storage.get('transactions') || [];
         
@@ -36,6 +36,8 @@
             }
             this.allTransactions = globalTx;
             this.filteredTransactions = [...this.allTransactions];
+            this.accounts = window.Storage.get('accounts') || [];
+            this.cards = window.Storage.get('cards') || [];
             this.renderTable();
         });
 
@@ -81,8 +83,6 @@
                         this.renderTable();
                     });
                 });
-            });
-        }
             });
         }
     }

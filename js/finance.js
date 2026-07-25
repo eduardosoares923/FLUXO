@@ -1,4 +1,4 @@
-﻿class FinanceController {
+class FinanceController {
     constructor() {
         let allTransactions = window.Storage.get('transactions') || [];
         
@@ -12,6 +12,7 @@
         }
         
         this.transactions = allTransactions;
+        this.currentNavDate = new Date();
         this.init();
         this.bindEvents();
     }
@@ -25,8 +26,15 @@
         const paymentSelect = document.getElementById('txPaymentMethod');
         const personSelect = document.getElementById('txPerson');
         
-        const accounts = window.Storage.get('accounts') || [];
-        const cards = window.Storage.get('cards') || [];
+        let accounts = window.Storage.get('accounts') || [];
+        let cards = window.Storage.get('cards') || [];
+
+        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                accounts = accounts.filter(a => a.owner && window.currentUser.name && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
+                cards = cards.filter(c => c.holder && window.currentUser.name && c.holder.trim().toLowerCase() === window.currentUser.name.toLowerCase());
+            }
+        }
 
         // Popular Forma de Pgto com Contas e Cartões
         if (paymentSelect) {
@@ -166,7 +174,13 @@
         }
         
         window.addEventListener('dataUpdated', () => {
-            this.transactions = window.Storage.get('transactions') || [];
+            let allTx = window.Storage.get('transactions') || [];
+            if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+                if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                    allTx = allTx.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
+                }
+            }
+            this.transactions = allTx;
             this.updateDashboard();
         });
     }
@@ -233,7 +247,11 @@
                     const cards = window.Storage.get('cards') || [];
                     const oldCardIndex = cards.findIndex(c => c.id === oldCardId);
                     if (oldCardIndex > -1) {
-                        cards[oldCardIndex].usedLimit -= oldTx.amount;
+                        if (oldTx.type === 'expense') {
+                            cards[oldCardIndex].usedLimit -= oldTx.amount;
+                        } else if (oldTx.type === 'income') {
+                            cards[oldCardIndex].usedLimit += oldTx.amount;
+                        }
                         if (cards[oldCardIndex].usedLimit < 0) cards[oldCardIndex].usedLimit = 0;
                         promises.push(window.Storage.saveRecord('cards', cards[oldCardIndex]));
                     }
@@ -259,7 +277,12 @@
                     const cards = window.Storage.get('cards') || [];
                     const newCardIndex = cards.findIndex(c => c.id === newCardId);
                     if (newCardIndex > -1) {
-                        cards[newCardIndex].usedLimit += totalAmount;
+                        if (type === 'expense') {
+                            cards[newCardIndex].usedLimit += totalAmount;
+                        } else if (type === 'income') {
+                            cards[newCardIndex].usedLimit -= totalAmount;
+                            if (cards[newCardIndex].usedLimit < 0) cards[newCardIndex].usedLimit = 0;
+                        }
                         promises.push(window.Storage.saveRecord('cards', cards[newCardIndex]));
                     }
                 }
@@ -284,9 +307,9 @@
                     const newTx = {
                         id: window.Utils.generateId(),
                         type,
-                        description: ` (/)`,
+                        description: `${desc} (${i}/${installmentsCount})`,
                         amount: roundedAmount,
-                        date: `--`,
+                        date: `${yyyy}-${mm}-${dd}`,
                         category,
                         paymentMethod,
                         person,
@@ -321,7 +344,12 @@
                 const cards = window.Storage.get('cards') || [];
                 const cardIndex = cards.findIndex(c => c.id === cardId);
                 if (cardIndex > -1) {
-                    cards[cardIndex].usedLimit += totalAmount;
+                    if (type === 'expense') {
+                        cards[cardIndex].usedLimit += totalAmount;
+                    } else if (type === 'income') {
+                        cards[cardIndex].usedLimit -= totalAmount;
+                        if (cards[cardIndex].usedLimit < 0) cards[cardIndex].usedLimit = 0;
+                    }
                     promises.push(window.Storage.saveRecord('cards', cards[cardIndex]));
                 }
             }
@@ -348,7 +376,7 @@
         
         if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
             if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                cards = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === window.currentUser.name.toLowerCase());
+                cards = cards.filter(c => c.holder && window.currentUser.name && c.holder.trim().toLowerCase() === window.currentUser.name.toLowerCase());
             }
         }
         
@@ -437,7 +465,7 @@
         
         if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
             if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                accounts = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
+                accounts = accounts.filter(a => a.owner && window.currentUser.name && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
             }
         }
         

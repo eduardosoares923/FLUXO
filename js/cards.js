@@ -1,4 +1,4 @@
-﻿class CardsController {
+class CardsController {
     constructor() {
         this.cards = window.Storage.get('cards') || [];
         this.init();
@@ -117,7 +117,7 @@
         window.UI.openModal('invoiceModal');
     }
 
-    saveCard() {
+    async saveCard() {
         const editId = document.getElementById('editCardId').value;
         const name = document.getElementById('cardName').value.trim();
         const brand = document.getElementById('cardBrand').value.trim();
@@ -133,6 +133,7 @@
         }
 
         const limit = parseFloat(limitStr);
+        let cardToSave = null;
 
         if (editId) {
             const index = this.cards.findIndex(c => c.id === editId);
@@ -141,35 +142,49 @@
                     ...this.cards[index],
                     name, brand, holder, limit, color, closeDay, dueDay
                 };
+                cardToSave = this.cards[index];
             }
         } else {
             const last4 = Math.floor(1000 + Math.random() * 9000);
-            this.cards.push({
+            cardToSave = {
                 id: window.Utils.generateId(),
                 name, brand, holder, limit,
                 usedLimit: 0, color, closeDay, dueDay, last4
-            });
+            };
+            this.cards.push(cardToSave);
         }
 
-        window.Storage.set('cards', this.cards);
-        this.renderCards();
-        
-        window.UI.closeModal('cardModal');
-        const form = document.getElementById('cardForm');
-        if (form) form.reset();
-        
-        window.UI.showToast(editId ? 'Cartão atualizado com sucesso!' : 'Cartão adicionado com sucesso!', 'success');
+        if (cardToSave) {
+            try {
+                await window.Storage.saveRecord('cards', cardToSave);
+                this.renderCards();
+                
+                window.UI.closeModal('cardModal');
+                const form = document.getElementById('cardForm');
+                if (form) form.reset();
+                
+                window.UI.showToast(editId ? 'Cartão atualizado com sucesso!' : 'Cartão adicionado com sucesso!', 'success');
+            } catch (e) {
+                console.error(e);
+                window.UI.showToast('Erro ao salvar cartão', 'error');
+            }
+        }
     }
 
     deleteCard(id) {
         const card = this.cards.find(c => c.id === id);
         if (!card) return;
         
-        window.UI.confirmDialog(`Tem certeza que deseja excluir o cartão ${card.name}? Isso não excluirá as transações vinculadas a ele.`, 'Confirmação', () => {
-            this.cards = this.cards.filter(c => c.id !== id);
-            window.Storage.set('cards', this.cards);
-            this.renderCards();
-            window.UI.showToast('Cartão excluído com sucesso!', 'success');
+        window.UI.confirmDialog(`Tem certeza que deseja excluir o cartão ${card.name}? Isso não excluirá as transações vinculadas a ele.`, 'Confirmação', async () => {
+            try {
+                await window.Storage.deleteRecord('cards', id);
+                this.cards = this.cards.filter(c => c.id !== id);
+                this.renderCards();
+                window.UI.showToast('Cartão excluído com sucesso!', 'success');
+            } catch (e) {
+                console.error(e);
+                window.UI.showToast('Erro ao excluir cartão', 'error');
+            }
         });
     }
 

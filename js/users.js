@@ -1,4 +1,4 @@
-﻿class UsersApp {
+class UsersApp {
     constructor() {
         this.users = [];
         this.editingUserId = null;
@@ -159,13 +159,13 @@
         let html = '';
         PERMISSION_MODULES.forEach(mod => {
             const perms = permissions[mod.id] || [];
-            html += "<tr>
-                <td style='padding: 0.5rem;'> + mod.name + </td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='view'  + (perms.includes('view') ? 'checked' : '') + ></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='create'  + (perms.includes('create') ? 'checked' : '') + ></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='edit'  + (perms.includes('edit') ? 'checked' : '') + ></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='delete'  + (perms.includes('delete') ? 'checked' : '') + ></td>
-            </tr>;
+            html += `<tr>
+                <td style='padding: 0.5rem;'>${mod.name}</td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='view' ${perms.includes('view') ? 'checked' : ''}></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='create' ${perms.includes('create') ? 'checked' : ''}></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='edit' ${perms.includes('edit') ? 'checked' : ''}></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='delete' ${perms.includes('delete') ? 'checked' : ''}></td>
+            </tr>`;
         });
         tbody.innerHTML = html;
         
@@ -428,14 +428,14 @@
         if (linkedTransactions.length > 0 || linkedAccounts.length > 0 || linkedCards.length > 0) {
             const action = document.querySelector('input[name="deleteUserAction"]:checked').value;
             if (action === 'delete') {
-                const newTransactions = transactions.filter(tx => tx.userId !== user.id);
-                window.Storage.set('transactions', newTransactions);
+                const txToDelete = transactions.filter(tx => tx.userId === user.id);
+                txToDelete.forEach(tx => window.Storage.deleteRecord('transactions', tx.id));
                 
-                const newAccounts = accounts.filter(a => !(a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase()));
-                window.Storage.set('accounts', newAccounts);
+                const accToDelete = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase());
+                accToDelete.forEach(a => window.Storage.deleteRecord('accounts', a.id));
                 
-                const newCards = cards.filter(c => !(c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase()));
-                window.Storage.set('cards', newCards);
+                const cardsToDelete = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase());
+                cardsToDelete.forEach(c => window.Storage.deleteRecord('cards', c.id));
                 
             } else if (action === 'transfer') {
                 const targetUserId = document.getElementById('deleteUserTransferSelect').value;
@@ -445,28 +445,28 @@
                     if (tx.userId === user.id) {
                         tx.userId = targetUserId;
                         tx.person = targetUser.name;
+                        window.Storage.saveRecord('transactions', tx);
                     }
                 });
-                window.Storage.set('transactions', transactions);
                 
                 accounts.forEach(a => {
                     if (a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase()) {
                         a.owner = targetUser.name;
+                        window.Storage.saveRecord('accounts', a);
                     }
                 });
-                window.Storage.set('accounts', accounts);
                 
                 cards.forEach(c => {
                     if (c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase()) {
                         c.holder = targetUser.name;
+                        window.Storage.saveRecord('cards', c);
                     }
                 });
-                window.Storage.set('cards', cards);
             }
         }
 
         this.users = this.users.filter(u => u.id !== id);
-        window.Storage.set('users', this.users);
+        window.Storage.deleteRecord('users', id);
         
         window.UI.closeModal('deleteUserModal');
         this.renderUsers();

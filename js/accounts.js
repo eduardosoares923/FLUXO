@@ -1,4 +1,4 @@
-﻿class AccountsController {
+class AccountsController {
     constructor() {
         this.accounts = window.Storage.get('accounts') || [];
         this.init();
@@ -8,15 +8,16 @@
     init() {
         // Create a default account if empty
         if (this.accounts.length === 0) {
-            this.accounts.push({
+            const defaultAcc = {
                 id: 'default_account',
                 name: 'Carteira Principal',
                 type: 'wallet',
                 owner: 'Eu',
                 balance: 0,
                 color: '#6366f1'
-            });
-            window.Storage.set('accounts', this.accounts);
+            };
+            this.accounts.push(defaultAcc);
+            window.Storage.saveRecord('accounts', defaultAcc);
         }
         this.renderAccounts();
     }
@@ -44,9 +45,6 @@
                 this.saveAccount();
                 window.UI.closeModal('accountModal');
                 form.reset();
-                
-                const isEdit = document.getElementById('editAccountId').value !== '';
-                window.UI.showToast(isEdit ? 'Conta atualizada com sucesso!' : 'Conta adicionada com sucesso!', 'success');
             });
         }
         
@@ -148,23 +146,18 @@
         if (linkedTransactions.length > 0) {
             const action = document.querySelector('input[name="deleteAccountAction"]:checked').value;
             if (action === 'delete') {
-                const newTransactions = transactions.filter(tx => 
-                    !(tx.paymentMethod === `acc_${acc.id}` || (acc.id === 'default_account' && tx.paymentMethod === 'account'))
-                );
-                window.Storage.set('transactions', newTransactions);
+                linkedTransactions.forEach(tx => window.Storage.deleteRecord('transactions', tx.id));
             } else if (action === 'transfer') {
                 const targetAccVal = document.getElementById('deleteAccountTransferSelect').value;
-                transactions.forEach(tx => {
-                    if (tx.paymentMethod === `acc_${acc.id}` || (acc.id === 'default_account' && tx.paymentMethod === 'account')) {
-                        tx.paymentMethod = targetAccVal;
-                    }
+                linkedTransactions.forEach(tx => {
+                    tx.paymentMethod = targetAccVal;
+                    window.Storage.saveRecord('transactions', tx);
                 });
-                window.Storage.set('transactions', transactions);
             }
         }
         
         this.accounts = this.accounts.filter(a => a.id !== id);
-        window.Storage.set('accounts', this.accounts);
+        window.Storage.deleteRecord('accounts', id);
         
         window.UI.closeModal('deleteAccountModal');
         this.renderAccounts();
@@ -197,7 +190,14 @@
         }
 
         window.Storage.saveRecord('accounts', acc).then(() => {
-            window.UI.showToast('Conta salva com sucesso.', 'success');
+            if (editId) {
+                const idx = this.accounts.findIndex(a => a.id === editId);
+                if (idx !== -1) this.accounts[idx] = acc;
+            } else {
+                this.accounts.push(acc);
+            }
+            this.renderAccounts();
+            window.UI.showToast(editId ? 'Conta atualizada com sucesso!' : 'Conta adicionada com sucesso!', 'success');
         });
     }
 
