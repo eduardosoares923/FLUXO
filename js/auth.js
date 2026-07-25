@@ -15,11 +15,26 @@ class AuthManager {
         if (typeof firebase !== 'undefined') {
             firebase.auth().onAuthStateChanged((user) => {
                 if (user) {
-                    // User is signed in via Firebase
-                    // Ensure local session exists and syncs
+                    console.log('Firebase Auth logged in:', user.uid);
                     if (!this.session || this.session.id !== user.uid) {
                         this.syncUserSessionFromFirestore(user.uid);
                     }
+                } else {
+                    console.log('Firebase Auth says user is null!');
+                    if (this.session) {
+                        Storage.remove('session');
+                        this.session = null;
+                        if (!this.isLoginPage) {
+                            if (window.UI) window.UI.showToast('Auth state nulo. Deslogando...', 'error');
+                            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+                        }
+                    }
+                }
+            });
+        } else {
+             if (window.UI) window.UI.showToast('Firebase nÃ£o carregado no listener!', 'error');
+        }
+    }
                 } else {
                     // User is signed out
                     if (this.session) {
@@ -101,8 +116,14 @@ class AuthManager {
 
     verifySession() {
         if (!this.session && !this.isLoginPage) {
-            window.location.href = 'index.html';
+            console.log('No session, bouncing to index.html in 2 seconds for debugging');
+            if (window.UI) window.UI.showToast('SessÃ£o expirada. Redirecionando...', 'error');
+            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
         } else if (this.session && this.isLoginPage) {
+            // Allow them to stay on login page if they want to debug, or bounce after 1s
+            setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
+        }
+    } else if (this.session && this.isLoginPage) {
             window.location.href = 'dashboard.html';
         }
     }
