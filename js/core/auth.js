@@ -150,7 +150,26 @@ class AuthManager {
         if (!this.session) return false;
         if (this.session.role === 'admin') return true;
         if (!personName) return true;
-        return this.session.person === personName;
+
+        const pLower = personName.trim().toLowerCase();
+
+        // Direct linked person or user name match
+        if (this.session.person && this.session.person.trim().toLowerCase() === pLower) return true;
+        if (this.session.name && this.session.name.trim().toLowerCase() === pLower) return true;
+
+        // Gerente (Manager): check allowedPersons list if specified
+        if (this.session.role === 'gerente') {
+            if (this.session.allowedPersons && Array.isArray(this.session.allowedPersons)) {
+                return this.session.allowedPersons.some(p => p.trim().toLowerCase() === pLower);
+            }
+            if (typeof this.session.allowedPersons === 'string' && this.session.allowedPersons.trim()) {
+                const list = this.session.allowedPersons.split(',').map(s => s.trim().toLowerCase());
+                return list.includes(pLower);
+            }
+            return true; // Default manager access
+        }
+
+        return false;
     }
 
     hasPermission(module, action = 'view') {

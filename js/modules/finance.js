@@ -603,6 +603,9 @@ class FinanceController {
         const todayStr = new Date().toISOString().split('T')[0];
 
         personMap.forEach((personOriginalName, personLower) => {
+            if (window.currentUser && window.Auth && !window.Auth.canAccessPerson(personOriginalName)) {
+                return;
+            }
             let income = 0;
             let expense = 0;
             let cardsTotal = 0;
