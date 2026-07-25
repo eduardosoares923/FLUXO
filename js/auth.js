@@ -85,6 +85,17 @@ class AuthManager {
             }
         } catch (e) {
             console.error("Erro ao sincronizar sessÃ£o:", e);
+            if (e.code === 'permission-denied') {
+                if (window.UI) window.UI.showToast('Erro de PermissÃ£o no Banco de Dados. Desbloqueie o Firestore nas Regras.', 'error');
+            } else {
+                if (window.UI) window.UI.showToast('Erro ao ler banco de dados: ' + e.message, 'error');
+            }
+            // Destravar o botÃ£o caso falhe
+            const btn = document.getElementById('loginBtn');
+            if (btn) {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
         }
     }
 
