@@ -296,30 +296,80 @@
     border-radius: 10px !important;
   }
 
-  /* ---- Tables ---- */
+  /* ---- Tables & Scrolling ---- */
   .table-responsive,
   .transactions-table-container,
-  .table-container {
+  .table-container,
+  div[style*="overflow-x: auto"],
+  div[style*="overflow-x:auto"] {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     width: 100% !important;
+    display: block !important;
   }
 
   table,
   .transactions-table,
-  .table {
-    min-width: 650px !important;
+  .table,
+  div[style*="overflow-x: auto"] table,
+  div[style*="overflow-x:auto"] table {
+    min-width: 600px !important;
+    width: 100% !important;
+    table-layout: auto !important;
+  }
+
+  table th,
+  table td,
+  .table th,
+  .table td,
+  .transactions-table th,
+  .transactions-table td {
+    white-space: nowrap !important;
+    padding: 0.6rem 0.75rem !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* ---- Forms & Spacing in Modals ---- */
+  .form-group,
+  div[class*="form-group"],
+  div[style*="margin-bottom: 1.5rem"],
+  div[style*="margin-bottom: 1rem"],
+  div[style*="margin-bottom:1.5rem"],
+  div[style*="margin-bottom:1rem"] {
+    margin-bottom: 0.5rem !important;
+  }
+
+  .form-label,
+  label {
+    margin-bottom: 0.2rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  .form-control,
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"],
+  input[type="url"],
+  select.form-control,
+  select {
+    padding: 0.45rem 0.65rem !important;
+    font-size: 0.85rem !important;
+    height: auto !important;
+    min-height: 38px !important;
   }
 
   /* ---- Filters ---- */
   .filters-section {
     flex-direction: column !important;
-    gap: 0.75rem !important;
-    padding: 1rem !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
   }
 
   .filter-group {
     min-width: 100% !important;
+    margin-bottom: 0.25rem !important;
   }
 
   /* ---- Section Headers ---- */
@@ -340,21 +390,35 @@
   }
 
   /* ---- Modals ---- */
-  .modal-content {
-    width: 95% !important;
+  .modal-content,
+  .modal-overlay .glass-panel {
+    width: 92% !important;
+    max-width: 440px !important;
     max-height: 85vh !important;
-    padding: 1.25rem !important;
+    padding: 1rem !important;
+  }
+
+  .modal-header,
+  .modal-title {
+    margin-bottom: 0.75rem !important;
+    font-size: 1.1rem !important;
+  }
+
+  .modal-actions {
+    margin-top: 1rem !important;
+    padding-top: 0.75rem !important;
+    gap: 0.5rem !important;
   }
 
   /* ---- Form Rows ---- */
   .form-row {
     flex-direction: column !important;
-    gap: 0.75rem !important;
+    gap: 0.5rem !important;
   }
 
   /* ---- Account Cards ---- */
   .account-card {
-    padding: 1rem !important;
+    padding: 0.75rem !important;
   }
 
   .add-account-btn {
