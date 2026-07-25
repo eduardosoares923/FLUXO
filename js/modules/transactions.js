@@ -3,7 +3,7 @@ class TransactionsController {
         let globalTx = window.Storage.get('transactions') || [];
         
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-            globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person));
+            globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
         }
         
         this.allTransactions = globalTx;
@@ -235,7 +235,7 @@ class TransactionsController {
 
             let globalTx = window.Storage.get('transactions') || [];
             if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-                globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person));
+                globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
             }
             this.allTransactions = globalTx;
             this.applyFilters();

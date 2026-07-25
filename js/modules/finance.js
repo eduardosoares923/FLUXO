@@ -4,7 +4,7 @@ class FinanceController {
         
         // Filtrar transações por usuário/pessoa vinculada
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-            allTransactions = allTransactions.filter(tx => window.Auth.canAccessPerson(tx.person));
+            allTransactions = allTransactions.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
         }
         
         this.transactions = allTransactions;
@@ -202,7 +202,7 @@ class FinanceController {
         const refreshHandler = () => {
             let allTx = window.Storage.get('transactions') || [];
             if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-                allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person));
+                allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
             }
             this.transactions = allTx;
             this.updateDashboard();
@@ -744,7 +744,7 @@ class FinanceController {
     updateDashboard() {
         let allTx = window.Storage.get('transactions') || [];
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-            allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person));
+            allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
         }
 
         const personFilterVal = document.getElementById('globalPersonFilter')?.value || 'all';

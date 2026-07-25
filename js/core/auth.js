@@ -146,25 +146,36 @@ class AuthManager {
         }
     }
 
-    canAccessPerson(personName) {
+    canAccessPerson(personName, tx = null) {
         if (!this.session) return false;
         if (this.session.role === 'admin') return true;
+        
+        // If transaction object is provided and created by current user
+        if (tx && tx.userId && String(tx.userId) === String(this.session.id)) {
+            return true;
+        }
+
         if (!personName) return true;
 
-        const pLower = personName.trim().toLowerCase();
+        const norm = str => String(str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        const target = norm(personName);
 
-        // Direct linked person or user name match
-        if (this.session.person && this.session.person.trim().toLowerCase() === pLower) return true;
-        if (this.session.name && this.session.name.trim().toLowerCase() === pLower) return true;
+        if (!target) return true;
+
+        // Direct linked person, user name, username, or email prefix match
+        if (this.session.person && norm(this.session.person) === target) return true;
+        if (this.session.name && norm(this.session.name) === target) return true;
+        if (this.session.username && norm(this.session.username) === target) return true;
+        if (this.session.email && norm(this.session.email.split('@')[0]) === target) return true;
 
         // Gerente (Manager): check allowedPersons list if specified
         if (this.session.role === 'gerente') {
             if (this.session.allowedPersons && Array.isArray(this.session.allowedPersons)) {
-                return this.session.allowedPersons.some(p => p.trim().toLowerCase() === pLower);
+                return this.session.allowedPersons.some(p => norm(p) === target);
             }
             if (typeof this.session.allowedPersons === 'string' && this.session.allowedPersons.trim()) {
-                const list = this.session.allowedPersons.split(',').map(s => s.trim().toLowerCase());
-                return list.includes(pLower);
+                const list = this.session.allowedPersons.split(',').map(norm);
+                return list.includes(target);
             }
             return true; // Default manager access
         }
