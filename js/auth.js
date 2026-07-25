@@ -1,8 +1,6 @@
-﻿// auth.js
-
-class AuthManager {
+﻿class AuthManager {
     constructor() {
-        this.session = Storage.get('session');
+        this.session = window.Storage.get('session');
         this.isLoginPage = window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/');
         
         this.verifySession();
@@ -15,30 +13,12 @@ class AuthManager {
         if (typeof firebase !== 'undefined') {
             firebase.auth().onAuthStateChanged((user) => {
                 if (user) {
-                    console.log('Firebase Auth logged in:', user.uid);
                     if (!this.session || this.session.id !== user.uid) {
                         this.syncUserSessionFromFirestore(user.uid);
                     }
                 } else {
-                    console.log('Firebase Auth says user is null!');
                     if (this.session) {
-                        Storage.remove('session');
-                        this.session = null;
-                        if (!this.isLoginPage) {
-                            if (window.UI) window.UI.showToast('Auth state nulo. Deslogando...', 'error');
-                            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
-                        }
-                    }
-                }
-            });
-        } else {
-             if (window.UI) window.UI.showToast('Firebase nÃ£o carregado no listener!', 'error');
-        }
-    }
-                } else {
-                    // User is signed out
-                    if (this.session) {
-                        Storage.remove('session');
+                        window.Storage.remove('session');
                         this.session = null;
                         if (!this.isLoginPage) window.location.href = 'index.html';
                     }
@@ -61,15 +41,13 @@ class AuthManager {
                     permissions: userData.permissions || {},
                     loginTime: new Date().toISOString()
                 };
-                Storage.set('session', this.session);
+                window.Storage.set('session', this.session);
                 if (this.isLoginPage) {
                     window.location.href = 'dashboard.html';
                 } else {
                     this.protectUI();
                 }
             } else {
-                // FALLBACK: O usuÃ¡rio foi criado manualmente no Firebase Auth, mas nÃ£o existe no Firestore ainda.
-                // Vamos criar automaticamente como ADMIN para nÃ£o bloquear o acesso do dono do sistema.
                 const userEmail = firebase.auth().currentUser.email;
                 const newAdmin = {
                     id: uid,
@@ -93,7 +71,7 @@ class AuthManager {
                     permissions: {},
                     loginTime: new Date().toISOString()
                 };
-                Storage.set('session', this.session);
+                window.Storage.set('session', this.session);
                 if (this.isLoginPage) {
                     window.location.href = 'dashboard.html';
                 }
@@ -105,7 +83,6 @@ class AuthManager {
             } else {
                 if (window.UI) window.UI.showToast('Erro ao ler banco de dados: ' + e.message, 'error');
             }
-            // Destravar o botÃ£o caso falhe
             const btn = document.getElementById('loginBtn');
             if (btn) {
                 btn.classList.remove('loading');
@@ -116,14 +93,8 @@ class AuthManager {
 
     verifySession() {
         if (!this.session && !this.isLoginPage) {
-            console.log('No session, bouncing to index.html in 2 seconds for debugging');
-            if (window.UI) window.UI.showToast('SessÃ£o expirada. Redirecionando...', 'error');
-            setTimeout(() => { window.location.href = 'index.html'; }, 2000);
+            window.location.href = 'index.html';
         } else if (this.session && this.isLoginPage) {
-            // Allow them to stay on login page if they want to debug, or bounce after 1s
-            setTimeout(() => { window.location.href = 'dashboard.html'; }, 1000);
-        }
-    } else if (this.session && this.isLoginPage) {
             window.location.href = 'dashboard.html';
         }
     }
@@ -167,11 +138,11 @@ class AuthManager {
     logout() {
         if (typeof firebase !== 'undefined') {
             firebase.auth().signOut().then(() => {
-                Storage.remove('session');
+                window.Storage.remove('session');
                 window.location.href = 'index.html';
             });
         } else {
-            Storage.remove('session');
+            window.Storage.remove('session');
             window.location.href = 'index.html';
         }
     }
@@ -179,12 +150,12 @@ class AuthManager {
     bindLoginEvents() {
         if (!this.isLoginPage) return;
 
-        Storage.init();
+        window.Storage.init();
 
         const loginForm = document.getElementById('loginForm');
         const togglePassword = document.getElementById('togglePassword');
         const emailInput = document.getElementById('email');
-        const rememberedEmail = Storage.get('rememberedEmail');
+        const rememberedEmail = window.Storage.get('rememberedEmail');
 
         if (rememberedEmail && emailInput) {
             emailInput.value = rememberedEmail;
@@ -211,7 +182,7 @@ class AuthManager {
 
     handleLogin(e) {
         e.preventDefault();
-        const loginId = document.getElementById('email').value.trim(); // Now strictly email
+        const loginId = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
         const rememberMe = document.getElementById('rememberMe').checked;
         const btn = document.getElementById('loginBtn');
@@ -225,12 +196,10 @@ class AuthManager {
                     if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
                     
                     if (rememberMe) {
-                        Storage.set('rememberedEmail', loginId);
+                        window.Storage.set('rememberedEmail', loginId);
                     } else {
-                        Storage.remove('rememberedEmail');
+                        window.Storage.remove('rememberedEmail');
                     }
-                    
-                    // The onAuthStateChanged listener will handle redirection
                 })
                 .catch((error) => {
                     let msg = 'E-mail ou senha incorretos.';
@@ -247,5 +216,4 @@ class AuthManager {
     }
 }
 
-// Inicializa AutenticaÃ§Ã£o Globalmente
 window.Auth = new AuthManager();
