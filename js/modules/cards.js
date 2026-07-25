@@ -83,39 +83,55 @@ class CardsController {
         const card = this.cards.find(c => c.id === id);
         if (!card) return;
 
-        document.getElementById('invoiceModalTitle').textContent = `Fatura: ${card.name}`;
+        document.getElementById('invoiceModalTitle').textContent = `Fatura: ${card.name} (Dia ${card.closeDay || 1} / Venc. ${card.dueDay || 10})`;
         
         const listEl = document.getElementById('invoiceTransactionList');
         listEl.innerHTML = '';
 
         const allTransactions = window.Storage.get('transactions') || [];
-        // Filter transactions for this card
         const cardTransactions = allTransactions.filter(tx => tx.paymentMethod === `card_${id}`);
+        const totalInvoice = cardTransactions.reduce((sum, tx) => sum + (tx.type === 'expense' ? parseFloat(tx.amount) : -parseFloat(tx.amount)), 0);
 
         if (cardTransactions.length === 0) {
             listEl.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhuma compra registrada neste cartão.</div>`;
         } else {
-            // Sort newest first
+            const headerInfo = document.createElement('div');
+            headerInfo.style.cssText = 'padding: 0.75rem 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass-border);';
+            headerInfo.innerHTML = `
+                <div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Total Utilizado na Fatura</div>
+                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--danger);">${window.Utils.formatCurrency(totalInvoice)}</div>
+                </div>
+                <div style="font-size: 0.8rem; text-align: right; color: var(--text-secondary);">
+                    <div>Fechamento: <strong>Dia ${card.closeDay || 1}</strong></div>
+                    <div>Vencimento: <strong style="color: var(--accent-primary);">Dia ${card.dueDay || 10}</strong></div>
+                </div>
+            `;
+            listEl.appendChild(headerInfo);
+
             cardTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             cardTransactions.forEach(tx => {
-                const iconBg = 'expense'; // Cartão geralmente é despesa
-                const iconClass = 'fa-arrow-down';
-                const sign = '-';
+                const isExpense = tx.type === 'expense';
+                const iconBg = isExpense ? 'expense' : 'income';
+                const iconClass = isExpense ? 'fa-arrow-down' : 'fa-arrow-up';
+                const sign = isExpense ? '-' : '+';
+                const color = isExpense ? 'var(--danger)' : 'var(--success)';
 
                 const item = document.createElement('div');
                 item.className = 'transaction-item';
+                item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--glass-border);';
                 item.innerHTML = `
-                    <div class="tx-info">
-                        <div class="tx-icon ${iconBg}">
+                    <div class="tx-info" style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div class="tx-icon ${iconBg}" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${isExpense ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'}; color: ${color};">
                             <i class="fa-solid ${iconClass}"></i>
                         </div>
                         <div class="tx-details">
-                            <span class="tx-desc">${window.Utils.escapeHTML(tx.description)}</span>
-                            <span class="tx-date">${window.Utils.formatDate(tx.date)} &bull; ${window.Utils.escapeHTML(tx.category)}</span>
+                            <div class="tx-desc" style="font-weight: 600; font-size: 0.9rem;">${window.Utils.escapeHTML(tx.description)}</div>
+                            <div class="tx-date" style="font-size: 0.75rem; color: var(--text-secondary);">${window.Utils.formatDate(tx.date)} &bull; ${window.Utils.escapeHTML(tx.category)}</div>
                         </div>
                     </div>
-                    <div class="tx-amount ${iconBg}">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
+                    <div class="tx-amount ${iconBg}" style="font-weight: 700; font-size: 0.95rem; color: ${color};">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
                 `;
                 listEl.appendChild(item);
             });
@@ -210,9 +226,15 @@ class CardsController {
             }
         }
 
+        const allTransactions = window.Storage.get('transactions') || [];
+
         visibleCards.forEach(card => {
-            const available = card.limit - card.usedLimit;
-            const percentage = (card.usedLimit / card.limit) * 100;
+            const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
+            const totalUsed = cardTxs.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+            
+            const cardLimit = parseFloat(card.limit) || 0;
+            const available = cardLimit - totalUsed;
+            const percentage = cardLimit > 0 ? (totalUsed / cardLimit) * 100 : 0;
             
             let barClass = 'safe';
             if (percentage > 80) barClass = 'danger';
@@ -221,13 +243,13 @@ class CardsController {
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';
             cardEl.innerHTML = `
-                <div class="credit-card" style="background-color: ${card.color};">
+                <div class="credit-card" style="background-color: ${card.color || '#6366f1'};">
                     <div class="card-bank">
                         <span>${window.Utils.escapeHTML(card.name)}</span>
                         <i class="fa-solid fa-wifi" style="transform: rotate(90deg);"></i>
                     </div>
                     <div class="card-chip"></div>
-                    <div class="card-number">**** **** **** ${card.last4}</div>
+                    <div class="card-number">**** **** **** ${card.last4 || '0000'}</div>
                     <div class="card-footer">
                         <div class="card-holder">${window.Utils.escapeHTML(card.holder)}</div>
                         <div class="card-brand">${window.Utils.escapeHTML(card.brand)}</div>
@@ -236,27 +258,31 @@ class CardsController {
                 <div class="card-details">
                     <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.5rem;">
                         <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}">
-                            <i class="fa-solid fa-list"></i> Fatura
+                            <i class="fa-solid fa-list"></i> Ver Fatura
                         </button>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Limite Total</span>
-                        <span class="detail-value">${window.Utils.formatCurrency(card.limit)}</span>
+                        <span class="detail-value">${window.Utils.formatCurrency(cardLimit)}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Limite Disponível</span>
                         <span class="detail-value" style="color: var(--success);">${window.Utils.formatCurrency(available)}</span>
                     </div>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar ${barClass}" style="width: ${percentage}%"></div>
+                    <div class="progress-bar-container" style="margin: 0.5rem 0;">
+                        <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%"></div>
                     </div>
-                    <div class="detail-row" style="margin-top: 1rem;">
+                    <div class="detail-row">
                         <span class="detail-label">Fatura Atual (Usado)</span>
-                        <span class="detail-value">${window.Utils.formatCurrency(card.usedLimit)}</span>
+                        <span class="detail-value" style="color: var(--danger); font-weight: 700;">${window.Utils.formatCurrency(totalUsed)}</span>
+                    </div>
+                    <div class="detail-row" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--glass-border);">
+                        <span class="detail-label">Fechamento</span>
+                        <span class="detail-value">Dia ${card.closeDay || 1}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Vencimento</span>
-                        <span class="detail-value">Dia ${card.dueDay}</span>
+                        <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">Dia ${card.dueDay || 10}</span>
                     </div>
                 </div>
                 <div class="card-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--glass-border);">
@@ -271,13 +297,18 @@ class CardsController {
             container.appendChild(cardEl);
         });
 
-        // Recoloca o botão no final
         if (addBtn) container.appendChild(addBtn);
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('cardsContainer')) {
+const initCards = () => {
+    if (!window.cardsController && document.getElementById('cardsContainer')) {
         window.cardsController = new CardsController();
     }
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initCards);
+} else {
+    initCards();
+}

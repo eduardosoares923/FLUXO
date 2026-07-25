@@ -280,8 +280,14 @@ class AccountsController {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('accountsContainer')) {
+const initAccounts = () => {
+    if (!window.accountsController && document.getElementById('accountsContainer')) {
         window.accountsController = new AccountsController();
     }
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAccounts);
+} else {
+    initAccounts();
+}

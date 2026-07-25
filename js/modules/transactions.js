@@ -184,8 +184,14 @@ class TransactionsController {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('transactionsTableBody')) {
+const initTransactions = () => {
+    if (!window.transactionsController && document.getElementById('transactionsTableBody')) {
         window.transactionsController = new TransactionsController();
     }
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTransactions);
+} else {
+    initTransactions();
+}

@@ -1075,8 +1075,14 @@ class ReportsController {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('chartIncomeVsExpense')) {
+const initReports = () => {
+    if (!window.reportsController && (document.getElementById('chartIncomeVsExpense') || document.getElementById('reportPersonFilter'))) {
         window.reportsController = new ReportsController();
     }
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initReports);
+} else {
+    initReports();
+}
