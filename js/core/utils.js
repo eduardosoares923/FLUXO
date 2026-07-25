@@ -111,13 +111,8 @@ const Utils = {
             }
         }
 
-        let melhorDiaCompra;
-        if (now < currentClosing) {
-            melhorDiaCompra = getClampedDate(year, month - 1, closeD);
-        } else {
-            melhorDiaCompra = currentClosing; // O próprio dia de fechamento já é o melhor dia!
-        }
-
+        // O melhor dia de compra para o ciclo vigente/próximo é sempre alinhado ao dia de fechamento!
+        const melhorDiaCompra = proximoFechamento;
         const proximoMelhorDia = proximoFechamento;
 
         const diffMsClose = proximoFechamento - now;
