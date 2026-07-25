@@ -254,49 +254,50 @@ class CardsController {
 
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';
-            cardEl.style.cssText = 'background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--glass-border); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;';
+            cardEl.style.cssText = 'background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--glass-border); padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; box-shadow: 0 4px 20px rgba(0,0,0,0.15); width: 100%; box-sizing: border-box; overflow: hidden;';
 
             cardEl.innerHTML = `
-                <!-- Top Header: Card Visual + Actions -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
-                    <!-- Sleek Realistic Card Badge -->
-                    <div class="credit-card" style="background: linear-gradient(135deg, ${card.color || '#8A05BE'}, ${card.color ? card.color + 'dd' : '#4a0080'}); width: 100%; max-width: 280px; height: 150px; border-radius: 12px; padding: 1rem 1.25rem; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 8px 16px rgba(0,0,0,0.25); position: relative; overflow: hidden; flex-shrink: 0;">
+                <!-- Top Header: Card Visual + Integrated Actions -->
+                <div style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%;">
+                    <!-- Sleek Card Visual Badge -->
+                    <div class="credit-card" style="background: linear-gradient(135deg, ${card.color || '#8A05BE'}, ${card.color ? card.color + 'dd' : '#4a0080'}); width: 100%; height: 140px; border-radius: 12px; padding: 0.85rem 1rem; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 6px 14px rgba(0,0,0,0.25); position: relative; overflow: hidden; box-sizing: border-box;">
                         <div style="position: absolute; right: -20px; bottom: -20px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none;"></div>
+                        
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">${window.Utils.escapeHTML(card.name)}</span>
-                            <i class="fa-solid fa-wifi" style="transform: rotate(90deg); font-size: 1rem; opacity: 0.8;"></i>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <div style="width: 32px; height: 24px; background: linear-gradient(135deg, #ffd700, #b8860b); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3);"></div>
-                        </div>
-                        <div>
-                            <div style="font-family: monospace; font-size: 1rem; letter-spacing: 2px; opacity: 0.9;">**** **** **** ${card.last4 || '0000'}</div>
-                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.2rem;">
-                                <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85;">${window.Utils.escapeHTML(card.holder)}</span>
-                                <span style="font-weight: 700; font-style: italic; font-size: 0.9rem;">${window.Utils.escapeHTML(card.brand)}</span>
+                            <span style="font-weight: 800; font-size: 1rem; letter-spacing: 0.5px;">${window.Utils.escapeHTML(card.name)}</span>
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <i class="fa-solid fa-wifi" style="transform: rotate(90deg); font-size: 0.85rem; opacity: 0.8; margin-right: 0.25rem;"></i>
+                                <button class="btn btn-sm" data-action="edit" data-id="${card.id}" title="Editar Cartão" style="width: 28px; height: 28px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.2); color: white; border: none; cursor: pointer;">
+                                    <i class="fa-solid fa-pen" style="font-size: 0.7rem;"></i>
+                                </button>
+                                <button class="btn btn-sm" data-action="delete" data-id="${card.id}" title="Excluir Cartão" style="width: 28px; height: 28px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.4); color: white; border: none; cursor: pointer;">
+                                    <i class="fa-solid fa-trash" style="font-size: 0.7rem;"></i>
+                                </button>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Quick Action Buttons -->
-                    <div style="display: flex; flex-direction: flex-row; gap: 0.5rem; align-items: center;">
-                        <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${card.id}" title="Editar Cartão" style="width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;">
-                            <i class="fa-solid fa-pen"></i>
-                        </button>
-                        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${card.id}" title="Excluir Cartão" style="width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="width: 30px; height: 22px; background: linear-gradient(135deg, #ffd700, #b8860b); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3);"></div>
+                        </div>
+
+                        <div>
+                            <div style="font-family: monospace; font-size: 0.95rem; letter-spacing: 2px; opacity: 0.95;">**** **** **** ${card.last4 || '0000'}</div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.15rem;">
+                                <span style="font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85;">${window.Utils.escapeHTML(card.holder)}</span>
+                                <span style="font-weight: 700; font-style: italic; font-size: 0.85rem;">${window.Utils.escapeHTML(card.brand)}</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Clean Invoice & Limit Summary (Nubank Style) -->
-                <div style="display: flex; flex-direction: column; gap: 0.75rem; background: var(--bg-primary); border-radius: 12px; padding: 1rem; border: 1px solid var(--glass-border);">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                        <div>
-                            <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual</span>
-                            <div style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-top: 0.1rem;">${window.Utils.formatCurrency(totalUsed)}</div>
+                <div style="display: flex; flex-direction: column; gap: 0.6rem; background: var(--bg-primary); border-radius: 12px; padding: 0.85rem; border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="min-width: 120px;">
+                            <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual</span>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); margin-top: 0.1rem; white-space: nowrap; word-break: keep-all;">${window.Utils.formatCurrency(totalUsed)}</div>
                         </div>
-                        <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}" style="padding: 0.4rem 1rem; border-radius: 20px; font-weight: 600;">
+                        <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}" style="padding: 0.4rem 0.85rem; border-radius: 20px; font-weight: 600; white-space: nowrap; font-size: 0.8rem;">
                             <i class="fa-solid fa-list-ul"></i> Ver Fatura
                         </button>
                     </div>
@@ -306,33 +307,33 @@ class CardsController {
                         <div class="progress-bar-container" style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 0.35rem;">
                             <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%; height: 100%; border-radius: 3px;"></div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary);">
-                            <span>Disponível: <strong style="color: var(--success);">${window.Utils.formatCurrency(available)}</strong></span>
-                            <span>Limite: ${window.Utils.formatCurrency(cardLimit)}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                            <span style="white-space: nowrap;">Disponível: <strong style="color: var(--success);">${window.Utils.formatCurrency(available)}</strong></span>
+                            <span style="white-space: nowrap;">Limite: ${window.Utils.formatCurrency(cardLimit)}</span>
                         </div>
                     </div>
                 </div>
 
                 <!-- Smart Date Badges Grid (Clean Pills) -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
-                    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 0.5rem 0.75rem;">
-                        <div style="font-size: 0.7rem; color: #10b981; font-weight: 700; text-transform: uppercase;"><i class="fa-solid fa-star"></i> Melhor Dia</div>
-                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedMelhorDia}</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.4rem;">
+                    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 0.45rem 0.6rem;">
+                        <div style="font-size: 0.65rem; color: #10b981; font-weight: 700; text-transform: uppercase;"><i class="fa-solid fa-star"></i> Melhor Dia</div>
+                        <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem; white-space: nowrap;">${metrics.formattedMelhorDia}</div>
                     </div>
 
-                    <div style="background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem 0.75rem;">
-                        <div style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Fechamento</div>
-                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedFechamento}</div>
+                    <div style="background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.45rem 0.6rem;">
+                        <div style="font-size: 0.65rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Fechamento</div>
+                        <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem; white-space: nowrap;">${metrics.formattedFechamento}</div>
                     </div>
 
-                    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; padding: 0.5rem 0.75rem;">
-                        <div style="font-size: 0.7rem; color: #818cf8; font-weight: 700; text-transform: uppercase;">Vencimento</div>
-                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedVencimento}</div>
+                    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; padding: 0.45rem 0.6rem;">
+                        <div style="font-size: 0.65rem; color: #818cf8; font-weight: 700; text-transform: uppercase;">Vencimento</div>
+                        <div style="font-size: 0.82rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem; white-space: nowrap;">${metrics.formattedVencimento}</div>
                     </div>
                 </div>
 
                 <!-- Destination Status Banner -->
-                <div style="font-size: 0.78rem; padding: 0.5rem 0.75rem; background: var(--bg-primary); border-radius: 8px; border-left: 3px solid ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.25rem;">
+                <div style="font-size: 0.75rem; padding: 0.45rem 0.65rem; background: var(--bg-primary); border-radius: 8px; border-left: 3px solid ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.25rem;">
                     <span style="color: var(--text-secondary);">Compras hoje entram na:</span>
                     <strong style="color: ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'};">${metrics.destinoCompraHoje}</strong>
                 </div>
