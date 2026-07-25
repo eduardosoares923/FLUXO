@@ -51,6 +51,7 @@ class CardsController {
                 if (action === 'invoice') this.openInvoiceModal(id);
                 if (action === 'edit') this.openEditModal(id);
                 if (action === 'delete') this.deleteCard(id);
+                if (action === 'togglePaid') this.togglePaidInvoice(id);
             });
         }
 
@@ -60,6 +61,61 @@ class CardsController {
         };
         window.addEventListener('dataUpdated', refreshCardsHandler);
         window.addEventListener('fluxo:dataChanged', refreshCardsHandler);
+    }
+
+    async togglePaidInvoice(id) {
+        const card = this.cards.find(c => c.id === id);
+        if (!card) return;
+
+        const now = new Date();
+        const closeD = card.closeDay || 28;
+        const dueD = card.dueDay || 10;
+        const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+        const paidRecordId = `inv_${id}_${currentMonthStr}`;
+        const paidInvoices = window.Storage.get('paidInvoices') || [];
+        const existing = paidInvoices.find(p => p.id === paidRecordId || (p.cardId === id && p.monthStr === currentMonthStr));
+
+        if (existing) {
+            try {
+                await window.Storage.deleteRecord('paidInvoices', existing.id);
+                window.UI.showToast(`Fatura do cartão ${card.name} reaberta!`, 'info');
+            } catch (err) {
+                console.error(err);
+                window.UI.showToast('Erro ao reabrir fatura', 'error');
+            }
+        } else {
+            const allTransactions = window.Storage.get('transactions') || [];
+            const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${id}`);
+            const totalInvoice = cardTxs.reduce((sum, tx) => {
+                const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
+                return invMonth === currentMonthStr ? sum + (parseFloat(tx.amount) || 0) : sum;
+            }, 0);
+
+            const record = {
+                id: paidRecordId,
+                cardId: id,
+                cardName: card.name,
+                monthStr: currentMonthStr,
+                paidAt: new Date().toISOString(),
+                amount: totalInvoice
+            };
+
+            try {
+                await window.Storage.saveRecord('paidInvoices', record);
+                window.UI.showToast(`Fatura de ${window.Utils.formatCurrency(totalInvoice)} do cartão ${card.name} marcada como PAGA! 🎉`, 'success');
+            } catch (err) {
+                console.error(err);
+                window.UI.showToast('Erro ao marcar fatura como paga', 'error');
+            }
+        }
+
+        this.renderCards();
+        const modal = document.getElementById('invoiceModal');
+        if (modal && modal.classList.contains('active')) {
+            this.openInvoiceModal(id);
+        }
+        window.dispatchEvent(new Event('dataUpdated'));
     }
 
     openEditModal(id) {
@@ -92,21 +148,35 @@ class CardsController {
         const cardTransactions = allTransactions.filter(tx => tx.paymentMethod === `card_${id}`);
         const totalInvoice = cardTransactions.reduce((sum, tx) => sum + (tx.type === 'expense' ? parseFloat(tx.amount) : -parseFloat(tx.amount)), 0);
 
+        const paidInvoices = window.Storage.get('paidInvoices') || [];
+        const now = new Date();
+        const closeD = card.closeDay || 28;
+        const dueD = card.dueDay || 10;
+        const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const isPaid = paidInvoices.some(p => p.cardId === id && p.monthStr === currentMonthStr);
+
+        const headerInfo = document.createElement('div');
+        headerInfo.style.cssText = 'padding: 0.85rem 1rem; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass-border); flex-wrap: wrap; gap: 0.5rem;';
+        headerInfo.innerHTML = `
+            <div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total da Fatura (${currentMonthStr})</div>
+                <div style="font-size: 1.3rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(totalInvoice)}</div>
+                ${isPaid ? '<span style="font-size: 0.75rem; color: var(--success); font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Fatura Paga</span>' : ''}
+            </div>
+            <div>
+                <button class="btn ${isPaid ? 'btn-success' : 'btn-outline-success'} btn-sm" onclick="window.cardsController.togglePaidInvoice('${card.id}')" style="border-radius: 20px; font-weight: 700; padding: 0.4rem 0.9rem;">
+                    <i class="fa-solid ${isPaid ? 'fa-circle-check' : 'fa-check'}"></i> ${isPaid ? 'Fatura Paga (Desmarcar)' : 'Marcar Fatura como PAGA'}
+                </button>
+            </div>
+        `;
+
         if (cardTransactions.length === 0) {
-            listEl.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhuma compra registrada neste cartão.</div>`;
+            listEl.appendChild(headerInfo);
+            const emptyEl = document.createElement('div');
+            emptyEl.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary);';
+            emptyEl.textContent = 'Nenhuma compra registrada neste cartão.';
+            listEl.appendChild(emptyEl);
         } else {
-            const headerInfo = document.createElement('div');
-            headerInfo.style.cssText = 'padding: 0.75rem 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass-border);';
-            headerInfo.innerHTML = `
-                <div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary);">Total Utilizado na Fatura</div>
-                    <div style="font-size: 1.2rem; font-weight: 700; color: var(--danger);">${window.Utils.formatCurrency(totalInvoice)}</div>
-                </div>
-                <div style="font-size: 0.8rem; text-align: right; color: var(--text-secondary);">
-                    <div>Fechamento: <strong>Dia ${card.closeDay || 1}</strong></div>
-                    <div>Vencimento: <strong style="color: var(--accent-primary);">Dia ${card.dueDay || 10}</strong></div>
-                </div>
-            `;
             listEl.appendChild(headerInfo);
 
             cardTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -244,10 +314,20 @@ class CardsController {
         }
 
         const allTransactions = window.Storage.get('transactions') || [];
+        const paidInvoices = window.Storage.get('paidInvoices') || [];
+        const now = new Date();
 
         visibleCards.forEach(card => {
+            const closeD = card.closeDay || 28;
+            const dueD = card.dueDay || 10;
+            const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const isPaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === currentMonthStr);
+
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
-            const totalUsed = cardTxs.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+            const totalUsed = cardTxs.reduce((sum, tx) => {
+                const invMonth = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD) : '';
+                return invMonth === currentMonthStr ? sum + (parseFloat(tx.amount) || 0) : sum;
+            }, 0);
             
             const cardLimit = parseFloat(card.limit) || 0;
             const available = cardLimit - totalUsed;
@@ -271,7 +351,10 @@ class CardsController {
                         <div style="position: absolute; right: -20px; bottom: -20px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none;"></div>
                         
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-weight: 800; font-size: 1rem; letter-spacing: 0.5px;">${window.Utils.escapeHTML(card.name)}</span>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-weight: 800; font-size: 1rem; letter-spacing: 0.5px;">${window.Utils.escapeHTML(card.name)}</span>
+                                ${isPaid ? '<span style="font-size: 0.65rem; background: #10b981; color: white; padding: 0.15rem 0.55rem; border-radius: 10px; font-weight: 700; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="fa-solid fa-circle-check"></i> PAGA</span>' : ''}
+                            </div>
                             <div style="display: flex; align-items: center; gap: 0.4rem;">
                                 <i class="fa-solid fa-wifi" style="transform: rotate(90deg); font-size: 0.85rem; opacity: 0.8; margin-right: 0.25rem;"></i>
                                 <button class="btn btn-sm" data-action="edit" data-id="${card.id}" title="Editar Cartão" style="width: 28px; height: 28px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.2); color: white; border: none; cursor: pointer;">
@@ -301,12 +384,17 @@ class CardsController {
                 <div style="display: flex; flex-direction: column; gap: 0.6rem; background: var(--bg-primary); border-radius: 12px; padding: 0.85rem; border: 1px solid var(--glass-border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
                         <div style="min-width: 120px;">
-                            <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual</span>
-                            <div style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); margin-top: 0.1rem; white-space: nowrap; word-break: keep-all;">${window.Utils.formatCurrency(totalUsed)}</div>
+                            <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual (${currentMonthStr})</span>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--text-primary)'}; margin-top: 0.1rem; white-space: nowrap; word-break: keep-all;">${window.Utils.formatCurrency(totalUsed)}</div>
                         </div>
-                        <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}" style="padding: 0.4rem 0.85rem; border-radius: 20px; font-weight: 600; white-space: nowrap; font-size: 0.8rem;">
-                            <i class="fa-solid fa-list-ul"></i> Ver Fatura
-                        </button>
+                        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                            <button class="btn ${isPaid ? 'btn-success' : 'btn-outline-success'} btn-sm" data-action="togglePaid" data-id="${card.id}" title="${isPaid ? 'Fatura Paga (Clique para Reabrir)' : 'Marcar Fatura como PAGA'}" style="padding: 0.4rem 0.75rem; border-radius: 20px; font-weight: 700; white-space: nowrap; font-size: 0.78rem;">
+                                <i class="fa-solid ${isPaid ? 'fa-circle-check' : 'fa-check'}"></i> ${isPaid ? 'PAGO' : 'Marcar PAGO'}
+                            </button>
+                            <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}" style="padding: 0.4rem 0.75rem; border-radius: 20px; font-weight: 600; white-space: nowrap; font-size: 0.78rem;">
+                                <i class="fa-solid fa-list-ul"></i> Fatura
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Sleek Limit Progress Bar -->

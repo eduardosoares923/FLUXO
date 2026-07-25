@@ -2,7 +2,7 @@
 const APP_PREFIX = 'fluxo_';
 
 window.Storage = {
-    syncCollections: ['users', 'accounts', 'transactions', 'cards', 'settings', 'persons'],
+    syncCollections: ['users', 'accounts', 'transactions', 'cards', 'settings', 'persons', 'paidInvoices'],
     isFirebaseReady: false,
     unsubscribes: {},
 

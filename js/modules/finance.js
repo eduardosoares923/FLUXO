@@ -495,8 +495,11 @@ class FinanceController {
             return acc;
         }, {});
 
+        const paidInvoices = window.Storage.get('paidInvoices') || [];
+
         cards.forEach(card => {
             const faturaAtual = cardTotals[card.id] || 0;
+            const isPaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === currentMonthPrefix);
 
             const cardEl = document.createElement('div');
             cardEl.style.cssText = `
@@ -518,13 +521,16 @@ class FinanceController {
                         <i class="fa-solid fa-credit-card"></i>
                     </div>
                     <div>
-                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-primary);">${window.Utils.escapeHTML(card.name)}</div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-primary); display: flex; align-items: center; gap: 0.35rem;">
+                            ${window.Utils.escapeHTML(card.name)}
+                            ${isPaid ? '<span style="font-size: 0.65rem; background: rgba(16,185,129,0.15); color: var(--success); padding: 0.1rem 0.4rem; border-radius: 6px; font-weight: 700;"><i class="fa-solid fa-check"></i> Paga</span>' : ''}
+                        </div>
                         <div style="font-size: 0.75rem; color: var(--text-secondary);">Final ${window.Utils.escapeHTML(card.last4)} &bull; Vence dia ${window.Utils.escapeHTML(card.dueDay)}</div>
                     </div>
                 </div>
                 <div style="text-align: right;">
                     <div style="font-size: 0.75rem; color: var(--text-secondary);">Fatura do Mês</div>
-                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--danger);">${window.Utils.formatCurrency(faturaAtual)}</div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: ${isPaid ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(faturaAtual)}</div>
                 </div>
             `;
             listEl.appendChild(cardEl);
