@@ -685,10 +685,8 @@ class FinanceController {
 
     updateDashboard() {
         let allTx = window.Storage.get('transactions') || [];
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                allTx = allTx.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person));
         }
         this.transactions = allTx;
 
@@ -825,10 +823,8 @@ class FinanceController {
         
         // Saldo das Contas Bancárias (Saldo Atual)
         let accounts = window.Storage.get('accounts') || [];
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                accounts = accounts.filter(a => a.owner && window.currentUser.name && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            accounts = accounts.filter(a => window.Auth.canAccessPerson(a.owner));
         }
         
         let currentBalance = 0;
