@@ -56,6 +56,86 @@ const Utils = {
         return `${dueYear}-${dueMonth}`;
     },
 
+    getCardMetrics(closeDay = 1, dueDay = 10, refDate = new Date()) {
+        const closeD = parseInt(closeDay) || 1;
+        const dueD = parseInt(dueDay) || 10;
+        
+        const now = refDate ? new Date(refDate) : new Date();
+        now.setHours(0, 0, 0, 0);
+
+        const year = now.getFullYear();
+        const month = now.getMonth();
+
+        const getClampedDate = (y, m, d) => {
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            const validDay = Math.min(d, lastDay);
+            return new Date(y, m, validDay, 0, 0, 0, 0);
+        };
+
+        let currentClosing = getClampedDate(year, month, closeD);
+        let proximoFechamento;
+
+        if (now <= currentClosing) {
+            proximoFechamento = currentClosing;
+        } else {
+            proximoFechamento = getClampedDate(year, month + 1, closeD);
+        }
+
+        const fYear = proximoFechamento.getFullYear();
+        const fMonth = proximoFechamento.getMonth();
+
+        let proximoVencimento;
+        if (dueD > closeD) {
+            proximoVencimento = getClampedDate(fYear, fMonth, dueD);
+        } else {
+            proximoVencimento = getClampedDate(fYear, fMonth + 1, dueD);
+        }
+
+        let melhorDiaCompra;
+        if (now <= currentClosing) {
+            const prevClosing = getClampedDate(year, month - 1, closeD);
+            melhorDiaCompra = new Date(prevClosing);
+            melhorDiaCompra.setDate(melhorDiaCompra.getDate() + 1);
+        } else {
+            melhorDiaCompra = new Date(currentClosing);
+            melhorDiaCompra.setDate(melhorDiaCompra.getDate() + 1);
+        }
+
+        const proximoMelhorDia = new Date(proximoFechamento);
+        proximoMelhorDia.setDate(proximoMelhorDia.getDate() + 1);
+
+        const diffMsClose = proximoFechamento - now;
+        const diasParaFechamento = Math.max(0, Math.ceil(diffMsClose / (1000 * 60 * 60 * 24)));
+
+        const diffMsDue = proximoVencimento - now;
+        const diasParaVencimento = Math.max(0, Math.ceil(diffMsDue / (1000 * 60 * 60 * 24)));
+
+        const vaiParaProxima = now > currentClosing;
+        const formattedFechamento = this.formatDate(proximoFechamento.toISOString().split('T')[0]);
+        const formattedVencimento = this.formatDate(proximoVencimento.toISOString().split('T')[0]);
+        const formattedMelhorDia = this.formatDate(melhorDiaCompra.toISOString().split('T')[0]);
+        const formattedProximoMelhorDia = this.formatDate(proximoMelhorDia.toISOString().split('T')[0]);
+
+        const destinoCompraHoje = vaiParaProxima 
+            ? `Próxima Fatura (vence em ${formattedVencimento})`
+            : `Fatura Atual (vence em ${formattedVencimento})`;
+
+        return {
+            proximoFechamento,
+            proximoVencimento,
+            melhorDiaCompra,
+            proximoMelhorDia,
+            diasParaFechamento,
+            diasParaVencimento,
+            vaiParaProxima,
+            destinoCompraHoje,
+            formattedFechamento,
+            formattedVencimento,
+            formattedMelhorDia,
+            formattedProximoMelhorDia
+        };
+    },
+
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     },

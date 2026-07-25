@@ -250,10 +250,7 @@ class CardsController {
             if (percentage > 80) barClass = 'danger';
             else if (percentage > 50) barClass = 'warning';
 
-            const closeD = parseInt(card.closeDay) || 1;
-            const dueD = parseInt(card.dueDay) || 10;
-            let melhorDia = closeD + 1;
-            if (melhorDia > 31) melhorDia = 1;
+            const metrics = window.Utils.getCardMetrics(card.closeDay, card.dueDay);
 
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';
@@ -291,17 +288,24 @@ class CardsController {
                         <span class="detail-label">Fatura Atual (Usado)</span>
                         <span class="detail-value" style="color: var(--danger); font-weight: 700;">${window.Utils.formatCurrency(totalUsed)}</span>
                     </div>
-                    <div class="detail-row" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--glass-border);">
-                        <span class="detail-label">Fechamento</span>
-                        <span class="detail-value">Dia ${closeD}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label" style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-star"></i> Melhor Dia de Compra</span>
-                        <span class="detail-value" style="color: #10b981; font-weight: 700;">Dia ${melhorDia}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Vencimento</span>
-                        <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">Dia ${dueD}</span>
+
+                    <div style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem;">
+                        <div class="detail-row" style="margin: 0;">
+                            <span class="detail-label" style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-star"></i> Melhor Dia p/ Comprar</span>
+                            <span class="detail-value" style="color: #10b981; font-weight: 700;">${metrics.formattedMelhorDia}</span>
+                        </div>
+                        <div class="detail-row" style="margin: 0;">
+                            <span class="detail-label"><i class="fa-regular fa-calendar-xmark"></i> Próximo Fechamento</span>
+                            <span class="detail-value" style="font-weight: 600;">${metrics.formattedFechamento} <small style="color: var(--text-secondary);">(${metrics.diasParaFechamento === 0 ? 'Hoje!' : metrics.diasParaFechamento + ' dias'})</small></span>
+                        </div>
+                        <div class="detail-row" style="margin: 0;">
+                            <span class="detail-label"><i class="fa-regular fa-calendar-check"></i> Próximo Vencimento</span>
+                            <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">${metrics.formattedVencimento} <small style="color: var(--text-secondary);">(${metrics.diasParaVencimento} dias)</small></span>
+                        </div>
+                        <div style="margin-top: 0.25rem; padding-top: 0.4rem; border-top: 1px dashed var(--glass-border); font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center;">
+                            <span style="color: var(--text-secondary);">Compras HOJE vão para:</span>
+                            <span style="font-weight: 700; color: ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'};">${metrics.destinoCompraHoje}</span>
+                        </div>
                     </div>
                 </div>
                 <div class="card-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--glass-border);">
