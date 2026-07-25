@@ -71,7 +71,6 @@ class FinanceController {
         }
 
         // Popular Quem Gastou (Pessoas)
-        const personSelect = document.getElementById('txPerson');
         const personList = document.getElementById('personList');
         
         let personsList = window.Storage.get('persons') || [];
@@ -145,10 +144,13 @@ class FinanceController {
 
         if (btnNova) btnNova.addEventListener('click', () => {
             if (form) form.reset();
-            document.getElementById('editTxId').value = '';
-            document.querySelector('#transactionModal .modal-title').textContent = 'Nova Transação';
-            document.getElementById('txDate').valueAsDate = new Date();
-            window.UI.openModal('transactionModal');
+            const editId = document.getElementById('editTxId');
+            if (editId) editId.value = '';
+            const modalTitle = document.querySelector('#transactionModal .modal-title');
+            if (modalTitle) modalTitle.textContent = 'Nova Transação';
+            const txDate = document.getElementById('txDate');
+            if (txDate) txDate.valueAsDate = new Date();
+            if (window.UI) window.UI.openModal('transactionModal');
         });
         
         if (btnClose) btnClose.addEventListener('click', () => window.UI.closeModal('transactionModal'));
@@ -244,14 +246,16 @@ class FinanceController {
         const tx = this.transactions.find(t => t.id === id);
         if (!tx) return;
 
-        document.getElementById('editTxId').value = tx.id;
-        document.querySelector('#transactionModal .modal-title').textContent = 'Editar Transação';
+        const editIdEl = document.getElementById('editTxId');
+        if (editIdEl) editIdEl.value = tx.id;
+        const modalTitle = document.querySelector('#transactionModal .modal-title');
+        if (modalTitle) modalTitle.textContent = 'Editar Transação';
         
-        document.getElementById('txType').value = tx.type;
-        document.getElementById('txDesc').value = tx.description.replace(/ \(\d+\/\d+\)$/, ''); // Remove (1/2) suffix if present
-        document.getElementById('txAmount').value = tx.amount;
-        document.getElementById('txDate').value = tx.date;
-        document.getElementById('txCategory').value = tx.category;
+        if (document.getElementById('txType')) document.getElementById('txType').value = tx.type;
+        if (document.getElementById('txDesc')) document.getElementById('txDesc').value = tx.description.replace(/ \(\d+\/\d+\)$/, '');
+        if (document.getElementById('txAmount')) document.getElementById('txAmount').value = tx.amount;
+        if (document.getElementById('txDate')) document.getElementById('txDate').value = tx.date;
+        if (document.getElementById('txCategory')) document.getElementById('txCategory').value = tx.category;
         
         if (document.getElementById('txPaymentMethod')) {
             document.getElementById('txPaymentMethod').value = tx.paymentMethod || 'account';
@@ -428,10 +432,8 @@ class FinanceController {
 
         let cards = window.Storage.get('cards') || [];
         
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                cards = cards.filter(c => c.holder && window.currentUser.name && c.holder.trim().toLowerCase() === window.currentUser.name.toLowerCase());
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            cards = cards.filter(c => window.Auth.canAccessPerson(c.holder));
         }
         
         listEl.innerHTML = '';
@@ -448,7 +450,7 @@ class FinanceController {
             if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
                 const cardId = tx.paymentMethod.replace('card_', '');
                 const card = cards.find(c => c.id === cardId);
-                const closeD = card ? (card.closeDay || 1) : 1;
+                const closeD = card ? (card.closeDay || 28) : 28;
                 const dueD = card ? (card.dueDay || 10) : 10;
                 
                 const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
@@ -501,10 +503,8 @@ class FinanceController {
 
         let accounts = window.Storage.get('accounts') || [];
         
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                accounts = accounts.filter(a => a.owner && window.currentUser.name && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            accounts = accounts.filter(a => window.Auth.canAccessPerson(a.owner));
         }
         
         listEl.innerHTML = '';
