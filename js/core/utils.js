@@ -39,22 +39,17 @@ const Utils = {
         const day = d.getDate();
 
         const closeD = parseInt(closeDay) || 1;
-        const dueD = parseInt(dueDay) || 10;
 
-        // A partir do próprio dia de fechamento (day >= closeD), a compra vai para a próxima fatura!
+        // A partir do próprio dia de fechamento (day >= closeD), a compra vai para a fatura do mês seguinte!
         if (day >= closeD) {
             month += 1;
         }
 
-        if (dueD <= closeD) {
-            month += 1;
-        }
-
-        const dueDate = new Date(year, month, dueD);
-        const dueYear = dueDate.getFullYear();
-        const dueMonth = String(dueDate.getMonth() + 1).padStart(2, '0');
+        const invoiceDate = new Date(year, month, 1);
+        const invYear = invoiceDate.getFullYear();
+        const invMonth = String(invoiceDate.getMonth() + 1).padStart(2, '0');
         
-        return `${dueYear}-${dueMonth}`;
+        return `${invYear}-${invMonth}`;
     },
 
     getCardMetrics(closeDay = 1, dueDay = 10, refDate = new Date()) {
