@@ -983,12 +983,10 @@ class FinanceController {
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Inicializa se o formulário de transação existir (Dashboard e Lançamentos)
-    if (document.getElementById('transactionForm')) {
+const initFinance = () => {
+    if (!window.financeController && (document.getElementById('transactionForm') || document.getElementById('recentTransactionsTableBody') || document.getElementById('currentBalance'))) {
         window.financeController = new FinanceController();
         
-        // Bind Filter Event (só no dashboard)
         const filter = document.getElementById('globalDateFilter');
         if (filter) {
             filter.addEventListener('change', () => {
@@ -996,4 +994,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
     }
-});
+};
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initFinance);
+} else {
+    initFinance();
+}
