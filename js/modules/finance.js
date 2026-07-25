@@ -1013,6 +1013,9 @@ const initFinance = () => {
                 window.financeController.updateDashboard();
             });
         }
+    } else if (window.financeController) {
+        // Already initialized — just refresh the data
+        window.financeController.updateDashboard();
     }
 };
 
@@ -1021,3 +1024,7 @@ if (document.readyState === 'loading') {
 } else {
     initFinance();
 }
+
+// Also re-run when Firebase finishes loading data (handles async auth cases)
+window.addEventListener('fluxo:dataChanged', initFinance);
+window.addEventListener('dataUpdated', initFinance);
