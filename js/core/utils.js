@@ -11,11 +11,22 @@ const Utils = {
     formatDate(dateString) {
         if (!dateString) return '-';
         try {
-            const [year, month, day] = dateString.split('-');
+            const dateOnly = String(dateString).split('T')[0].trim();
+            const [year, month, day] = dateOnly.split('-').map(Number);
             const date = new Date(year, month - 1, day);
             if (isNaN(date.getTime())) return '-';
             return new Intl.DateTimeFormat('pt-BR').format(date);
         } catch (e) { return '-'; }
+    },
+
+    parseTxDate(dateString) {
+        if (!dateString) return null;
+        try {
+            const dateOnly = String(dateString).split('T')[0].trim();
+            const [year, month, day] = dateOnly.split('-').map(Number);
+            if (!year || !month || !day) return null;
+            return new Date(year, month - 1, day, 12, 0, 0);
+        } catch (e) { return null; }
     },
 
     generateId() {

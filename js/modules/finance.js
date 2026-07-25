@@ -702,13 +702,13 @@ class FinanceController {
         }
 
         const currentPeriodTxs = this.transactions.filter(tx => {
-            const d = new Date(tx.date + 'T12:00:00');
-            return d >= startDate && d <= endDate;
+            const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
+            return d && d >= startDate && d <= endDate;
         });
 
         const prevPeriodTxs = this.transactions.filter(tx => {
-            const d = new Date(tx.date + 'T12:00:00');
-            return d >= previousStartDate && d <= previousEndDate;
+            const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
+            return d && d >= previousStartDate && d <= previousEndDate;
         });
 
         // --- 2. Render Recent Transactions Table ---
@@ -900,7 +900,7 @@ class FinanceController {
         const dataIn = sortedDates.map(d => dateMap[d].in);
         const dataOut = sortedDates.map(d => dateMap[d].out);
 
-        const ctxMain = document.getElementById('mainFlowChart');
+        const ctxMain = document.getElementById('cashFlowChart') || document.getElementById('mainFlowChart');
         if (ctxMain) {
             this.mainChartInstance = new Chart(ctxMain, {
                 type: 'bar',
@@ -910,13 +910,13 @@ class FinanceController {
                         {
                             label: 'Receitas',
                             data: dataIn,
-                            backgroundColor: '#2ecc71',
+                            backgroundColor: '#10b981',
                             borderRadius: 4
                         },
                         {
                             label: 'Despesas',
                             data: dataOut,
-                            backgroundColor: '#e74c3c',
+                            backgroundColor: '#ef4444',
                             borderRadius: 4
                         }
                     ]
@@ -929,7 +929,7 @@ class FinanceController {
                         x: { grid: { display: false } }
                     },
                     plugins: {
-                        legend: { position: 'top', labels: { color: '#a0a0a0' } }
+                        legend: { position: 'top', labels: { color: '#94a3b8' } }
                     }
                 }
             });
@@ -945,9 +945,9 @@ class FinanceController {
         
         const catLabels = Object.keys(catMap);
         const catData = Object.values(catMap);
-        const colors = ['#3498db', '#9b59b6', '#e67e22', '#f1c40f', '#1abc9c', '#e74c3c', '#34495e'];
+        const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#ef4444', '#06b6d4'];
 
-        const ctxPie = document.getElementById('categoryPieChart');
+        const ctxPie = document.getElementById('categoryChart') || document.getElementById('categoryPieChart');
         if (ctxPie) {
             this.pieChartInstance = new Chart(ctxPie, {
                 type: 'doughnut',
