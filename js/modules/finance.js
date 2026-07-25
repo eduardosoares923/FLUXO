@@ -54,39 +54,29 @@ class FinanceController {
         }
 
         // Popular Quem Gastou (Pessoas)
+        const personSelect = document.getElementById('txPerson');
         const personList = document.getElementById('personList');
-        if (personList) {
-            personList.innerHTML = '<option value="Eu"></option>';
-            const personMap = new Map(); // map lowercase to original case
-            
-            // From accounts
-            accounts.forEach(a => { 
-                if (a.owner) {
-                    const name = a.owner.trim();
-                    if (!personMap.has(name.toLowerCase())) personMap.set(name.toLowerCase(), name);
-                } 
-            });
-            // From cards
-            cards.forEach(c => { 
-                if (c.holder) {
-                    const name = c.holder.trim();
-                    if (!personMap.has(name.toLowerCase())) personMap.set(name.toLowerCase(), name);
-                } 
-            });
-            // From transactions
-            this.transactions.forEach(tx => {
-                if (tx.person) {
-                    const name = tx.person.trim();
-                    if (!personMap.has(name.toLowerCase())) personMap.set(name.toLowerCase(), name);
-                }
-            });
+        
+        let personsList = window.Storage.get('persons') || [];
+        let personNames = personsList.map(p => p.name.trim());
+        if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
 
-            personMap.forEach((originalName, lowerName) => {
-                if (lowerName !== 'eu') { // Eu is already hardcoded
-                    const opt = document.createElement('option');
-                    opt.value = originalName;
-                    personList.appendChild(opt);
-                }
+        if (personSelect) {
+            personSelect.innerHTML = '';
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                personSelect.appendChild(opt);
+            });
+        }
+
+        if (personList) {
+            personList.innerHTML = '';
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                personList.appendChild(opt);
             });
         }
 

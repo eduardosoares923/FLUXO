@@ -1,8 +1,8 @@
 class AuthManager {
     constructor() {
         this.session = window.Storage.get('session');
-        this.isLoginPage = window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '';
-        
+        this.isLoginPage = window.location.pathname.endsWith('index.html') || window.location.pathname.endsWith('/') || window.location.pathname === '' || window.location.pathname.endsWith('/index');
+
         this.verifySession();
         this.bindLoginEvents();
         this.protectUI();
@@ -179,7 +179,7 @@ class AuthManager {
         });
         
         const userName = document.getElementById('userName');
-        if (userName && this.session) userName.textContent = this.session.name.split(' ')[0];
+        if (userName && this.session) userName.textContent = this.session.name;
     }
 
     logout() {
