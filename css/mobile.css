@@ -296,37 +296,163 @@
     border-radius: 10px !important;
   }
 
-  /* ---- Tables & Scrolling ---- */
+  /* ---- MOBILE CARD TABLES (Estilo App de Banco Nubank / Inter) ---- */
   .table-responsive,
   .transactions-table-container,
   .table-container,
   div[style*="overflow-x: auto"],
   div[style*="overflow-x:auto"] {
-    overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
+    overflow-x: visible !important;
     width: 100% !important;
     display: block !important;
   }
 
-  table,
-  .transactions-table,
   .table,
-  div[style*="overflow-x: auto"] table,
-  div[style*="overflow-x:auto"] table {
-    min-width: 600px !important;
+  .transactions-table,
+  table {
+    display: block !important;
     width: 100% !important;
-    table-layout: auto !important;
+    min-width: 0 !important;
+    border: none !important;
+    background: transparent !important;
   }
 
-  table th,
-  table td,
-  .table th,
-  .table td,
-  .transactions-table th,
-  .transactions-table td {
-    white-space: nowrap !important;
-    padding: 0.6rem 0.75rem !important;
+  .table thead,
+  .transactions-table thead,
+  table thead {
+    display: none !important; /* Esconder cabeçalho da tabela no celular */
+  }
+
+  .table tbody,
+  .transactions-table tbody,
+  table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.65rem !important;
+    width: 100% !important;
+  }
+
+  .table tbody tr,
+  .transactions-table tbody tr,
+  table tbody tr {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: 12px !important;
+    padding: 0.85rem 1rem !important;
+    margin: 0 !important;
+    gap: 0.35rem 0.5rem !important;
+    box-shadow: var(--shadow-sm) !important;
+  }
+
+  .table tbody td,
+  .transactions-table tbody td,
+  table tbody td {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 0 !important;
+    border: none !important;
+    background: transparent !important;
     font-size: 0.85rem !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+  }
+
+  /* ---- Otimizações específicas para Transações em formato de Card Mobile ---- */
+  .transactions-table tbody td:nth-child(1),
+  #recentTransactionsTableBody tr td:nth-child(1) { /* Data */
+    order: 3;
+    font-size: 0.75rem !important;
+    color: var(--text-secondary) !important;
+    width: 100% !important;
+    margin-top: 0.2rem !important;
+    padding-top: 0.3rem !important;
+    border-top: 1px dashed var(--glass-border) !important;
+  }
+
+  .transactions-table tbody td:nth-child(2),
+  #recentTransactionsTableBody tr td:nth-child(2) { /* Descrição */
+    order: 1;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+    color: var(--text-primary) !important;
+    max-width: 60% !important;
+  }
+
+  .transactions-table tbody td:nth-child(3),
+  #recentTransactionsTableBody tr td:nth-child(3) { /* Categoria */
+    order: 4;
+    font-size: 0.7rem !important;
+    color: var(--accent-primary) !important;
+    background: rgba(99, 102, 241, 0.1) !important;
+    padding: 0.15rem 0.4rem !important;
+    border-radius: 4px !important;
+  }
+
+  .transactions-table tbody td:nth-child(4),
+  #recentTransactionsTableBody tr td:nth-child(4) { /* Forma/Conta */
+    order: 5;
+    font-size: 0.75rem !important;
+    color: var(--text-secondary) !important;
+    margin-left: auto !important;
+  }
+
+  .transactions-table tbody td:nth-child(5) { /* Tipo Badge */
+    display: none !important;
+  }
+
+  .transactions-table tbody td:nth-child(6),
+  #recentTransactionsTableBody tr td:nth-child(6) { /* Valor */
+    order: 2;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    text-align: right !important;
+    margin-left: auto !important;
+  }
+
+  .transactions-table tbody td:nth-child(7) { /* Ações (Deletar) */
+    order: 6;
+    margin-left: 0.5rem !important;
+  }
+
+  /* ---- Otimizações específicas para Usuários em formato Card Mobile ---- */
+  #usersTableBody tr td:nth-child(1) { /* Perfil (Avatar + Nome) */
+    order: 1;
+    font-weight: 700 !important;
+    font-size: 0.95rem !important;
+  }
+
+  #usersTableBody tr td:nth-child(2) { /* Email */
+    order: 3;
+    width: 100% !important;
+    font-size: 0.8rem !important;
+    color: var(--text-secondary) !important;
+    word-break: break-all !important;
+    margin-top: 0.2rem !important;
+    padding-top: 0.3rem !important;
+    border-top: 1px dashed var(--glass-border) !important;
+  }
+
+  #usersTableBody tr td:nth-child(3) { /* Cargo Badge */
+    order: 2;
+    margin-left: auto !important;
+  }
+
+  #usersTableBody tr td:nth-child(4) { /* Status */
+    order: 4;
+    font-size: 0.75rem !important;
+  }
+
+  #usersTableBody tr td:nth-child(5) { /* Último Acesso */
+    display: none !important;
+  }
+
+  #usersTableBody tr td:nth-child(6) { /* Ações */
+    order: 5;
+    margin-left: auto !important;
   }
 
   /* ---- Forms & Spacing in Modals ---- */
