@@ -810,7 +810,7 @@ class FinanceController {
             if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
                 const cardId = tx.paymentMethod.replace('card_', '');
                 const card = cardsList.find(c => c.id === cardId);
-                const closeD = card ? (card.closeDay || 1) : 1;
+                const closeD = card ? (card.closeDay || 28) : 28;
                 const dueD = card ? (card.dueDay || 10) : 10;
                 
                 const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);

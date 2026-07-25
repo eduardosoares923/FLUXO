@@ -39,7 +39,7 @@ const Utils = {
         } catch (e) { return null; }
     },
 
-    getCardInvoiceMonth(txDateStr, closeDay = 1, dueDay = 10) {
+    getCardInvoiceMonth(txDateStr, closeDay = 28, dueDay = 10) {
         if (!txDateStr) return '';
         const d = this.parseTxDate(txDateStr);
         if (!d) return '';
@@ -48,7 +48,7 @@ const Utils = {
         let month = d.getMonth();
         const day = d.getDate();
 
-        const closeD = parseInt(closeDay) || 1;
+        const closeD = parseInt(closeDay) || 28;
 
         // A partir do próprio dia de fechamento (day >= closeD), a compra vai para a fatura do mês seguinte!
         if (day >= closeD) {
@@ -62,8 +62,8 @@ const Utils = {
         return `${invYear}-${invMonth}`;
     },
 
-    getCardMetrics(closeDay = 1, dueDay = 10, refDate = new Date()) {
-        const closeD = parseInt(closeDay) || 1;
+    getCardMetrics(closeDay = 28, dueDay = 10, refDate = new Date()) {
+        const closeD = parseInt(closeDay) || 28;
         const dueD = parseInt(dueDay) || 10;
         
         const now = refDate ? new Date(refDate) : new Date();
