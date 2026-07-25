@@ -73,24 +73,42 @@ const Utils = {
             return new Date(y, m, validDay, 0, 0, 0, 0);
         };
 
-        let currentClosing = getClampedDate(year, month, closeD);
+        const currentClosing = getClampedDate(year, month, closeD);
+
+        // 1. Fechamento recente e próximo fechamento
+        let prevClosing;
         let proximoFechamento;
 
-        // A partir do próprio dia de fechamento (now >= currentClosing), o ciclo atual fechou!
         if (now < currentClosing) {
             proximoFechamento = currentClosing;
+            prevClosing = getClampedDate(year, month - 1, closeD);
         } else {
+            prevClosing = currentClosing;
             proximoFechamento = getClampedDate(year, month + 1, closeD);
         }
 
-        const fYear = proximoFechamento.getFullYear();
-        const fMonth = proximoFechamento.getMonth();
-
+        // 2. Próximo Vencimento (A primeira data de vencimento que é HOJE ou no FUTURO)
         let proximoVencimento;
+        const pcYear = prevClosing.getFullYear();
+        const pcMonth = prevClosing.getMonth();
+
+        let prevInvoiceDue;
         if (dueD > closeD) {
-            proximoVencimento = getClampedDate(fYear, fMonth, dueD);
+            prevInvoiceDue = getClampedDate(pcYear, pcMonth, dueD);
         } else {
-            proximoVencimento = getClampedDate(fYear, fMonth + 1, dueD);
+            prevInvoiceDue = getClampedDate(pcYear, pcMonth + 1, dueD);
+        }
+
+        if (prevInvoiceDue >= now) {
+            proximoVencimento = prevInvoiceDue;
+        } else {
+            const fYear = proximoFechamento.getFullYear();
+            const fMonth = proximoFechamento.getMonth();
+            if (dueD > closeD) {
+                proximoVencimento = getClampedDate(fYear, fMonth, dueD);
+            } else {
+                proximoVencimento = getClampedDate(fYear, fMonth + 1, dueD);
+            }
         }
 
         let melhorDiaCompra;
