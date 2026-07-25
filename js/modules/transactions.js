@@ -42,13 +42,13 @@ class TransactionsController {
         window.addEventListener('dataUpdated', refreshTxHandler);
         window.addEventListener('fluxo:dataChanged', refreshTxHandler);
 
-        const applyFilters = () => {
-            const search = searchInput.value.toLowerCase();
-            const type = typeSelect.value;
-            const cat = catSelect.value;
+        this.applyFilters = () => {
+            const search = searchInput ? searchInput.value.toLowerCase() : '';
+            const type = typeSelect ? typeSelect.value : 'all';
+            const cat = catSelect ? catSelect.value : 'all';
 
             this.filteredTransactions = this.allTransactions.filter(tx => {
-                const matchSearch = tx.description.toLowerCase().includes(search);
+                const matchSearch = !search || (tx.description && tx.description.toLowerCase().includes(search));
                 const matchType = type === 'all' || tx.type === type;
                 const matchCat = cat === 'all' || tx.category === cat;
                 return matchSearch && matchType && matchCat;
@@ -59,9 +59,31 @@ class TransactionsController {
             this.renderTable();
         };
 
-        if (btnFilter) btnFilter.addEventListener('click', applyFilters);
-        if (searchInput) searchInput.addEventListener('keyup', (e) => { if(e.key === 'Enter') applyFilters(); });
+        if (btnFilter) btnFilter.addEventListener('click', () => this.applyFilters());
+        if (searchInput) searchInput.addEventListener('keyup', (e) => { if(e.key === 'Enter') this.applyFilters(); });
         
+        // Modal Handlers para Nova Transação
+        const btnNova = document.getElementById('btnNovaTransacao');
+        const btnCloseModal = document.getElementById('closeTxModalBtn');
+        const btnCancelModal = document.getElementById('cancelTxBtn');
+        const txForm = document.getElementById('txForm');
+
+        if (btnNova) {
+            btnNova.addEventListener('click', () => this.openNovaTransacaoModal());
+        }
+
+        if (btnCloseModal) {
+            btnCloseModal.addEventListener('click', () => window.UI.closeModal('txModal'));
+        }
+
+        if (btnCancelModal) {
+            btnCancelModal.addEventListener('click', () => window.UI.closeModal('txModal'));
+        }
+
+        if (txForm) {
+            txForm.addEventListener('submit', (e) => this.saveTransaction(e));
+        }
+
         // Event Delegation for Table Actions
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
@@ -85,6 +107,141 @@ class TransactionsController {
                     });
                 });
             });
+        }
+    }
+
+    populateTxModalOptions() {
+        const paymentSelect = document.getElementById('txPaymentMethod');
+        const personSelect = document.getElementById('txPerson');
+
+        const accounts = window.Storage.get('accounts') || [];
+        const cards = window.Storage.get('cards') || [];
+        const persons = window.Storage.get('persons') || [];
+
+        if (paymentSelect) {
+            paymentSelect.innerHTML = '';
+            
+            const groupAcc = document.createElement('optgroup');
+            groupAcc.label = "Contas";
+            accounts.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                opt.textContent = `Conta: ${acc.name}`;
+                groupAcc.appendChild(opt);
+            });
+            paymentSelect.appendChild(groupAcc);
+
+            if (cards.length > 0) {
+                const groupCard = document.createElement('optgroup');
+                groupCard.label = "Cartões de Crédito";
+                cards.forEach(card => {
+                    const opt = document.createElement('option');
+                    opt.value = `card_${card.id}`;
+                    opt.textContent = `Cartão: ${card.name}`;
+                    groupCard.appendChild(opt);
+                });
+                paymentSelect.appendChild(groupCard);
+            }
+        }
+
+        if (personSelect) {
+            personSelect.innerHTML = '';
+            let personNames = persons.map(p => p.name.trim());
+            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+            
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                personSelect.appendChild(opt);
+            });
+        }
+
+        const dateInput = document.getElementById('txDate');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+    }
+
+    openNovaTransacaoModal() {
+        const form = document.getElementById('txForm');
+        if (form) form.reset();
+
+        this.populateTxModalOptions();
+
+        const dateInput = document.getElementById('txDate');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+
+        window.UI.openModal('txModal');
+    }
+
+    async saveTransaction(e) {
+        e.preventDefault();
+
+        const type = document.getElementById('txType')?.value || 'expense';
+        const description = document.getElementById('txDescription')?.value.trim();
+        const amountStr = document.getElementById('txAmount')?.value;
+        const category = document.getElementById('txCategory')?.value;
+        const paymentMethod = document.getElementById('txPaymentMethod')?.value || 'account';
+        const person = document.getElementById('txPerson')?.value || 'Eduardo';
+        const dateStr = document.getElementById('txDate')?.value || new Date().toISOString().split('T')[0];
+
+        if (!description || !amountStr) {
+            window.UI.showToast('Preencha a descrição e o valor.', 'error');
+            return;
+        }
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            window.UI.showToast('Informe um valor válido maior que zero.', 'error');
+            return;
+        }
+
+        const currentUser = window.currentUser || window.Storage.get('session');
+
+        const newTx = {
+            id: window.Utils.generateId(),
+            type,
+            description,
+            amount,
+            category,
+            paymentMethod,
+            person,
+            date: dateStr,
+            userId: currentUser ? currentUser.id : '1',
+            createdAt: new Date().toISOString()
+        };
+
+        try {
+            await window.Storage.saveRecord('transactions', newTx);
+
+            // If expense on a credit card, update card usedLimit
+            if (paymentMethod.startsWith('card_') && type === 'expense') {
+                const cardId = paymentMethod.replace('card_', '');
+                const cards = window.Storage.get('cards') || [];
+                const card = cards.find(c => c.id === cardId);
+                if (card) {
+                    card.usedLimit = (card.usedLimit || 0) + amount;
+                    await window.Storage.saveRecord('cards', card);
+                }
+            }
+
+            if (window.Audit) {
+                window.Audit.log('TRANSACTION_CREATE', { description, amount, type });
+            }
+
+            window.UI.closeModal('txModal');
+            window.UI.showToast('Lançamento realizado com sucesso!', 'success');
+
+            let globalTx = window.Storage.get('transactions') || [];
+            if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+                globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person));
+            }
+            this.allTransactions = globalTx;
+            this.applyFilters();
+        } catch (err) {
+            console.error('Erro ao salvar lançamento:', err);
+            window.UI.showToast('Erro ao salvar lançamento: ' + (err.message || 'Tente novamente'), 'error');
         }
     }
 
