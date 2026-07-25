@@ -141,23 +141,25 @@ class UsersApp {
         tbody.innerHTML = htmlBuffer;
     }
 
-    const PERMISSION_MODULES = [
-        { id: 'dashboard', name: 'Dashboard' },
-        { id: 'finance', name: 'Fluxo de Caixa' },
-        { id: 'transactions', name: 'LanÃ§amentos' },
-        { id: 'accounts', name: 'Contas BancÃ¡rias' },
-        { id: 'cards', name: 'CartÃµes' },
-        { id: 'categories', name: 'Categorias' },
-        { id: 'reports', name: 'AnÃ¡lises e RelatÃ³rios' },
-        { id: 'settings', name: 'ConfiguraÃ§Ãµes' },
-        { id: 'users', name: 'Cadastro de UsuÃ¡rios' }
-    ];
+    get PERMISSION_MODULES() {
+        return [
+            { id: 'dashboard', name: 'Dashboard' },
+            { id: 'finance', name: 'Fluxo de Caixa' },
+            { id: 'transactions', name: 'Lançamentos' },
+            { id: 'accounts', name: 'Contas Bancárias' },
+            { id: 'cards', name: 'Cartões' },
+            { id: 'categories', name: 'Categorias' },
+            { id: 'reports', name: 'Análises e Relatórios' },
+            { id: 'settings', name: 'Configurações' },
+            { id: 'users', name: 'Cadastro de Usuários' }
+        ];
+    }
 
     renderPermissions(permissions = {}) {
         const tbody = document.getElementById('permissionsTableBody');
         if (!tbody) return;
         let html = '';
-        PERMISSION_MODULES.forEach(mod => {
+        this.PERMISSION_MODULES.forEach(mod => {
             const perms = permissions[mod.id] || [];
             html += `<tr>
                 <td style='padding: 0.5rem;'>${mod.name}</td>
