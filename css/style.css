@@ -444,3 +444,34 @@ select.form-control option {
     min-width: 600px;
   }
 }
+
+/* Global Form Row & Select Enhancements */
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-row > .form-group {
+  flex: 1 1 140px;
+  min-width: 130px;
+}
+
+select.form-control {
+  padding-right: 2rem !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+select.form-control option {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  padding: 0.5rem 1rem;
+}
+
+[data-theme="light"] select.form-control option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}

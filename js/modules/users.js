@@ -112,6 +112,9 @@ class UsersApp {
             const lastLoginText = user.lastLogin ? new Date(user.lastLogin).toLocaleString('pt-BR') : 'Nunca acessou';
             const avatarSrc = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`;
 
+            const roleKey = (user.role && roleLabels[user.role]) ? user.role : 'usuario';
+            const roleBadge = roleLabels[roleKey];
+
             htmlBuffer += `
                 <tr style="border-bottom: 1px solid var(--glass-border)">
                     <td style="padding: 1rem;">
@@ -123,7 +126,7 @@ class UsersApp {
                         </div>
                     </td>
                     <td style="padding: 1rem; color: var(--text-secondary);">${window.Utils.escapeHTML(user.email)}</td>
-                    <td style="padding: 1rem;">${roleLabels[user.role || 'usuario']}</td>
+                    <td style="padding: 1rem;">${roleBadge}</td>
                     <td style="padding: 1rem;">${statusLabel}</td>
                     <td style="padding: 1rem; color: var(--text-secondary); font-size: 0.9rem;">${lastLoginText}</td>
                     <td style="padding: 1rem; text-align: right;">

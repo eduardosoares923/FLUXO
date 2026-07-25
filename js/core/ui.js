@@ -1,4 +1,4 @@
-﻿class UIManager {
+class UIManager {
     constructor() {
         this.initDropdowns();
         this.initModals();

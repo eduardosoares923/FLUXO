@@ -1,4 +1,4 @@
-﻿/* css/dashboard.css */
+/* css/dashboard.css */
 .dashboard-layout {
   display: flex;
   height: 100vh;
@@ -346,39 +346,6 @@
   font-weight: 700;
 }
 
-.modal-close {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 1.25rem;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.modal-close:hover {
-  color: var(--text-primary);
-}
-
-.form-row {
-  display: flex;
-  gap: 1rem;
-}
-
-.form-row > .form-group {
-  flex: 1;
-}
-
-/* Header Utilities */
-.header-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
-.btn-icon {
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 0.5rem;
   border: none;
   font-size: 1.2rem;
   cursor: pointer;
