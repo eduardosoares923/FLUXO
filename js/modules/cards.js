@@ -250,6 +250,11 @@ class CardsController {
             if (percentage > 80) barClass = 'danger';
             else if (percentage > 50) barClass = 'warning';
 
+            const closeD = parseInt(card.closeDay) || 1;
+            const dueD = parseInt(card.dueDay) || 10;
+            let melhorDia = closeD + 1;
+            if (melhorDia > 31) melhorDia = 1;
+
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';
             cardEl.innerHTML = `
@@ -288,11 +293,15 @@ class CardsController {
                     </div>
                     <div class="detail-row" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--glass-border);">
                         <span class="detail-label">Fechamento</span>
-                        <span class="detail-value">Dia ${card.closeDay || 1}</span>
+                        <span class="detail-value">Dia ${closeD}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label" style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-star"></i> Melhor Dia de Compra</span>
+                        <span class="detail-value" style="color: #10b981; font-weight: 700;">Dia ${melhorDia}</span>
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Vencimento</span>
-                        <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">Dia ${card.dueDay || 10}</span>
+                        <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">Dia ${dueD}</span>
                     </div>
                 </div>
                 <div class="card-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--glass-border);">
