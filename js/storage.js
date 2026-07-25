@@ -34,7 +34,7 @@ window.Storage = {
                 // Trigger event to update UI
                 window.dispatchEvent(new CustomEvent('fluxo:dataChanged', { detail: { collection } }));
             }, (error) => {
-                console.error(Firebase sync error on collection :, error);
+                console.error('Firebase sync error on collection:', error);
             });
         });
     },
