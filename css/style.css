@@ -223,6 +223,37 @@ a:hover {
   background-color: rgba(239, 68, 68, 0.1);
   color: var(--danger);
 }
+
+/* Circular Icon Button / Theme Toggle */
+.btn-icon,
+#themeToggle {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px !important;
+  min-height: 36px !important;
+  max-width: 36px !important;
+  max-height: 36px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid var(--glass-border) !important;
+  color: var(--text-primary) !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+  outline: none !important;
+}
+
+[data-theme="light"] .btn-icon,
+[data-theme="light"] #themeToggle {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  color: var(--text-primary) !important;
+}
 .btn-ghost.success:hover {
   background-color: rgba(16, 185, 129, 0.1);
   color: var(--success);
