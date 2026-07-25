@@ -258,25 +258,28 @@ class AccountsController {
 
             card.innerHTML = `
                 <div class="account-header">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div style="width: 40px; height: 40px; border-radius: 10px; background: ${acc.color || '#10b981'}20; color: ${acc.color || '#10b981'}; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                    <div style="display: flex; align-items: center; gap: 0.85rem; flex: 1;">
+                        <div class="account-icon" style="background: ${acc.color || '#10b981'};">
                             <i class="fa-solid ${typeIcons[acc.type] || 'fa-wallet'}"></i>
                         </div>
-                        <div>
-                            <div class="account-name" style="font-weight: 600; font-size: 1.05rem;">${window.Utils.escapeHTML(acc.name)}</div>
-                            <div class="account-type" style="font-size: 0.78rem; color: var(--text-secondary);">${typeNames[acc.type] || 'Conta'} &bull; Titular: ${window.Utils.escapeHTML(acc.owner || 'Não definido')}</div>
+                        <div class="account-title-group">
+                            <div class="account-name">${window.Utils.escapeHTML(acc.name)}</div>
+                            <div class="account-owner">
+                                <i class="fa-solid fa-user" style="font-size: 0.75rem; color: var(--accent-primary);"></i>
+                                ${typeNames[acc.type] || 'Conta'} &bull; <strong>${window.Utils.escapeHTML(acc.owner || 'Não definido')}</strong>
+                            </div>
                         </div>
                     </div>
-                    <div class="account-actions">
-                        <button class="btn btn-ghost primary btn-sm" onclick="window.AccountsApp.openEditModal('${acc.id}')" title="Editar"><i class="fa-solid fa-pen-to-square"></i></button>
-                        <button class="btn btn-ghost danger btn-sm" onclick="window.AccountsApp.openDeleteModal('${acc.id}')" title="Excluir"><i class="fa-solid fa-trash"></i></button>
-                    </div>
                 </div>
-                <div class="account-body" style="margin-top: 1rem;">
-                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Saldo Atual Calculado</div>
-                    <div class="account-balance" style="font-size: 1.4rem; font-weight: 700; color: ${calculatedBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                <div class="account-balance-group">
+                    <div class="balance-label">Saldo Atual Calculado</div>
+                    <div class="balance-value" style="color: ${calculatedBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">
                         ${window.Utils.formatCurrency(calculatedBalance)}
                     </div>
+                </div>
+                <div class="account-actions">
+                    <button class="btn btn-ghost primary btn-sm" onclick="window.AccountsApp.openEditModal('${acc.id}')" title="Editar"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                    <button class="btn btn-ghost danger btn-sm" onclick="window.AccountsApp.openDeleteModal('${acc.id}')" title="Excluir"><i class="fa-solid fa-trash"></i> Excluir</button>
                 </div>
             `;
             container.appendChild(card);
@@ -294,7 +297,7 @@ class AccountsController {
             this.populateOwnerSelects();
             window.UI.openModal('accountModal');
         };
-        addBtn.innerHTML = `<i class="fa-solid fa-circle-plus"></i><span>Adicionar Nova Conta</span>`;
+        addBtn.innerHTML = `<i class="fa-solid fa-plus-circle"></i><span>Adicionar Nova Conta</span>`;
         container.appendChild(addBtn);
     }
 
@@ -351,8 +354,8 @@ class AccountsController {
         try {
             await window.Storage.saveRecord('persons', personRecord);
 
-            // Propagate renaming across all collections if editing existing person name
-            if (oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
+            // Renaming person updates all linked historical records
+            if (editId && oldName && oldName.toLowerCase() !== newName.toLowerCase()) {
                 const txs = window.Storage.get('transactions') || [];
                 txs.forEach(t => {
                     if (t.person && t.person.trim().toLowerCase() === oldName.toLowerCase()) {
@@ -387,14 +390,14 @@ class AccountsController {
             }
 
             if (window.Audit) {
-                window.Audit.log('PERSON_SAVE', { oldName, newName });
+                window.Audit.log(editId ? 'PERSON_UPDATE' : 'PERSON_CREATE', { name: newName });
             }
 
             this.loadPersons();
             this.renderPersons();
             this.renderAccounts();
             window.UI.closeModal('personModal');
-            window.UI.showToast('Pessoa salva e sincronizada em todo o sistema!', 'success');
+            window.UI.showToast('Pessoa salva com sucesso!', 'success');
         } catch (err) {
             console.error('Erro ao salvar pessoa:', err);
             window.UI.showToast('Erro ao salvar pessoa.', 'error');
@@ -513,30 +516,32 @@ class AccountsController {
 
             card.innerHTML = `
                 <div class="account-header">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div style="width: 42px; height: 42px; border-radius: 50%; background: ${p.color || '#6366f1'}20; color: ${p.color || '#6366f1'}; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 700; border: 2px solid ${p.color || '#6366f1'};">
+                    <div style="display: flex; align-items: center; gap: 0.85rem; flex: 1;">
+                        <div style="width: 48px; height: 48px; border-radius: 50%; background: ${p.color || '#6366f1'}25; color: ${p.color || '#6366f1'}; display: flex; align-items: center; justify-content: center; font-size: 1.15rem; font-weight: 800; border: 2px solid ${p.color || '#6366f1'}; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
                             ${window.Utils.escapeHTML(p.name.substring(0, 2).toUpperCase())}
                         </div>
-                        <div>
-                            <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">${window.Utils.escapeHTML(p.name)}</div>
-                            <div style="font-size: 0.78rem; color: var(--text-secondary);">${userCount > 0 ? '<i class="fa-solid fa-user-check" style="color: var(--success); margin-right: 3px;"></i> Usuário do Sistema' : 'Titular Vinculado'}</div>
+                        <div class="account-title-group">
+                            <div class="account-name">${window.Utils.escapeHTML(p.name)}</div>
+                            <div class="account-owner">
+                                ${userCount > 0 ? '<span style="color: var(--success); font-weight: 600;"><i class="fa-solid fa-user-check"></i> Usuário do Sistema</span>' : '<span style="color: var(--text-secondary);"><i class="fa-solid fa-id-badge"></i> Titular Vinculado</span>'}
+                            </div>
                         </div>
                     </div>
-                    <div class="account-actions">
-                        <button class="btn btn-ghost primary btn-sm" onclick="window.AccountsApp.openEditPersonModal('${p.id}')" title="Editar / Renomear"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
-                        <button class="btn btn-ghost danger btn-sm" onclick="window.AccountsApp.openDeletePersonModal('${p.id}')" title="Excluir / Mesclar"><i class="fa-solid fa-trash"></i></button>
-                    </div>
                 </div>
-                <div class="account-body" style="margin-top: 1rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
-                    <span style="font-size: 0.75rem; background: var(--bg-primary); padding: 0.35rem 0.65rem; border-radius: 6px; border: 1px solid var(--glass-border); color: var(--text-secondary);">
+                <div class="account-balance-group" style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: space-between; padding: 0.85rem 1rem;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
                         <i class="fa-solid fa-money-bill-transfer" style="color: var(--accent-primary);"></i> <strong>${txCount}</strong> lançamentos
                     </span>
-                    <span style="font-size: 0.75rem; background: var(--bg-primary); padding: 0.35rem 0.65rem; border-radius: 6px; border: 1px solid var(--glass-border); color: var(--text-secondary);">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
                         <i class="fa-solid fa-wallet" style="color: var(--success);"></i> <strong>${accCount}</strong> contas
                     </span>
-                    <span style="font-size: 0.75rem; background: var(--bg-primary); padding: 0.35rem 0.65rem; border-radius: 6px; border: 1px solid var(--glass-border); color: var(--text-secondary);">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary); display: flex; align-items: center; gap: 0.4rem;">
                         <i class="fa-solid fa-credit-card" style="color: #ec4899;"></i> <strong>${cardCount}</strong> cartões
                     </span>
+                </div>
+                <div class="account-actions">
+                    <button class="btn btn-ghost primary btn-sm" onclick="window.AccountsApp.openEditPersonModal('${p.id}')" title="Editar / Renomear"><i class="fa-solid fa-pen-to-square"></i> Editar</button>
+                    <button class="btn btn-ghost danger btn-sm" onclick="window.AccountsApp.openDeletePersonModal('${p.id}')" title="Excluir / Mesclar"><i class="fa-solid fa-trash"></i> Excluir</button>
                 </div>
             `;
             container.appendChild(card);
@@ -546,7 +551,7 @@ class AccountsController {
         const addBtn = document.createElement('div');
         addBtn.className = 'add-account-btn';
         addBtn.onclick = () => this.openPersonModal();
-        addBtn.innerHTML = `<i class="fa-solid fa-circle-plus"></i><span>Cadastrar Nova Pessoa</span>`;
+        addBtn.innerHTML = `<i class="fa-solid fa-user-plus"></i><span>Cadastrar Nova Pessoa</span>`;
         container.appendChild(addBtn);
     }
 }
