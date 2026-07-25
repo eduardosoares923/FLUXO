@@ -1,4 +1,4 @@
-﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
   /* Colors - Dark Theme (Default) */
@@ -420,5 +420,27 @@ select.form-control option {
   /* Fix overlapping text */
   * {
     word-break: break-word;
+  }
+
+  /* Mobile Touch Targets & Usability */
+  .btn, .nav-item, input, select {
+    min-height: 44px;
+  }
+
+  /* Month Navigator Mobile Wrap */
+  .month-navigator {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  /* Table Responsive Smooth Scrolling */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .table-responsive table {
+    min-width: 600px;
   }
 }

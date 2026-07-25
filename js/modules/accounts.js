@@ -208,6 +208,14 @@ class AccountsController {
         const addBtn = document.getElementById('btnNovaConta');
         container.innerHTML = '';
 
+        let visibleAccounts = this.accounts;
+        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                const uName = (window.currentUser.name || '').trim().toLowerCase();
+                visibleAccounts = this.accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === uName);
+            }
+        }
+
         // Let's compute actual balance from transactions!
         const transactions = window.Storage.get('transactions') || [];
 
@@ -220,7 +228,7 @@ class AccountsController {
             return accMap;
         }, {});
 
-        this.accounts.forEach(acc => {
+        visibleAccounts.forEach(acc => {
             
             // Re-calculate the current balance of this specific account based on transactions
             // The initial balance is a starting point

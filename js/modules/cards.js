@@ -192,11 +192,18 @@ class CardsController {
         const container = document.getElementById('cardsContainer');
         if (!container) return;
 
-        // Limpa tudo exceto o botão de adicionar
         const addBtn = document.getElementById('btnNovoCartao');
         container.innerHTML = '';
 
-        this.cards.forEach(card => {
+        let visibleCards = this.cards;
+        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                const uName = (window.currentUser.name || '').trim().toLowerCase();
+                visibleCards = this.cards.filter(c => c.holder && c.holder.trim().toLowerCase() === uName);
+            }
+        }
+
+        visibleCards.forEach(card => {
             const available = card.limit - card.usedLimit;
             const percentage = (card.usedLimit / card.limit) * 100;
             

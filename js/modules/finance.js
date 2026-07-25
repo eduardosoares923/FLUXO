@@ -183,6 +183,51 @@ class FinanceController {
             this.transactions = allTx;
             this.updateDashboard();
         });
+
+        // Month Navigation Handlers
+        const btnPrevMonth = document.getElementById('btnPrevMonth');
+        const btnNextMonth = document.getElementById('btnNextMonth');
+        const btnTodayMonth = document.getElementById('btnTodayMonth');
+
+        if (btnPrevMonth) {
+            btnPrevMonth.addEventListener('click', () => {
+                this.currentNavDate.setMonth(this.currentNavDate.getMonth() - 1);
+                this.updateMonthDisplay();
+                this.updateDashboard();
+            });
+        }
+
+        if (btnNextMonth) {
+            btnNextMonth.addEventListener('click', () => {
+                this.currentNavDate.setMonth(this.currentNavDate.getMonth() + 1);
+                this.updateMonthDisplay();
+                this.updateDashboard();
+            });
+        }
+
+        if (btnTodayMonth) {
+            btnTodayMonth.addEventListener('click', () => {
+                this.currentNavDate = new Date();
+                this.updateMonthDisplay();
+                this.updateDashboard();
+            });
+        }
+
+        this.updateMonthDisplay();
+    }
+
+    updateMonthDisplay() {
+        const display = document.getElementById('currentMonthDisplay');
+        if (!display) return;
+        
+        const monthNames = [
+            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        
+        const m = monthNames[this.currentNavDate.getMonth()];
+        const y = this.currentNavDate.getFullYear();
+        display.textContent = `${m} de ${y}`;
     }
 
     openEditModal(id) {

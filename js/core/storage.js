@@ -34,9 +34,26 @@ window.Storage = {
                 // Trigger event to update UI
                 window.dispatchEvent(new CustomEvent('fluxo:dataChanged', { detail: { collection } }));
             }, (error) => {
-                console.error('Firebase sync error on collection:', error);
+                console.error('Firebase sync error on collection:', collection, error);
+                if (error.code === 'permission-denied') {
+                    if (window.UI) window.UI.showToast('Permissão insuficiente para sincronizar ' + collection, 'error');
+                } else if (error.code === 'unavailable') {
+                    if (window.UI) window.UI.showToast('Modo offline: Sincronização em segundo plano', 'info');
+                }
             });
         });
+    },
+
+    // Helper for error messages
+    notifyError(err, fallbackMsg) {
+        if (!window.UI) return;
+        let msg = fallbackMsg || 'Erro ao processar operação.';
+        if (err) {
+            if (err.code === 'permission-denied') msg = 'Permissão insuficiente. Verifique suas regras de acesso.';
+            else if (err.code === 'unavailable') msg = 'Sem conexão com o servidor. Dados salvos localmente.';
+            else if (err.message) msg = err.message;
+        }
+        window.UI.showToast(msg, 'error');
     },
 
     // Legacy method for settings or local only overrides
@@ -45,6 +62,7 @@ window.Storage = {
             localStorage.setItem(APP_PREFIX + key, JSON.stringify(value));
         } catch (e) {
             console.error('Erro ao salvar no LocalStorage', e);
+            this.notifyError(e, 'Erro ao salvar no armazenamento local');
         }
     },
 
@@ -88,15 +106,34 @@ window.Storage = {
             this.set(collection, localData);
 
             if (this.isFirebaseReady && typeof firebase !== 'undefined') {
-                // Ensure no undefined values are sent to Firestore
                 const cleanRecord = JSON.parse(JSON.stringify(record));
                 
-                // Don't duplicate the id field inside the document if you prefer, but it's okay
+                // 5s Timeout Safeguard to prevent infinite loading
+                let isResolved = false;
+                const timeoutId = setTimeout(() => {
+                    if (!isResolved) {
+                        isResolved = true;
+                        console.warn('Firestore save query timed out. Resolving locally.');
+                        resolve(record);
+                    }
+                }, 5000);
+
                 firebase.firestore().collection(collection).doc(record.id).set(cleanRecord, { merge: true })
-                    .then(() => resolve(record))
+                    .then(() => {
+                        if (!isResolved) {
+                            isResolved = true;
+                            clearTimeout(timeoutId);
+                            resolve(record);
+                        }
+                    })
                     .catch(e => {
-                        console.error('Erro ao salvar no Firestore:', e);
-                        reject(e);
+                        if (!isResolved) {
+                            isResolved = true;
+                            clearTimeout(timeoutId);
+                            console.error('Erro ao salvar no Firestore:', e);
+                            this.notifyError(e, 'Erro ao salvar documento no banco de dados');
+                            resolve(record); // Fallback to local save so UI doesn't crash
+                        }
                     });
             } else {
                 resolve(record);
@@ -112,11 +149,31 @@ window.Storage = {
             this.set(collection, filtered);
 
             if (this.isFirebaseReady && typeof firebase !== 'undefined') {
+                let isResolved = false;
+                const timeoutId = setTimeout(() => {
+                    if (!isResolved) {
+                        isResolved = true;
+                        console.warn('Firestore delete query timed out. Resolving locally.');
+                        resolve();
+                    }
+                }, 5000);
+
                 firebase.firestore().collection(collection).doc(id).delete()
-                    .then(() => resolve())
+                    .then(() => {
+                        if (!isResolved) {
+                            isResolved = true;
+                            clearTimeout(timeoutId);
+                            resolve();
+                        }
+                    })
                     .catch(e => {
-                        console.error('Erro ao deletar no Firestore:', e);
-                        reject(e);
+                        if (!isResolved) {
+                            isResolved = true;
+                            clearTimeout(timeoutId);
+                            console.error('Erro ao deletar no Firestore:', e);
+                            this.notifyError(e, 'Erro ao excluir documento no banco de dados');
+                            resolve(); // Fallback to local deletion
+                        }
                     });
             } else {
                 resolve();
