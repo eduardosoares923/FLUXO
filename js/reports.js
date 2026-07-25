@@ -1,4 +1,4 @@
-﻿class ReportsController {
+class ReportsController {
     constructor() {
         this.theme = Storage.get('theme') || 'dark';
         this.textColor = this.theme === 'dark' ? '#f8fafc' : '#0f172a';
@@ -568,13 +568,16 @@
         const history = [];
         let runningBalance = currentBalance;
         
-        // Loop invertido para descobrir os saldos do passado
+        // Loop invertido para descobrir os saldos do passado (usando push para O(1) performance)
         for (let i = sortedTx.length - 1; i >= 0; i--) {
             const tx = sortedTx[i];
-            history.unshift({ date: tx.date, balance: runningBalance });
+            history.push({ date: tx.date, balance: runningBalance });
             if (tx.type === 'income') runningBalance -= tx.amount;
             else if (tx.type === 'expense') runningBalance += tx.amount; // volta o dinheiro
         }
+        
+        // Reverte o array para a ordem cronológica correta
+        history.reverse();
 
         // Agrupar último saldo do dia
         const dailyBalance = {};

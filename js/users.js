@@ -1,4 +1,4 @@
-class UsersApp {
+﻿class UsersApp {
     constructor() {
         this.users = [];
         this.editingUserId = null;
@@ -141,6 +141,49 @@ class UsersApp {
         tbody.innerHTML = htmlBuffer;
     }
 
+    const PERMISSION_MODULES = [
+        { id: 'dashboard', name: 'Dashboard' },
+        { id: 'finance', name: 'Fluxo de Caixa' },
+        { id: 'transactions', name: 'LanÃ§amentos' },
+        { id: 'accounts', name: 'Contas BancÃ¡rias' },
+        { id: 'cards', name: 'CartÃµes' },
+        { id: 'categories', name: 'Categorias' },
+        { id: 'reports', name: 'AnÃ¡lises e RelatÃ³rios' },
+        { id: 'settings', name: 'ConfiguraÃ§Ãµes' },
+        { id: 'users', name: 'Cadastro de UsuÃ¡rios' }
+    ];
+
+    renderPermissions(permissions = {}) {
+        const tbody = document.getElementById('permissionsTableBody');
+        if (!tbody) return;
+        let html = '';
+        PERMISSION_MODULES.forEach(mod => {
+            const perms = permissions[mod.id] || [];
+            html += "<tr>
+                <td style='padding: 0.5rem;'> + mod.name + </td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='view'  + (perms.includes('view') ? 'checked' : '') + ></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='create'  + (perms.includes('create') ? 'checked' : '') + ></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='edit'  + (perms.includes('edit') ? 'checked' : '') + ></td>
+                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module=' + mod.id + ' value='delete'  + (perms.includes('delete') ? 'checked' : '') + ></td>
+            </tr>;
+        });
+        tbody.innerHTML = html;
+        
+        // Hide permissions container if user role is admin (they have full access anyway)
+        const roleInput = document.getElementById('userRoleInput');
+        const permContainer = document.getElementById('permissionsContainer');
+        const togglePerms = () => {
+            if(roleInput.value === 'admin') {
+                permContainer.style.display = 'none';
+            } else {
+                permContainer.style.display = 'block';
+            }
+        };
+        roleInput.removeEventListener('change', togglePerms);
+        roleInput.addEventListener('change', togglePerms);
+        togglePerms();
+    }
+
     openNewModal() {
         this.editingUserId = null;
         document.getElementById('userForm').reset();
@@ -150,6 +193,7 @@ class UsersApp {
         // Password is required for new user
         document.getElementById('userPasswordInput').required = true;
         document.getElementById('userPasswordConfirmInput').required = true;
+        this.renderPermissions({});
         
         window.UI.openModal('userModal');
     }
@@ -176,6 +220,7 @@ class UsersApp {
         document.getElementById('userPasswordConfirmInput').required = false;
         
         document.getElementById('userModalTitle').textContent = 'Editar Perfil';
+        this.renderPermissions(user.permissions || {});
         window.UI.openModal('userModal');
     }
 
@@ -195,7 +240,15 @@ class UsersApp {
         const confirmPassword = document.getElementById('userPasswordConfirmInput').value;
         const role = document.getElementById('userRoleInput').value;
         const status = document.getElementById('userStatusInput').value;
-        const notes = document.getElementById('userNotesInput').value.trim();
+                const notes = document.getElementById('userNotesInput').value.trim();
+        
+        // Extract permissions
+        const perms = {};
+        document.querySelectorAll('.perm-cb:checked').forEach(cb => {
+            const mod = cb.getAttribute('data-module');
+            if(!perms[mod]) perms[mod] = [];
+            perms[mod].push(cb.value);
+        });
         
         if (!name || !email) {
             window.UI.showToast('Nome e e-mail são obrigatórios.', 'error');
@@ -237,9 +290,10 @@ class UsersApp {
                     }
                 }
                 
-                user.role = role;
+                                user.role = role;
                 user.status = status;
                 user.notes = notes;
+                user.permissions = perms;
                 
                 this.users[userIndex] = user;
                 window.UI.showToast('Perfil atualizado com sucesso.', 'success');

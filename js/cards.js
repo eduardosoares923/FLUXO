@@ -1,4 +1,4 @@
-class CardsController {
+﻿class CardsController {
     constructor() {
         this.cards = window.Storage.get('cards') || [];
         this.init();

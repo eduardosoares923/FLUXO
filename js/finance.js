@@ -1,4 +1,4 @@
-class FinanceController {
+﻿class FinanceController {
     constructor() {
         let allTransactions = window.Storage.get('transactions') || [];
         
@@ -670,42 +670,23 @@ class FinanceController {
         
         listEl.innerHTML = '';
         
-        // --- 1. Global Date Filter ---
-        const filterEl = document.getElementById('globalDateFilter');
-        const filterVal = filterEl ? filterEl.value : 'this_month';
+        // --- 1. Global Date Filter (Month Navigation) ---
+        const isDashboard = window.location.pathname.includes('dashboard.html');
         
-        const now = new Date();
         let startDate = new Date(0);
         let endDate = new Date(3000, 0, 1);
-        
         let previousStartDate = new Date(0);
         let previousEndDate = new Date(0);
 
-        if (filterVal === 'this_month') {
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        if (isDashboard) {
+            const targetYear = this.currentNavDate.getFullYear();
+            const targetMonth = this.currentNavDate.getMonth();
             
-            previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
-        } else if (filterVal === 'last_month') {
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+            startDate = new Date(targetYear, targetMonth, 1);
+            endDate = new Date(targetYear, targetMonth + 1, 0);
             
-            previousStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            previousEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0);
-        } else if (filterVal === 'this_quarter') {
-            const quarter = Math.floor(now.getMonth() / 3);
-            startDate = new Date(now.getFullYear(), quarter * 3, 1);
-            endDate = new Date(now.getFullYear(), quarter * 3 + 3, 0);
-            
-            previousStartDate = new Date(now.getFullYear(), (quarter - 1) * 3, 1);
-            previousEndDate = new Date(now.getFullYear(), (quarter - 1) * 3 + 3, 0);
-        } else if (filterVal === 'this_year') {
-            startDate = new Date(now.getFullYear(), 0, 1);
-            endDate = new Date(now.getFullYear(), 11, 31);
-            
-            previousStartDate = new Date(now.getFullYear() - 1, 0, 1);
-            previousEndDate = new Date(now.getFullYear() - 1, 11, 31);
+            previousStartDate = new Date(targetYear, targetMonth - 1, 1);
+            previousEndDate = new Date(targetYear, targetMonth, 0);
         }
 
         const currentPeriodTxs = this.transactions.filter(tx => {

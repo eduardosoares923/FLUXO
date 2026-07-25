@@ -1,4 +1,4 @@
-// auth.js
+﻿// auth.js
 
 class AuthManager {
     constructor() {
@@ -18,15 +18,20 @@ class AuthManager {
         }
     }
 
-    hasPermission(requiredRole) {
+    hasPermission(module, action = 'view') {
         if (!this.session) return false;
-        const role = this.session.role || 'visitante';
-        const roles = {
-            'admin': 3,
-            'usuario': 2,
-            'visitante': 1
-        };
-        return (roles[role] || 0) >= (roles[requiredRole] || 0);
+        if (this.session.role === 'admin') return true;
+
+        // Modulos de legado que ainda nÃ£o foram convertidos na UI
+        if (module === 'admin') return this.session.role === 'admin';
+        if (module === 'gerente') return ['admin', 'gerente'].includes(this.session.role);
+        
+        if (module === 'config_system') return this.session.role === 'admin' || (this.session.permissions && this.session.permissions['settings'] && this.session.permissions['settings'].includes('edit'));
+        if (module === 'manage_users') return this.session.role === 'admin' || (this.session.permissions && this.session.permissions['users'] && this.session.permissions['users'].includes('view'));
+
+        const permissions = this.session.permissions || {};
+        const modPerms = permissions[module] || [];
+        return modPerms.includes(action);
     }
 
     protectUI() {
@@ -128,11 +133,12 @@ class AuthManager {
                     email: user.email,
                     avatar: user.avatar,
                     role: user.role || 'usuario',
+                    permissions: user.permissions || {},
                     loginTime: new Date().toISOString()
                 });
 
                 if (rememberMe) {
-                    Storage.set('rememberedEmail', email);
+                    Storage.set('rememberedEmail', loginId);
                 } else {
                     Storage.remove('rememberedEmail');
                 }

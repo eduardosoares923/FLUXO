@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
   /* Colors - Dark Theme (Default) */
@@ -337,4 +337,27 @@ select.form-control option {
 @keyframes slideOut {
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(100%); opacity: 0; }
+}
+
+/* Mobile Bottom Sheet Modals */
+@media (max-width: 768px) {
+  .modal-overlay {
+    align-items: flex-end; /* Align bottom */
+    padding: 0;
+  }
+
+  .modal-content {
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 90vh !important;
+    animation: slideUp 0.3s ease forwards;
+    padding: 1.5rem 1rem !important;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
 }

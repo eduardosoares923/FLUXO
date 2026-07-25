@@ -189,6 +189,28 @@
                                 </select>
                             </div>
                         </div>
+
+                        <div class="form-group permissions-container" style="margin-bottom: 1.5rem; background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--glass-border);" id="permissionsContainer">
+                            <label class="form-label" style="margin-bottom: 1rem; font-size: 1.1rem; font-weight: 600; color: var(--primary);">Permissões Granulares</label>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 1rem;">Selecione os módulos e ações que este usuário pode acessar. Administradores têm acesso total.</p>
+                            
+                            <div style="overflow-x: auto;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                    <thead>
+                                        <tr style="border-bottom: 1px solid var(--glass-border);">
+                                            <th style="text-align: left; padding: 0.5rem; color: var(--text-secondary);">Módulo</th>
+                                            <th style="text-align: center; padding: 0.5rem; color: var(--text-secondary);">Ver</th>
+                                            <th style="text-align: center; padding: 0.5rem; color: var(--text-secondary);">Criar</th>
+                                            <th style="text-align: center; padding: 0.5rem; color: var(--text-secondary);">Editar</th>
+                                            <th style="text-align: center; padding: 0.5rem; color: var(--text-secondary);">Excluir</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="permissionsTableBody">
+                                        <!-- Preenchido via JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                         
                         <div class="form-group" style="margin-bottom: 1.5rem;">
                             <label class="form-label">ObservAções</label>
