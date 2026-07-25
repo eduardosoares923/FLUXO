@@ -62,7 +62,7 @@ class AuthManager {
                     email: userEmail,
                     role: 'admin',
                     status: 'ativo',
-                    avatar: https://ui-avatars.com/api/?name=Admin&background=random&color=fff,
+                    avatar: 'https://ui-avatars.com/api/?name=Admin&background=random&color=fff',
                     createdAt: new Date().toISOString(),
                     lastLogin: new Date().toISOString()
                 };
