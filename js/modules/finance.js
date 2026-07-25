@@ -96,6 +96,27 @@ class FinanceController {
             });
         }
 
+        // Popular Filtro Global de Pessoas do Dashboard
+        const globalPersonSelect = document.getElementById('globalPersonFilter');
+        if (globalPersonSelect) {
+            const previousVal = globalPersonSelect.value || 'all';
+            globalPersonSelect.innerHTML = '<option value="all" style="background: var(--bg-secondary); color: var(--text-primary);">Todas as Pessoas</option>';
+            
+            personNames.forEach(p => {
+                if (!window.Auth || window.Auth.canAccessPerson(p)) {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p;
+                    opt.style.cssText = "background: var(--bg-secondary); color: var(--text-primary);";
+                    globalPersonSelect.appendChild(opt);
+                }
+            });
+
+            if (Array.from(globalPersonSelect.options).some(o => o.value === previousVal)) {
+                globalPersonSelect.value = previousVal;
+            }
+        }
+
         if (paymentSelect) {
             paymentSelect.innerHTML = ''; // Clear default options
             
@@ -221,6 +242,13 @@ class FinanceController {
                 const now = new Date();
                 this.currentNavDate = new Date(now.getFullYear(), now.getMonth(), 1);
                 this.updateMonthDisplay();
+                this.updateDashboard();
+            });
+        }
+
+        const globalPersonSelect = document.getElementById('globalPersonFilter');
+        if (globalPersonSelect) {
+            globalPersonSelect.addEventListener('change', () => {
                 this.updateDashboard();
             });
         }
@@ -435,6 +463,12 @@ class FinanceController {
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
             cards = cards.filter(c => window.Auth.canAccessPerson(c.holder));
         }
+
+        const personFilterValCards = document.getElementById('globalPersonFilter')?.value || 'all';
+        if (personFilterValCards !== 'all') {
+            const filterLower = personFilterValCards.trim().toLowerCase();
+            cards = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === filterLower);
+        }
         
         listEl.innerHTML = '';
         if (cards.length === 0) {
@@ -505,6 +539,12 @@ class FinanceController {
         
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
             accounts = accounts.filter(a => window.Auth.canAccessPerson(a.owner));
+        }
+
+        const personFilterValAcc = document.getElementById('globalPersonFilter')?.value || 'all';
+        if (personFilterValAcc !== 'all') {
+            const filterLower = personFilterValAcc.trim().toLowerCase();
+            accounts = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === filterLower);
         }
         
         listEl.innerHTML = '';
@@ -706,6 +746,13 @@ class FinanceController {
         if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
             allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person));
         }
+
+        const personFilterVal = document.getElementById('globalPersonFilter')?.value || 'all';
+        if (personFilterVal !== 'all') {
+            const filterLower = personFilterVal.trim().toLowerCase();
+            allTx = allTx.filter(tx => tx.person && tx.person.trim().toLowerCase() === filterLower);
+        }
+
         this.transactions = allTx;
 
         // --- 1. Global Date Filter (Month Navigation) ---
