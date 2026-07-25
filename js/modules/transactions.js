@@ -2,10 +2,8 @@ class TransactionsController {
     constructor() {
         let globalTx = window.Storage.get('transactions') || [];
         
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                globalTx = globalTx.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person));
         }
         
         this.allTransactions = globalTx;

@@ -2,13 +2,9 @@ class FinanceController {
     constructor() {
         let allTransactions = window.Storage.get('transactions') || [];
         
-        // Filtrar transações por usuário (se não for admin/gerente)
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            // 'config_system' é permitido apenas para Admin e Gerente (gerente não pode, na verdade eu defini config_system como forbidden para gerente no app.js, peraí)
-            // Vou usar o cargo direto
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                allTransactions = allTransactions.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
-            }
+        // Filtrar transações por usuário/pessoa vinculada
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            allTransactions = allTransactions.filter(tx => window.Auth.canAccessPerson(tx.person));
         }
         
         this.transactions = allTransactions;

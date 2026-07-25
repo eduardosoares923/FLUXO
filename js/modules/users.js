@@ -23,11 +23,20 @@ class UsersApp {
     }
 
     bindEvents() {
+        const btnNovo = document.getElementById('btnNovoPerfil');
         const searchInput = document.getElementById('searchUser');
         const roleSelect = document.getElementById('filterRole');
         const statusSelect = document.getElementById('filterStatus');
         const form = document.getElementById('userForm');
 
+        const refreshUsersHandler = () => {
+            this.loadUsers();
+            this.renderUsers();
+        };
+        window.addEventListener('dataUpdated', refreshUsersHandler);
+        window.addEventListener('fluxo:dataChanged', refreshUsersHandler);
+
+        if (btnNovo) btnNovo.addEventListener('click', () => this.openNewModal());
         if (searchInput) searchInput.addEventListener('input', () => this.renderUsers());
         if (roleSelect) roleSelect.addEventListener('change', () => this.renderUsers());
         if (statusSelect) statusSelect.addEventListener('change', () => this.renderUsers());
@@ -82,7 +91,13 @@ class UsersApp {
         const statusFilter = document.getElementById('filterStatus')?.value || 'all';
 
         let filtered = this.users.filter(u => {
-            const matchesSearch = u.name.toLowerCase().includes(searchTerm) || u.email.toLowerCase().includes(searchTerm);
+            const matchesSearch = 
+                (u.name && u.name.toLowerCase().includes(searchTerm)) || 
+                (u.username && u.username.toLowerCase().includes(searchTerm)) || 
+                (u.email && u.email.toLowerCase().includes(searchTerm)) ||
+                (u.cpf && u.cpf.includes(searchTerm)) ||
+                (u.person && u.person.toLowerCase().includes(searchTerm));
+
             const matchesRole = roleFilter === 'all' || u.role === roleFilter;
             const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
             return matchesSearch && matchesRole && matchesStatus;
@@ -99,41 +114,47 @@ class UsersApp {
 
         filtered.forEach(user => {
             const roleLabels = {
-                'admin': '<span style="color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Administrador</span>',
-                'gerente': '<span style="color: #3b82f6; background: rgba(59, 130, 246, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Gerente</span>',
-                'usuario': '<span style="color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Usuário</span>',
-                'visitante': '<span style="color: #64748b; background: rgba(100, 116, 139, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">Visitante</span>'
+                'admin': '<span style="color: #8b5cf6; background: rgba(139, 92, 246, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Administrador</span>',
+                'gerente': '<span style="color: #3b82f6; background: rgba(59, 130, 246, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Gerente</span>',
+                'usuario': '<span style="color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Usuário</span>',
+                'visitante': '<span style="color: #64748b; background: rgba(100, 116, 139, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">Visitante</span>'
             };
 
             const statusLabel = user.status === 'ativo' 
-                ? '<span style="color: var(--success);"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.25rem; vertical-align: middle;"></i> Ativo</span>' 
-                : '<span style="color: var(--danger);"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.25rem; vertical-align: middle;"></i> Inativo</span>';
+                ? '<span style="color: var(--success); font-weight: 500;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.25rem; vertical-align: middle;"></i> Ativo</span>' 
+                : '<span style="color: var(--danger); font-weight: 500;"><i class="fa-solid fa-circle" style="font-size: 0.5rem; margin-right: 0.25rem; vertical-align: middle;"></i> Inativo</span>';
 
             const lastLoginText = user.lastLogin ? new Date(user.lastLogin).toLocaleString('pt-BR') : 'Nunca acessou';
             const avatarSrc = user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`;
 
             const roleKey = (user.role && roleLabels[user.role]) ? user.role : 'usuario';
             const roleBadge = roleLabels[roleKey];
+            const usernameDisplay = user.username ? `@${user.username}` : (user.email ? user.email.split('@')[0] : 'usuario');
+            const personDisplay = user.person || user.name || 'Eduardo';
 
             htmlBuffer += `
                 <tr style="border-bottom: 1px solid var(--glass-border)">
                     <td style="padding: 1rem;">
-                        <div style="display: flex; align-items: center; gap: 1rem;">
-                            <img src="${avatarSrc}" alt="${window.Utils.escapeHTML(user.name)}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <img src="${avatarSrc}" alt="${window.Utils.escapeHTML(user.name)}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover;">
                             <div>
                                 <div style="font-weight: 600; color: var(--text-primary);">${window.Utils.escapeHTML(user.name)}</div>
+                                <div style="font-size: 0.78rem; color: var(--accent-primary);">${window.Utils.escapeHTML(usernameDisplay)} &bull; <i class="fa-solid fa-user-tag" style="font-size: 0.7rem;"></i> ${window.Utils.escapeHTML(personDisplay)}</div>
                             </div>
                         </div>
                     </td>
-                    <td style="padding: 1rem; color: var(--text-secondary);">${window.Utils.escapeHTML(user.email)}</td>
+                    <td style="padding: 1rem; color: var(--text-secondary); font-size: 0.85rem;">
+                        <div>${window.Utils.escapeHTML(user.email || 'Sem e-mail')}</div>
+                        ${user.cpf ? `<div style="font-size: 0.75rem; color: var(--text-muted);">CPF: ${window.Utils.escapeHTML(user.cpf)}</div>` : ''}
+                    </td>
                     <td style="padding: 1rem;">${roleBadge}</td>
                     <td style="padding: 1rem;">${statusLabel}</td>
-                    <td style="padding: 1rem; color: var(--text-secondary); font-size: 0.9rem;">${lastLoginText}</td>
-                    <td style="padding: 1rem; text-align: right;">
-                        <button class="btn btn-ghost primary btn-sm" data-action="edit" data-id="${user.id}" title="Editar">
-                            <i class="fa-solid fa-pen-to-square"></i>
+                    <td style="padding: 1rem; color: var(--text-secondary); font-size: 0.85rem;">${lastLoginText}</td>
+                    <td style="padding: 1rem; text-align: right; white-space: nowrap;">
+                        <button class="btn btn-ghost primary btn-sm" onclick="window.UsersApp.openEditModal('${user.id}')" data-action="edit" data-id="${user.id}" title="Editar">
+                            <i class="fa-solid fa-pen-to-square"></i> Editar
                         </button>
-                        <button class="btn btn-ghost danger btn-sm" data-action="delete" data-id="${user.id}" title="Excluir">
+                        <button class="btn btn-ghost danger btn-sm" onclick="window.UsersApp.openDeleteModal('${user.id}')" data-action="delete" data-id="${user.id}" title="Excluir">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </td>
@@ -149,13 +170,40 @@ class UsersApp {
             { id: 'dashboard', name: 'Dashboard' },
             { id: 'finance', name: 'Fluxo de Caixa' },
             { id: 'transactions', name: 'Lançamentos' },
+            { id: 'incomes', name: 'Receitas' },
+            { id: 'expenses', name: 'Despesas' },
             { id: 'accounts', name: 'Contas Bancárias' },
-            { id: 'cards', name: 'Cartões' },
-            { id: 'categories', name: 'Categorias' },
+            { id: 'cards', name: 'Cartões de Crédito' },
+            { id: 'persons', name: 'Pessoas' },
             { id: 'reports', name: 'Análises e Relatórios' },
             { id: 'settings', name: 'Configurações' },
-            { id: 'users', name: 'Cadastro de Usuários' }
+            { id: 'users', name: 'Administração / Usuários' }
         ];
+    }
+
+    populatePersonOptions(selectedPerson = '') {
+        const personSelect = document.getElementById('userPersonInput');
+        if (!personSelect) return;
+
+        const personsSet = new Set(['Eduardo', 'Mãe', 'Rodrigo']);
+        const txs = window.Storage.get('transactions') || [];
+        txs.forEach(t => { if (t.person && t.person.trim()) personsSet.add(t.person.trim()); });
+        const accs = window.Storage.get('accounts') || [];
+        accs.forEach(a => { if (a.owner && a.owner.trim()) personsSet.add(a.owner.trim()); });
+        const cards = window.Storage.get('cards') || [];
+        cards.forEach(c => { if (c.holder && c.holder.trim()) personsSet.add(c.holder.trim()); });
+        this.users.forEach(u => { if (u.person && u.person.trim()) personsSet.add(u.person.trim()); });
+
+        if (selectedPerson) personsSet.add(selectedPerson.trim());
+
+        personSelect.innerHTML = '';
+        personsSet.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            if (p.toLowerCase() === selectedPerson.toLowerCase()) opt.selected = true;
+            personSelect.appendChild(opt);
+        });
     }
 
     renderPermissions(permissions = {}) {
@@ -164,38 +212,71 @@ class UsersApp {
         let html = '';
         this.PERMISSION_MODULES.forEach(mod => {
             const perms = permissions[mod.id] || [];
-            html += `<tr>
-                <td style='padding: 0.5rem;'>${mod.name}</td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='view' ${perms.includes('view') ? 'checked' : ''}></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='create' ${perms.includes('create') ? 'checked' : ''}></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='edit' ${perms.includes('edit') ? 'checked' : ''}></td>
-                <td style='text-align: center; padding: 0.5rem;'><input type='checkbox' class='perm-cb' data-module='${mod.id}' value='delete' ${perms.includes('delete') ? 'checked' : ''}></td>
+            html += `<tr style="border-bottom: 1px solid var(--glass-border);">
+                <td style="padding: 0.75rem 0.5rem; font-weight: 600; color: var(--text-primary); font-size: 0.85rem; min-width: 120px;">
+                    ${mod.name}
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <label style="display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.65rem; color: var(--text-secondary); cursor: pointer;">
+                        <input type="checkbox" class="perm-cb" data-module="${mod.id}" value="view" ${perms.includes('view') ? 'checked' : ''}>
+                        <span>Ver</span>
+                    </label>
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <label style="display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.65rem; color: var(--text-secondary); cursor: pointer;">
+                        <input type="checkbox" class="perm-cb" data-module="${mod.id}" value="create" ${perms.includes('create') ? 'checked' : ''}>
+                        <span>Criar</span>
+                    </label>
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <label style="display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.65rem; color: var(--text-secondary); cursor: pointer;">
+                        <input type="checkbox" class="perm-cb" data-module="${mod.id}" value="edit" ${perms.includes('edit') ? 'checked' : ''}>
+                        <span>Editar</span>
+                    </label>
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <label style="display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.65rem; color: var(--text-secondary); cursor: pointer;">
+                        <input type="checkbox" class="perm-cb" data-module="${mod.id}" value="delete" ${perms.includes('delete') ? 'checked' : ''}>
+                        <span>Excluir</span>
+                    </label>
+                </td>
+                <td style="text-align: center; padding: 0.4rem 0.25rem;">
+                    <label style="display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 0.65rem; color: var(--text-secondary); cursor: pointer;">
+                        <input type="checkbox" class="perm-cb" data-module="${mod.id}" value="export" ${perms.includes('export') ? 'checked' : ''}>
+                        <span>Exportar</span>
+                    </label>
+                </td>
             </tr>`;
         });
         tbody.innerHTML = html;
         
-        // Hide permissions container if user role is admin (they have full access anyway)
         const roleInput = document.getElementById('userRoleInput');
         const permContainer = document.getElementById('permissionsContainer');
         const togglePerms = () => {
-            if(roleInput.value === 'admin') {
-                permContainer.style.display = 'none';
-            } else {
-                permContainer.style.display = 'block';
+            if (roleInput && permContainer) {
+                if (roleInput.value === 'admin') {
+                    permContainer.style.display = 'none';
+                } else {
+                    permContainer.style.display = 'block';
+                }
             }
         };
-        roleInput.removeEventListener('change', togglePerms);
-        roleInput.addEventListener('change', togglePerms);
-        togglePerms();
+        if (roleInput) {
+            roleInput.removeEventListener('change', togglePerms);
+            roleInput.addEventListener('change', togglePerms);
+            togglePerms();
+        }
     }
 
     openNewModal() {
         this.editingUserId = null;
-        document.getElementById('userForm').reset();
+        const form = document.getElementById('userForm');
+        if (form) form.reset();
         document.getElementById('userId').value = '';
-        document.getElementById('userModalTitle').textContent = 'Novo Perfil';
+        document.getElementById('userModalTitle').textContent = 'Novo Perfil de Usuário';
         
-        // Password is required for new user
+        this.populatePersonOptions('Eduardo');
+
         document.getElementById('userPasswordInput').required = true;
         document.getElementById('userPasswordConfirmInput').required = true;
         this.renderPermissions({});
@@ -204,27 +285,33 @@ class UsersApp {
     }
 
     openEditModal(id) {
-        const user = this.users.find(u => u.id === id);
-        if (!user) return;
+        this.loadUsers();
+        const user = this.users.find(u => String(u.id) === String(id));
+        if (!user) {
+            if (window.UI) window.UI.showToast('Usuário não localizado no sistema.', 'error');
+            return;
+        }
         
-        this.editingUserId = id;
+        this.editingUserId = user.id;
         document.getElementById('userId').value = user.id;
         document.getElementById('userNameInput').value = user.name || '';
+        document.getElementById('userUsernameInput').value = user.username || '';
         document.getElementById('userCpfInput').value = user.cpf || '';
         document.getElementById('userAvatarInput').value = user.avatar || '';
         document.getElementById('userEmailInput').value = user.email || '';
+        
+        this.populatePersonOptions(user.person || user.name || 'Eduardo');
+
         document.getElementById('userRoleInput').value = user.role || 'usuario';
         document.getElementById('userStatusInput').value = user.status || 'ativo';
-        document.getElementById('userNotesInput').value = user.notes || '';
         
         document.getElementById('userPasswordInput').value = '';
         document.getElementById('userPasswordConfirmInput').value = '';
         
-        // Password is not required when editing
         document.getElementById('userPasswordInput').required = false;
         document.getElementById('userPasswordConfirmInput').required = false;
         
-        document.getElementById('userModalTitle').textContent = 'Editar Perfil';
+        document.getElementById('userModalTitle').textContent = 'Editar Perfil de Usuário';
         this.renderPermissions(user.permissions || {});
         window.UI.openModal('userModal');
     }
@@ -234,29 +321,30 @@ class UsersApp {
         this.editingUserId = null;
     }
 
-    saveUser(e) {
+    async saveUser(e) {
         e.preventDefault();
         
         const name = document.getElementById('userNameInput').value.trim();
+        const username = document.getElementById('userUsernameInput').value.trim().toLowerCase();
         const cpf = document.getElementById('userCpfInput').value.trim();
         const email = document.getElementById('userEmailInput').value.trim();
+        const person = document.getElementById('userPersonInput').value.trim();
         let avatar = document.getElementById('userAvatarInput').value.trim();
         const password = document.getElementById('userPasswordInput').value;
         const confirmPassword = document.getElementById('userPasswordConfirmInput').value;
-        const role = (document.getElementById('userRoleInput')?.value) || 'usuario';
-        const status = (document.getElementById('userStatusInput')?.value) || 'ativo';
-                const notes = document.getElementById('userNotesInput').value.trim();
+        const role = document.getElementById('userRoleInput')?.value || 'usuario';
+        const status = document.getElementById('userStatusInput')?.value || 'ativo';
         
         // Extract permissions
         const perms = {};
         document.querySelectorAll('.perm-cb:checked').forEach(cb => {
             const mod = cb.getAttribute('data-module');
-            if(!perms[mod]) perms[mod] = [];
+            if (!perms[mod]) perms[mod] = [];
             perms[mod].push(cb.value);
         });
         
-        if (!name || !email) {
-            window.UI.showToast('Nome e e-mail são obrigatórios.', 'error');
+        if (!name || !username || !person) {
+            window.UI.showToast('Nome completo, nome de usuário e Pessoa vinculada são obrigatórios.', 'error');
             return;
         }
 
@@ -265,47 +353,68 @@ class UsersApp {
             return;
         }
 
-        // Verifica email duplicado
-        const existingEmail = this.users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.id !== this.editingUserId);
-        if (existingEmail) {
-            window.UI.showToast('Já existe um usuário com este e-mail.', 'error');
+        // Uniqueness checks
+        const existingUsername = this.users.find(u => u.username && u.username.toLowerCase() === username && String(u.id) !== String(this.editingUserId));
+        if (existingUsername) {
+            window.UI.showToast('Já existe um usuário com este Nome de Usuário.', 'error');
             return;
+        }
+
+        if (email) {
+            const existingEmail = this.users.find(u => u.email && u.email.toLowerCase() === email.toLowerCase() && String(u.id) !== String(this.editingUserId));
+            if (existingEmail) {
+                window.UI.showToast('Já existe um usuário com este E-mail.', 'error');
+                return;
+            }
+        }
+
+        const cleanCpf = cpf.replace(/\D/g, '');
+        if (cleanCpf) {
+            const existingCpf = this.users.find(u => u.cpf && u.cpf.replace(/\D/g, '') === cleanCpf && String(u.id) !== String(this.editingUserId));
+            if (existingCpf) {
+                window.UI.showToast('Já existe um usuário com este CPF.', 'error');
+                return;
+            }
         }
         
         if (!avatar) {
             avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
         }
 
+        const authEmail = email || `${username}@fluxo.app`;
+
         if (this.editingUserId) {
             // Edit
-            const userIndex = this.users.findIndex(u => u.id === this.editingUserId);
+            const userIndex = this.users.findIndex(u => String(u.id) === String(this.editingUserId));
             if (userIndex !== -1) {
                 const user = this.users[userIndex];
                 user.name = name;
+                user.username = username;
                 user.cpf = cpf;
                 user.email = email;
+                user.person = person;
                 user.avatar = avatar;
                 if (password) user.password = password; 
                 
                 if (user.role === 'admin' && user.status === 'ativo' && (role !== 'admin' || status !== 'ativo')) {
                     if (this.isLastActiveAdmin(user.id)) {
-                        window.UI.showToast('VocÃª nÃ£o pode rebaixar ou desativar o Ãºltimo Administrador ativo.', 'error');
+                        window.UI.showToast('Você não pode rebaixar ou desativar o último Administrador ativo.', 'error');
                         return;
                     }
                 }
                 
                 user.role = role;
                 user.status = status;
-                user.notes = notes;
                 user.permissions = perms;
                 
-                window.Storage.saveRecord('users', user).then(() => {
-                    window.UI.showToast('Perfil atualizado com sucesso.', 'success');
-                    this.renderUsers();
-                });
+                await window.Storage.saveRecord('users', user);
+                if (window.Audit) {
+                    window.Audit.log('USER_UPDATE', { userId: user.id, username, role, person, status });
+                }
+                window.UI.showToast('Perfil atualizado com sucesso.', 'success');
             }
         } else {
-            // New user via Secondary Firebase App to prevent logout
+            // New user via Secondary Firebase App to prevent current admin logout
             if (typeof firebase !== 'undefined') {
                 let secondaryApp;
                 try {
@@ -314,58 +423,66 @@ class UsersApp {
                     secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
                 }
                 
-                secondaryApp.auth().createUserWithEmailAndPassword(email, password)
-                    .then((userCred) => {
-                        const newUser = {
-                            id: userCred.user.uid,
-                            name,
-                            cpf,
-                            email,
-                            password,
-                            avatar,
-                            role,
-                            status,
-                            notes,
-                            permissions: perms, // Fix: pass permissions correctly
-                            createdAt: new Date().toISOString(),
-                            lastLogin: null
-                        };
-                        window.Storage.saveRecord('users', newUser).then(() => {
-                            window.UI.showToast('Novo perfil criado com sucesso.', 'success');
-                            this.renderUsers();
-                            secondaryApp.auth().signOut();
-                        });
-                    })
-                    .catch((error) => {
-                        let msg = 'Erro ao criar usuÃ¡rio.';
-                        if (error.code === 'auth/email-already-in-use') msg = 'Este e-mail jÃ¡ estÃ¡ em uso.';
-                        if (error.code === 'auth/weak-password') msg = 'A senha deve ter pelo menos 6 caracteres.';
-                        window.UI.showToast(msg, 'error');
-                    });
+                try {
+                    const userCred = await secondaryApp.auth().createUserWithEmailAndPassword(authEmail, password);
+                    const newUser = {
+                        id: userCred.user.uid,
+                        name,
+                        username,
+                        cpf,
+                        email,
+                        authEmail,
+                        person,
+                        avatar,
+                        role,
+                        status,
+                        permissions: perms,
+                        createdAt: new Date().toISOString(),
+                        lastLogin: null
+                    };
+                    
+                    await window.Storage.saveRecord('users', newUser);
+                    if (window.Audit) {
+                        window.Audit.log('USER_CREATE', { userId: newUser.id, username, person, role });
+                    }
+                    window.UI.showToast('Novo usuário criado com sucesso.', 'success');
+                    secondaryApp.auth().signOut();
+                } catch(error) {
+                    let msg = 'Erro ao criar usuário.';
+                    if (error.code === 'auth/email-already-in-use') msg = 'Este usuário/e-mail já está em uso.';
+                    if (error.code === 'auth/weak-password') msg = 'A senha deve ter pelo menos 6 caracteres.';
+                    window.UI.showToast(msg, 'error');
+                    return;
+                }
             }
         }
         
-        // Se editou a si mesmo, atualiza a sessão local e header
-        if (this.editingUserId === window.currentUser.id) {
-            const updatedUser = this.users.find(u => u.id === this.editingUserId);
-            window.currentUser.name = updatedUser.name;
-            window.currentUser.avatar = updatedUser.avatar;
-            window.currentUser.role = updatedUser.role;
-            window.Storage.set('session', window.currentUser);
-            window.app.checkAuth(); // To re-render avatar and name in top header
+        // Update local session if editing self
+        if (String(this.editingUserId) === String(window.currentUser?.id)) {
+            const updatedUser = this.users.find(u => String(u.id) === String(this.editingUserId));
+            if (updatedUser) {
+                window.currentUser.name = updatedUser.name;
+                window.currentUser.avatar = updatedUser.avatar;
+                window.currentUser.role = updatedUser.role;
+                window.currentUser.person = updatedUser.person;
+                window.Storage.set('session', window.currentUser);
+                if (window.app) window.app.checkAuth();
+            }
         }
 
+        this.loadUsers();
         this.renderUsers();
         this.closeModal();
     }
 
     openDeleteModal(id) {
-        if (id === window.currentUser.id) {
+        if (String(id) === String(window.currentUser?.id)) {
             window.UI.showToast('Você não pode excluir sua própria conta por aqui.', 'error');
             return;
         }
 
-        const user = this.users.find(u => u.id === id);
+        this.loadUsers();
+        const user = this.users.find(u => String(u.id) === String(id));
         if (!user) return;
         
         if (user.role === 'admin' && user.status === 'ativo') {
@@ -382,28 +499,22 @@ class UsersApp {
         const accounts = window.Storage.get('accounts') || [];
         const cards = window.Storage.get('cards') || [];
         
-        const linkedTransactions = transactions.filter(tx => tx.userId === user.id);
-        const linkedAccounts = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase());
-        const linkedCards = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase());
-        
+        const linkedTransactions = transactions.filter(tx => String(tx.userId) === String(user.id));
         const warningEl = document.getElementById('deleteUserWarning');
         const countEl = document.getElementById('deleteUserTxCount');
         const optionsEl = document.getElementById('deleteUserOptions');
         const selectEl = document.getElementById('deleteUserTransferSelect');
         const radioDelete = document.getElementById('actionDeleteUserTx');
         
-        const totalLinks = linkedTransactions.length + linkedAccounts.length + linkedCards.length;
-        
-        if (totalLinks > 0) {
-            countEl.textContent = `${linkedTransactions.length} transações, ${linkedAccounts.length} contas e ${linkedCards.length} cartões`;
+        if (linkedTransactions.length > 0) {
+            countEl.textContent = linkedTransactions.length;
             warningEl.style.display = 'block';
             optionsEl.style.display = 'block';
             radioDelete.checked = true;
             selectEl.style.display = 'none';
             
-            // Populate transfer options
             selectEl.innerHTML = '';
-            this.users.filter(u => u.id !== id).forEach(u => {
+            this.users.filter(u => String(u.id) !== String(id)).forEach(u => {
                 const opt = document.createElement('option');
                 opt.value = u.id;
                 opt.textContent = u.name;
@@ -419,58 +530,38 @@ class UsersApp {
 
     confirmDeleteUser() {
         const id = document.getElementById('deleteUserIdInput').value;
-        const user = this.users.find(u => u.id === id);
+        const user = this.users.find(u => String(u.id) === String(id));
         if (!user) return;
-        
+
+        if (window.Audit) {
+            window.Audit.log('USER_DELETE', { userId: user.id, name: user.name, username: user.username });
+        }
+
         const transactions = window.Storage.get('transactions') || [];
         const accounts = window.Storage.get('accounts') || [];
         const cards = window.Storage.get('cards') || [];
-        
-        const linkedTransactions = transactions.filter(tx => tx.userId === user.id);
-        const linkedAccounts = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase());
-        const linkedCards = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase());
-        
-        if (linkedTransactions.length > 0 || linkedAccounts.length > 0 || linkedCards.length > 0) {
-            const action = document.querySelector('input[name="deleteUserAction"]:checked').value;
+        const linkedTransactions = transactions.filter(tx => String(tx.userId) === String(user.id));
+
+        if (linkedTransactions.length > 0) {
+            const action = document.querySelector('input[name="deleteUserAction"]:checked')?.value;
             if (action === 'delete') {
-                const txToDelete = transactions.filter(tx => tx.userId === user.id);
-                txToDelete.forEach(tx => window.Storage.deleteRecord('transactions', tx.id));
-                
-                const accToDelete = accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase());
-                accToDelete.forEach(a => window.Storage.deleteRecord('accounts', a.id));
-                
-                const cardsToDelete = cards.filter(c => c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase());
-                cardsToDelete.forEach(c => window.Storage.deleteRecord('cards', c.id));
-                
+                linkedTransactions.forEach(tx => window.Storage.deleteRecord('transactions', tx.id));
             } else if (action === 'transfer') {
                 const targetUserId = document.getElementById('deleteUserTransferSelect').value;
-                const targetUser = this.users.find(u => u.id === targetUserId);
-                
-                transactions.forEach(tx => {
-                    if (tx.userId === user.id) {
-                        tx.userId = targetUserId;
-                        tx.person = targetUser.name;
-                        window.Storage.saveRecord('transactions', tx);
-                    }
-                });
-                
-                accounts.forEach(a => {
-                    if (a.owner && a.owner.trim().toLowerCase() === user.name.trim().toLowerCase()) {
-                        a.owner = targetUser.name;
-                        window.Storage.saveRecord('accounts', a);
-                    }
-                });
-                
-                cards.forEach(c => {
-                    if (c.holder && c.holder.trim().toLowerCase() === user.name.trim().toLowerCase()) {
-                        c.holder = targetUser.name;
-                        window.Storage.saveRecord('cards', c);
-                    }
-                });
+                const targetUser = this.users.find(u => String(u.id) === String(targetUserId));
+                if (targetUser) {
+                    transactions.forEach(tx => {
+                        if (String(tx.userId) === String(user.id)) {
+                            tx.userId = targetUserId;
+                            tx.person = targetUser.person || targetUser.name;
+                            window.Storage.saveRecord('transactions', tx);
+                        }
+                    });
+                }
             }
         }
 
-        this.users = this.users.filter(u => u.id !== id);
+        this.users = this.users.filter(u => String(u.id) !== String(id));
         window.Storage.deleteRecord('users', id);
         
         window.UI.closeModal('deleteUserModal');
@@ -479,14 +570,19 @@ class UsersApp {
     }
 
     isLastActiveAdmin(excludeId) {
-        const activeAdmins = this.users.filter(u => u.role === 'admin' && u.status === 'ativo' && u.id !== excludeId);
+        const activeAdmins = this.users.filter(u => u.role === 'admin' && u.status === 'ativo' && String(u.id) !== String(excludeId));
         return activeAdmins.length === 0;
     }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Wait for app.js to initialize window.app and auth
-    setTimeout(() => {
+function initUsersApp() {
+    if (!window.UsersApp && window.Auth) {
         window.UsersApp = new UsersApp();
-    }, 100);
-});
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initUsersApp, 50));
+} else {
+    setTimeout(initUsersApp, 50);
+}

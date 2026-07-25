@@ -50,12 +50,24 @@ class AuthManager {
             }
 
             if (userData) {
+                if (userData.status === 'inativo') {
+                    firebase.auth().signOut();
+                    window.Storage.remove('session');
+                    this.session = null;
+                    if (window.UI) window.UI.showToast('Seu usuário está desativado pelo Administrador.', 'error');
+                    if (!this.isLoginPage) window.location.href = 'index.html';
+                    return;
+                }
+
                 this.session = {
                     id: userDocId,
                     name: userData.name || 'Usuário',
+                    username: userData.username || (userData.email ? userData.email.split('@')[0] : 'usuario'),
+                    cpf: userData.cpf || '',
                     email: userData.email || userEmail,
                     avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}`,
                     role: userData.role || 'usuario',
+                    person: userData.person || userData.name || 'Eu',
                     permissions: userData.permissions || {},
                     loginTime: new Date().toISOString()
                 };
@@ -71,13 +83,15 @@ class AuthManager {
                 const isFirstSystemUser = allUsersSnap.empty;
 
                 const newUserRole = isFirstSystemUser ? 'admin' : 'usuario';
-                const newUserName = isFirstSystemUser ? 'Administrador Principal' : (userEmail.split('@')[0]);
+                const newUserName = isFirstSystemUser ? 'Administrador Principal' : (userEmail ? userEmail.split('@')[0] : 'Usuario');
 
                 const newUserRecord = {
                     id: uid,
                     name: newUserName,
+                    username: newUserName.toLowerCase().replace(/\s+/g, ''),
                     email: userEmail,
                     role: newUserRole,
+                    person: newUserName,
                     status: 'ativo',
                     avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(newUserName)}&background=random&color=fff`,
                     createdAt: new Date().toISOString(),
@@ -89,9 +103,11 @@ class AuthManager {
                 this.session = {
                     id: uid,
                     name: newUserRecord.name,
+                    username: newUserRecord.username,
                     email: newUserRecord.email,
                     avatar: newUserRecord.avatar,
                     role: newUserRecord.role,
+                    person: newUserRecord.person,
                     permissions: {},
                     loginTime: new Date().toISOString()
                 };
@@ -101,9 +117,9 @@ class AuthManager {
                 }
             }
         } catch (e) {
-            console.error("Erro ao sincronizar sessÃ£o:", e);
+            console.error("Erro ao sincronizar sessão:", e);
             if (e.code === 'permission-denied') {
-                if (window.UI) window.UI.showToast('Erro de PermissÃ£o no Banco de Dados. Desbloqueie o Firestore nas Regras.', 'error');
+                if (window.UI) window.UI.showToast('Erro de Permissão no Banco de Dados. Desbloqueie o Firestore nas Regras.', 'error');
             } else {
                 if (window.UI) window.UI.showToast('Erro ao ler banco de dados: ' + e.message, 'error');
             }
@@ -121,6 +137,13 @@ class AuthManager {
         } else if (this.session && this.isLoginPage) {
             window.location.href = 'dashboard.html';
         }
+    }
+
+    canAccessPerson(personName) {
+        if (!this.session) return false;
+        if (this.session.role === 'admin') return true;
+        if (!personName) return true;
+        return this.session.person === personName;
     }
 
     hasPermission(module, action = 'view') {
@@ -160,6 +183,9 @@ class AuthManager {
     }
 
     logout() {
+        if (window.Audit) {
+            window.Audit.log('LOGOUT', { userId: this.session?.id });
+        }
         if (typeof firebase !== 'undefined') {
             firebase.auth().signOut().then(() => {
                 window.Storage.remove('session');
@@ -204,36 +230,76 @@ class AuthManager {
         }
     }
 
-    handleLogin(e) {
+    async handleLogin(e) {
         e.preventDefault();
-        const loginId = document.getElementById('email').value.trim();
+        const loginInput = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
         const rememberMe = document.getElementById('rememberMe').checked;
         const btn = document.getElementById('loginBtn');
 
+        if (!loginInput || !password) {
+            if (window.UI) window.UI.showToast('Preencha os campos de login e senha.', 'error');
+            return;
+        }
+
         btn.classList.add('loading');
         btn.disabled = true;
 
-        if (typeof firebase !== 'undefined') {
-            firebase.auth().signInWithEmailAndPassword(loginId, password)
-                .then((userCredential) => {
-                    if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
-                    
-                    if (rememberMe) {
-                        window.Storage.set('rememberedEmail', loginId);
-                    } else {
-                        window.Storage.remove('rememberedEmail');
+        try {
+            let authEmail = loginInput;
+            let foundUser = null;
+
+            if (typeof firebase !== 'undefined') {
+                const db = firebase.firestore();
+                const usersSnap = await db.collection('users').get();
+                const allUsers = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                const cleanInput = loginInput.toLowerCase();
+                const cleanCpf = loginInput.replace(/\D/g, '');
+
+                foundUser = allUsers.find(u => 
+                    (u.username && u.username.toLowerCase() === cleanInput) ||
+                    (u.email && u.email.toLowerCase() === cleanInput) ||
+                    (cleanCpf.length > 0 && u.cpf && u.cpf.replace(/\D/g, '') === cleanCpf)
+                );
+
+                if (foundUser) {
+                    if (foundUser.status === 'inativo') {
+                        if (window.UI) window.UI.showToast('Este usuário está inativo. Entre em contato com o Administrador.', 'error');
+                        btn.classList.remove('loading');
+                        btn.disabled = false;
+                        return;
                     }
-                })
-                .catch((error) => {
-                    let msg = 'E-mail ou senha incorretos.';
-                    if (error.code === 'auth/user-not-found') msg = 'UsuÃ¡rio nÃ£o encontrado.';
-                    if (window.UI) window.UI.showToast(msg, 'error');
-                    btn.classList.remove('loading');
-                    btn.disabled = false;
-                });
-        } else {
-            if (window.UI) window.UI.showToast('Firebase nÃ£o inicializado.', 'error');
+                    
+                    authEmail = foundUser.email || `${foundUser.username.toLowerCase()}@fluxo.app`;
+                }
+
+                const userCredential = await firebase.auth().signInWithEmailAndPassword(authEmail, password);
+                
+                if (rememberMe) {
+                    window.Storage.set('rememberedEmail', loginInput);
+                } else {
+                    window.Storage.remove('rememberedEmail');
+                }
+
+                if (window.Audit) {
+                    window.Audit.log('LOGIN', { identifier: loginInput, userId: userCredential.user.uid });
+                }
+
+                if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
+            } else {
+                if (window.UI) window.UI.showToast('Firebase não inicializado.', 'error');
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        } catch (error) {
+            console.error('Erro de login:', error);
+            let msg = 'Identificador ou senha incorretos.';
+            if (error.code === 'auth/user-not-found') msg = 'Usuário não encontrado.';
+            if (error.code === 'auth/wrong-password') msg = 'Senha incorreta.';
+            if (error.code === 'auth/invalid-email') msg = 'Formato de login inválido.';
+            if (window.UI) window.UI.showToast(msg, 'error');
+            
             btn.classList.remove('loading');
             btn.disabled = false;
         }

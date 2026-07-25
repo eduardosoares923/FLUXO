@@ -225,6 +225,13 @@ class CardsController {
         const container = document.getElementById('cardsContainer');
         if (!container) return;
 
+        this.cards = window.Storage.get('cards') || [];
+        let cardsToRender = this.cards;
+
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            cardsToRender = cardsToRender.filter(c => window.Auth.canAccessPerson(c.holder));
+        }
+
         const addBtn = document.getElementById('btnNovoCartao');
         container.innerHTML = '';
 

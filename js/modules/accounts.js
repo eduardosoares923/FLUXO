@@ -216,11 +216,8 @@ class AccountsController {
         container.innerHTML = '';
 
         let visibleAccounts = this.accounts;
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                const uName = (window.currentUser.name || '').trim().toLowerCase();
-                visibleAccounts = this.accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === uName);
-            }
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            visibleAccounts = this.accounts.filter(a => window.Auth.canAccessPerson(a.owner));
         }
 
         // Let's compute actual balance from transactions!
