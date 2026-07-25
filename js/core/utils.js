@@ -19,24 +19,47 @@ const Utils = {
         } catch (e) { return '-'; }
     },
 
-    parseTxDate(dateString) {
-        if (!dateString) return null;
+    parseTxDate(dateVal) {
+        if (!dateVal) return null;
         try {
-            const dateOnly = String(dateString).split('T')[0].trim();
+            if (dateVal instanceof Date) return dateVal;
+            if (typeof dateVal === 'number') return new Date(dateVal);
+            
+            const str = String(dateVal).trim();
+            if (!str) return null;
+
+            // If it's a numeric string timestamp
+            if (/^\d{10,}$/.test(str)) {
+                return new Date(parseInt(str, 10));
+            }
+
             // Handle DD/MM/YYYY (Brazilian format)
-            if (dateOnly.includes('/')) {
-                const parts = dateOnly.split('/').map(Number);
+            if (str.includes('/')) {
+                const parts = str.split('T')[0].split(' ')[0].split('/').map(Number);
                 if (parts.length === 3) {
                     const [day, month, year] = parts;
-                    if (!year || !month || !day) return null;
+                    if (year && month && day) {
+                        return new Date(year, month - 1, day, 12, 0, 0);
+                    }
+                }
+            }
+
+            // Handle YYYY-MM-DD or ISO string
+            const dateOnly = str.split('T')[0].split(' ')[0];
+            const parts = dateOnly.split('-').map(Number);
+            if (parts.length === 3) {
+                const [year, month, day] = parts;
+                if (year && month && day) {
                     return new Date(year, month - 1, day, 12, 0, 0);
                 }
             }
-            // Handle YYYY-MM-DD (ISO format)
-            const [year, month, day] = dateOnly.split('-').map(Number);
-            if (!year || !month || !day) return null;
-            return new Date(year, month - 1, day, 12, 0, 0);
-        } catch (e) { return null; }
+
+            // Standard Date fallback
+            const fallback = new Date(str);
+            return isNaN(fallback.getTime()) ? null : fallback;
+        } catch (e) {
+            return null;
+        }
     },
 
     getCardInvoiceMonth(txDateStr, closeDay = 28, dueDay = 10) {
