@@ -78,11 +78,11 @@ class TransactionsController {
         const btnDeleteAll = document.getElementById('btnDeleteAllTransactions');
         if (btnDeleteAll) {
             btnDeleteAll.addEventListener('click', () => {
-                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lanÃ§amentos na visÃ£o atual?', 'AtenÃ§Ã£o CrÃ­tica', () => {
+                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lançamentos na visão atual?', 'Atenção Crítica', () => {
                     const promises = this.allTransactions.map(tx => window.Storage.deleteRecord('transactions', tx.id));
                     Promise.all(promises).then(() => {
                         this.allTransactions = [];
-                        window.UI.showToast('Todos os lanÃ§amentos foram excluÃ­dos!', 'success');
+                        window.UI.showToast('Todos os lançamentos foram excluídos!', 'success');
                         this.renderTable();
                     });
                 });
@@ -112,7 +112,7 @@ class TransactionsController {
     }
 
     deleteTransaction(id) {
-        window.UI.confirmDialog('Deseja realmente excluir este lanÃ§amento? Esta aÃ§Ã£o afeta seu saldo e limites de cartÃ£o.', 'ConfirmaÃ§Ã£o', () => {
+        window.UI.confirmDialog('Deseja realmente excluir este lançamento? Esta ação afeta seu saldo e limites de cartão.', 'Confirmação', () => {
             const txIndex = this.allTransactions.findIndex(t => t.id === id);
             if (txIndex > -1) {
                 const tx = this.allTransactions[txIndex];
@@ -131,7 +131,7 @@ class TransactionsController {
                 }
                 
                 promise.then(() => window.Storage.deleteRecord('transactions', id)).then(() => {
-                    window.UI.showToast('LanÃ§amento excluÃ­do com sucesso!', 'success');
+                    window.UI.showToast('Lançamento excluído com sucesso!', 'success');
                 });
             }
         });
