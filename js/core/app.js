@@ -5,99 +5,178 @@ class App {
     }
 
     checkAuth() {
-        const session = window.Storage.get('session');
-        if (!session) return; // auth.js já redireciona
+        const session = window.Storage ? window.Storage.get('session') : null;
+        if (!session) return;
 
-        // Patch for old sessions missing role
         if (!session.role && session.id === '1') {
             session.role = 'admin';
-            window.Storage.set('session', session);
+            if (window.Storage) window.Storage.set('session', session);
         }
 
-        // Store globally for other scripts
         window.currentUser = session;
 
-        // Preencher dados do usuário
+        // Preencher dados do usuário no cabeçalho
         const userNameEl = document.getElementById('userName');
+        const userRoleTitleEl = document.getElementById('userRoleTitle');
         const userAvatarEl = document.getElementById('userAvatar');
         
-        if (userNameEl) userNameEl.textContent = session.name;
-        if (userAvatarEl && session.avatar) userAvatarEl.src = session.avatar;
+        const roleLabels = {
+            'admin': 'Administrador',
+            'gerente': 'Gerente',
+            'usuario': 'Usuário',
+            'visitante': 'Visitante'
+        };
+
+        if (userNameEl) userNameEl.textContent = session.name || 'Usuário';
+        if (userRoleTitleEl) userRoleTitleEl.textContent = roleLabels[session.role] || 'Usuário';
+        if (userAvatarEl) {
+            userAvatarEl.src = session.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(session.name || 'User')}`;
+        }
     }
 
     bindEvents() {
-        // Theme toggle is handled by ui.js
-
-        // Logout Logic
+        // Logout Button Listener
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                window.UI.confirmDialog('Deseja realmente sair do sistema?', 'Confirmação de Logout', () => {
-                    window.Storage.remove('session');
-                    window.location.href = 'index.html';
-                });
-            });
-        }
-
-        // Feature flags for unbuilt features
-        const profileBtn = document.querySelector('a[href="#profile"]');
-        const passwordBtn = document.querySelector('a[href="#password"]');
-        
-        if (profileBtn) {
-            profileBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (window.app) window.app.showToast('Edição de perfil será implementada em breve.', 'info');
-                if (userDropdown) userDropdown.style.display = 'none';
-            });
-        }
-        
-        if (passwordBtn) {
-            passwordBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (window.app) window.app.showToast('Alteração de senha será implementada em breve.', 'info');
-                if (userDropdown) userDropdown.style.display = 'none';
-            });
-        }
-
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if(confirm('Deseja realmente sair?')) {
+                if (window.Auth && typeof window.Auth.logout === 'function') {
+                    window.Auth.logout();
+                } else {
                     window.Storage.remove('session');
                     window.location.href = 'index.html';
                 }
             });
+        }
+
+        // Meu Perfil Link Listener
+        const myProfileLink = document.getElementById('myProfileLink') || document.querySelector('a[href="#profile"]');
+        if (myProfileLink) {
+            myProfileLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                const userDropdown = document.getElementById('userDropdown');
+                if (userDropdown) userDropdown.classList.remove('active');
+                this.openMyProfileModal();
+            });
+        }
+
+        // My Profile Form Submit Listener
+        const myProfileForm = document.getElementById('myProfileForm');
+        if (myProfileForm) {
+            myProfileForm.addEventListener('submit', (e) => this.saveMyProfile(e));
         }
     }
 
-    showToast(message, type = 'info') {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
+    openMyProfileModal() {
+        const currentUser = window.currentUser || (window.Storage ? window.Storage.get('session') : null);
+        if (!currentUser) return;
 
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        
-        let icon = 'fa-info-circle';
-        if (type === 'success') icon = 'fa-check-circle';
-        if (type === 'error') icon = 'fa-exclamation-circle';
+        const modal = document.getElementById('myProfileModal');
+        if (!modal) return;
 
-        toast.innerHTML = `
-            <i class="fa-solid ${icon}"></i>
-            <span>${message}</span>
-        `;
+        const nameInput = document.getElementById('myProfileNameInput');
+        const usernameInput = document.getElementById('myProfileUsernameInput');
+        const cpfInput = document.getElementById('myProfileCpfInput');
+        const emailInput = document.getElementById('myProfileEmailInput');
+        const personInput = document.getElementById('myProfilePersonInput');
+        const avatarInput = document.getElementById('myProfileAvatarInput');
+        const passwordInput = document.getElementById('myProfilePasswordInput');
+        const passwordConfirmInput = document.getElementById('myProfilePasswordConfirmInput');
 
-        container.appendChild(toast);
+        if (nameInput) nameInput.value = currentUser.name || '';
+        if (usernameInput) usernameInput.value = currentUser.username || (currentUser.email ? currentUser.email.split('@')[0] : '');
+        if (cpfInput) cpfInput.value = currentUser.cpf || '';
+        if (emailInput) emailInput.value = currentUser.email || '';
+        if (personInput) personInput.value = currentUser.person || currentUser.name || 'Eduardo';
+        if (avatarInput) avatarInput.value = currentUser.avatar || '';
+        if (passwordInput) passwordInput.value = '';
+        if (passwordConfirmInput) passwordConfirmInput.value = '';
 
-        // Remover após 3 segundos
-        setTimeout(() => {
-            toast.style.animation = 'slideOut 0.3s ease forwards';
-            setTimeout(() => {
-                if (container.contains(toast)) {
-                    container.removeChild(toast);
+        const nameHeader = document.getElementById('myProfileNameHeader');
+        const roleBadge = document.getElementById('myProfileRoleBadge');
+        const avatarPreview = document.getElementById('myProfileAvatarPreview');
+
+        if (nameHeader) nameHeader.textContent = currentUser.name || 'Usuário';
+        if (roleBadge) {
+            const roleLabels = { 'admin': 'Administrador', 'gerente': 'Gerente', 'usuario': 'Usuário', 'visitante': 'Visitante' };
+            roleBadge.textContent = roleLabels[currentUser.role] || 'Usuário';
+        }
+        if (avatarPreview) {
+            avatarPreview.src = currentUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}`;
+        }
+
+        if (window.UI) window.UI.openModal('myProfileModal');
+    }
+
+    async saveMyProfile(e) {
+        e.preventDefault();
+
+        const currentUser = window.currentUser || (window.Storage ? window.Storage.get('session') : null);
+        if (!currentUser) return;
+
+        const name = document.getElementById('myProfileNameInput')?.value.trim();
+        const username = document.getElementById('myProfileUsernameInput')?.value.trim().toLowerCase();
+        const cpf = document.getElementById('myProfileCpfInput')?.value.trim();
+        const email = document.getElementById('myProfileEmailInput')?.value.trim();
+        let avatar = document.getElementById('myProfileAvatarInput')?.value.trim();
+        const password = document.getElementById('myProfilePasswordInput')?.value;
+        const confirmPassword = document.getElementById('myProfilePasswordConfirmInput')?.value;
+
+        if (!name || !username) {
+            if (window.UI) window.UI.showToast('Nome e Nome de Usuário são obrigatórios.', 'error');
+            return;
+        }
+
+        if (password && password !== confirmPassword) {
+            if (window.UI) window.UI.showToast('As senhas digitadas não coincidem.', 'error');
+            return;
+        }
+
+        if (!avatar) {
+            avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`;
+        }
+
+        try {
+            const users = window.Storage.get('users') || [];
+            const userIndex = users.findIndex(u => String(u.id) === String(currentUser.id));
+
+            let userObj = userIndex !== -1 ? users[userIndex] : { ...currentUser };
+            userObj.name = name;
+            userObj.username = username;
+            userObj.cpf = cpf;
+            userObj.email = email;
+            userObj.avatar = avatar;
+
+            if (password) {
+                userObj.password = password;
+                if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
+                    await firebase.auth().currentUser.updatePassword(password);
                 }
-            }, 300);
-        }, 3000);
+            }
+
+            await window.Storage.saveRecord('users', userObj);
+
+            // Update active session
+            currentUser.name = name;
+            currentUser.username = username;
+            currentUser.cpf = cpf;
+            currentUser.email = email;
+            currentUser.avatar = avatar;
+
+            window.Storage.set('session', currentUser);
+            window.currentUser = currentUser;
+
+            this.checkAuth();
+            if (window.UI) window.UI.closeModal('myProfileModal');
+            if (window.UI) window.UI.showToast('Perfil atualizado com sucesso!', 'success');
+
+            if (window.Audit) {
+                window.Audit.log('MY_PROFILE_UPDATE', { userId: currentUser.id, name, username });
+            }
+        } catch (err) {
+            console.error('Erro ao atualizar perfil:', err);
+            if (window.UI) window.UI.showToast('Erro ao atualizar perfil: ' + (err.message || 'Tente novamente'), 'error');
+        }
     }
 }
 
@@ -105,52 +184,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.app = new App();
     
     // Listener Global para atualização em tempo real do Firebase
-    window.addEventListener('fluxo:dataChanged', (e) => {
-        // Tenta recarregar a tela atual se as classes existirem
-        if (window.UsersApp && typeof window.UsersApp.loadUsers === 'function') {
-            window.UsersApp.loadUsers();
-            if (typeof window.UsersApp.renderUsers === 'function') window.UsersApp.renderUsers();
-        }
-        if (window.FinanceApp && typeof window.FinanceApp.loadData === 'function') {
-            window.FinanceApp.loadData();
-            if (typeof window.FinanceApp.renderCards === 'function') window.FinanceApp.renderCards();
-            if (typeof window.FinanceApp.renderTransactions === 'function') window.FinanceApp.renderTransactions();
-        }
-        if (window.CardsApp && typeof window.CardsApp.init === 'function') {
-            window.CardsApp.init();
-        }
-        if (window.AccountsApp && typeof window.AccountsApp.init === 'function') {
-            window.AccountsApp.init();
-        }
-        if (window.TransactionsApp && typeof window.TransactionsApp.init === 'function') {
-            window.TransactionsApp.init();
-        }
+    window.addEventListener('fluxo:dataChanged', () => {
+        if (window.app) window.app.checkAuth();
     });
-});
-
-
-document.addEventListener('submit', (e) => {
-    const form = e.target;
-    const btn = form.querySelector('button[type="submit"]');
-    if (btn) {
-        // Prevent double submit
-        if (btn.hasAttribute('data-loading')) {
-            e.preventDefault();
-            return;
-        }
-        
-        const originalText = btn.innerHTML;
-        btn.setAttribute('data-loading', 'true');
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
-        btn.style.opacity = '0.7';
-        btn.style.pointerEvents = 'none';
-
-        // Re-enable after 1s (enough time for local storage + modal close)
-        setTimeout(() => {
-            btn.removeAttribute('data-loading');
-            btn.innerHTML = originalText;
-            btn.style.opacity = '1';
-            btn.style.pointerEvents = 'auto';
-        }, 1000);
-    }
 });
