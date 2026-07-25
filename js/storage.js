@@ -1,4 +1,4 @@
-﻿// storage.js
+// storage.js
 const APP_PREFIX = 'fluxo_';
 
 window.Storage = {
@@ -124,3 +124,6 @@ window.Storage = {
         });
     }
 };
+
+// Auto-inicializar sincronização Firebase em TODAS as páginas
+window.Storage.init();

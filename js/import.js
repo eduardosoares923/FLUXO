@@ -295,18 +295,18 @@ class ExcelImporter {
     saveToDatabase() {
         if (this.previewData.length === 0) return;
 
-        let existingTx = window.Storage.get('transactions') || [];
-        existingTx = existingTx.concat(this.previewData);
-        window.Storage.set('transactions', existingTx);
-
-        window.UI.closeModal('importPreviewModal');
-        window.UI.showToast(`${this.previewData.length} lançamentos importados com sucesso!`, 'success');
+        const promises = this.previewData.map(tx => window.Storage.saveRecord('transactions', tx));
         
-        // Refresh local table if it exists
-        if (window.transactionsController) {
-            window.transactionsController.allTransactions = existingTx;
-            document.getElementById('btnFilter').click();
-        }
+        Promise.all(promises).then(() => {
+            window.UI.closeModal('importPreviewModal');
+            window.UI.showToast(this.previewData.length + ' lançamentos importados com sucesso!', 'success');
+            
+            // Refresh local table if it exists
+            if (window.transactionsController) {
+                window.transactionsController.allTransactions = window.Storage.get('transactions') || [];
+                document.getElementById('btnFilter').click();
+            }
+        });
     }
 }
 
