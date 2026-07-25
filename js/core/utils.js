@@ -41,7 +41,8 @@ const Utils = {
         const closeD = parseInt(closeDay) || 1;
         const dueD = parseInt(dueDay) || 10;
 
-        if (day > closeD) {
+        // A partir do próprio dia de fechamento (day >= closeD), a compra vai para a próxima fatura!
+        if (day >= closeD) {
             month += 1;
         }
 
@@ -75,7 +76,8 @@ const Utils = {
         let currentClosing = getClampedDate(year, month, closeD);
         let proximoFechamento;
 
-        if (now <= currentClosing) {
+        // A partir do próprio dia de fechamento (now >= currentClosing), o ciclo atual fechou!
+        if (now < currentClosing) {
             proximoFechamento = currentClosing;
         } else {
             proximoFechamento = getClampedDate(year, month + 1, closeD);
@@ -92,17 +94,13 @@ const Utils = {
         }
 
         let melhorDiaCompra;
-        if (now <= currentClosing) {
-            const prevClosing = getClampedDate(year, month - 1, closeD);
-            melhorDiaCompra = new Date(prevClosing);
-            melhorDiaCompra.setDate(melhorDiaCompra.getDate() + 1);
+        if (now < currentClosing) {
+            melhorDiaCompra = getClampedDate(year, month - 1, closeD);
         } else {
-            melhorDiaCompra = new Date(currentClosing);
-            melhorDiaCompra.setDate(melhorDiaCompra.getDate() + 1);
+            melhorDiaCompra = currentClosing; // O próprio dia de fechamento já é o melhor dia!
         }
 
-        const proximoMelhorDia = new Date(proximoFechamento);
-        proximoMelhorDia.setDate(proximoMelhorDia.getDate() + 1);
+        const proximoMelhorDia = proximoFechamento;
 
         const diffMsClose = proximoFechamento - now;
         const diasParaFechamento = Math.max(0, Math.ceil(diffMsClose / (1000 * 60 * 60 * 24)));
@@ -110,7 +108,7 @@ const Utils = {
         const diffMsDue = proximoVencimento - now;
         const diasParaVencimento = Math.max(0, Math.ceil(diffMsDue / (1000 * 60 * 60 * 24)));
 
-        const vaiParaProxima = now > currentClosing;
+        const vaiParaProxima = now >= currentClosing;
         const formattedFechamento = this.formatDate(proximoFechamento.toISOString().split('T')[0]);
         const formattedVencimento = this.formatDate(proximoVencimento.toISOString().split('T')[0]);
         const formattedMelhorDia = this.formatDate(melhorDiaCompra.toISOString().split('T')[0]);
