@@ -53,6 +53,13 @@ class CardsController {
                 if (action === 'delete') this.deleteCard(id);
             });
         }
+
+        const refreshCardsHandler = () => {
+            this.cards = window.Storage.get('cards') || [];
+            this.renderCards();
+        };
+        window.addEventListener('dataUpdated', refreshCardsHandler);
+        window.addEventListener('fluxo:dataChanged', refreshCardsHandler);
     }
 
     openEditModal(id) {

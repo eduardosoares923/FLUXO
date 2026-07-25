@@ -27,7 +27,7 @@ class TransactionsController {
         const catSelect = document.getElementById('categoryFilter');
         const btnFilter = document.getElementById('btnFilter');
         
-        window.addEventListener('dataUpdated', () => {
+        const refreshTxHandler = () => {
             let globalTx = window.Storage.get('transactions') || [];
             if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
                 if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
@@ -38,8 +38,11 @@ class TransactionsController {
             this.filteredTransactions = [...this.allTransactions];
             this.accounts = window.Storage.get('accounts') || [];
             this.cards = window.Storage.get('cards') || [];
-            this.renderTable();
-        });
+            this.applyFilters();
+        };
+
+        window.addEventListener('dataUpdated', refreshTxHandler);
+        window.addEventListener('fluxo:dataChanged', refreshTxHandler);
 
         const applyFilters = () => {
             const search = searchInput.value.toLowerCase();

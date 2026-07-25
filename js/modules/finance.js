@@ -173,7 +173,7 @@ class FinanceController {
             });
         }
         
-        window.addEventListener('dataUpdated', () => {
+        const refreshHandler = () => {
             let allTx = window.Storage.get('transactions') || [];
             if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
                 if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
@@ -182,7 +182,10 @@ class FinanceController {
             }
             this.transactions = allTx;
             this.updateDashboard();
-        });
+        };
+
+        window.addEventListener('dataUpdated', refreshHandler);
+        window.addEventListener('fluxo:dataChanged', refreshHandler);
 
         // Month Navigation Handlers
         const btnPrevMonth = document.getElementById('btnPrevMonth');
@@ -682,6 +685,14 @@ class FinanceController {
     }
 
     updateDashboard() {
+        let allTx = window.Storage.get('transactions') || [];
+        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                allTx = allTx.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
+            }
+        }
+        this.transactions = allTx;
+
         // --- 1. Global Date Filter (Month Navigation) ---
         const isDashboard = window.location.pathname.includes('dashboard.html');
         

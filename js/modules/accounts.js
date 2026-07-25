@@ -70,6 +70,13 @@ class AccountsController {
                 });
             });
         }
+
+        const refreshAccountsHandler = () => {
+            this.accounts = window.Storage.get('accounts') || [];
+            this.renderAccounts();
+        };
+        window.addEventListener('dataUpdated', refreshAccountsHandler);
+        window.addEventListener('fluxo:dataChanged', refreshAccountsHandler);
     }
 
     openEditModal(id) {

@@ -49,11 +49,14 @@ class ReportsController {
         });
         observer.observe(document.documentElement, { attributes: true });
 
-        window.addEventListener('dataUpdated', () => {
+        const refreshReportHandler = () => {
             this.loadData();
             this.populateFilter();
             this.applyFilter();
-        });
+        };
+
+        window.addEventListener('dataUpdated', refreshReportHandler);
+        window.addEventListener('fluxo:dataChanged', refreshReportHandler);
 
         const filterSelect = document.getElementById('reportPersonFilter');
         if (filterSelect) {

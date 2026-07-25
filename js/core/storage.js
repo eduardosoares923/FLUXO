@@ -31,8 +31,8 @@ window.Storage = {
                 // Store in local cache
                 localStorage.setItem(APP_PREFIX + collection, JSON.stringify(dataArray));
                 
-                // Trigger event to update UI
-                window.dispatchEvent(new CustomEvent('fluxo:dataChanged', { detail: { collection } }));
+                // Trigger events to update UI
+                this.notifyDataChanged(collection);
             }, (error) => {
                 console.error('Firebase sync error on collection:', collection, error);
                 if (error.code === 'permission-denied') {
@@ -42,6 +42,11 @@ window.Storage = {
                 }
             });
         });
+    },
+
+    notifyDataChanged(collection) {
+        window.dispatchEvent(new CustomEvent('fluxo:dataChanged', { detail: { collection } }));
+        window.dispatchEvent(new CustomEvent('dataUpdated', { detail: { collection } }));
     },
 
     // Helper for error messages
@@ -104,6 +109,7 @@ window.Storage = {
                 localData.push(record);
             }
             this.set(collection, localData);
+            this.notifyDataChanged(collection);
 
             if (this.isFirebaseReady && typeof firebase !== 'undefined') {
                 const cleanRecord = JSON.parse(JSON.stringify(record));
@@ -147,6 +153,7 @@ window.Storage = {
             const localData = this.get(collection) || [];
             const filtered = localData.filter(item => item.id !== id);
             this.set(collection, filtered);
+            this.notifyDataChanged(collection);
 
             if (this.isFirebaseReady && typeof firebase !== 'undefined') {
                 let isResolved = false;
