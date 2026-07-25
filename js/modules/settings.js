@@ -1,4 +1,4 @@
-﻿class SettingsController {
+class SettingsController {
     constructor() {
         this.init();
         this.importedTransactions = [];
@@ -89,20 +89,21 @@
 
                     this.setLoadingProgress(50);
                     
-                    // Save to local storage
-                    if (data.users) Storage.set('users', data.users);
-                    if (data.currentUser) Storage.set('currentUser', data.currentUser);
-                    if (data.accounts) Storage.set('accounts', data.accounts);
-                    if (data.cards) Storage.set('cards', data.cards);
-                    if (data.transactions) Storage.set('transactions', data.transactions);
+                    const promises = [];
+                    if (data.users && Array.isArray(data.users)) data.users.forEach(u => promises.push(Storage.saveRecord('users', u)));
+                    if (data.accounts && Array.isArray(data.accounts)) data.accounts.forEach(a => promises.push(Storage.saveRecord('accounts', a)));
+                    if (data.cards && Array.isArray(data.cards)) data.cards.forEach(c => promises.push(Storage.saveRecord('cards', c)));
+                    if (data.transactions && Array.isArray(data.transactions)) data.transactions.forEach(t => promises.push(Storage.saveRecord('transactions', t)));
                     if (data.theme) Storage.set('theme', data.theme);
 
-                    this.setLoadingProgress(100);
-                    setTimeout(() => {
-                        this.hideLoading();
-                        window.UI.showToast('Backup restaurado com sucesso! Recarregando...', 'success');
-                        setTimeout(() => window.location.reload(), 1500);
-                    }, 800);
+                    Promise.all(promises).then(() => {
+                        this.setLoadingProgress(100);
+                        setTimeout(() => {
+                            this.hideLoading();
+                            window.UI.showToast('Backup restaurado com sucesso! Recarregando...', 'success');
+                            setTimeout(() => window.location.reload(), 1500);
+                        }, 800);
+                    });
 
                 } catch (error) {
                     this.hideLoading();
@@ -216,24 +217,37 @@
             const category = catRaw ? String(catRaw).trim() : 'Outros';
             const description = desc ? String(desc).trim() : 'Importado';
 
-            // Anti-Duplicidade Rule (Mesma data, valor exato e descrição parecida)
-            const isDuplicate = existingTx.some(tx => 
-                tx.date === finalDate && 
-                Math.abs(tx.amount - amount) < 0.01 && 
-                tx.description.toLowerCase() === description.toLowerCase()
-            );
+            return {
+                date: finalDate,
+                description: desc ? String(desc).trim() : 'Importado',
+                amount: type === 'expense' ? -amount : amount,
+                category: catRaw ? String(catRaw).trim() : 'Outros'
+            };
+        });
 
-            if (!isDuplicate) {
-                existingTx.push({
+        const newTxList = [];
+        this.parsedImportData.forEach(tx => {
+            const description = tx.description ? tx.description.trim() : 'Sem descrição';
+            const amount = Math.abs(tx.amount);
+            const type = tx.amount >= 0 ? 'income' : 'expense';
+
+            const formattedDate = tx.date ? tx.date.split('T')[0] : new Date().toISOString().split('T')[0];
+            const finalDate = formattedDate;
+
+            const exists = existingTx.some(e => e.date === finalDate && Math.abs(e.amount) === amount && e.description === description);
+            
+            if (!exists) {
+                const newTx = {
                     id: window.Utils.generateId(),
                     type,
                     amount,
                     description,
-                    category,
+                    category: tx.category || 'Outros',
                     date: finalDate,
-                    paymentMethod: 'account', // default
+                    paymentMethod: 'account',
                     person: ''
-                });
+                };
+                newTxList.push(newTx);
                 addedCount++;
             } else {
                 duplicateCount++;
@@ -242,26 +256,23 @@
 
         this.setLoadingProgress(90);
         
-        Storage.set('transactions', existingTx);
+        const promises = newTxList.map(tx => Storage.saveRecord('transactions', tx));
         
-        setTimeout(() => {
+        Promise.all(promises).then(() => {
             this.hideLoading();
-            let msg = `${addedCount} transações importadas com sucesso!`;
-            if (duplicateCount > 0) msg += ` (${duplicateCount} ignoradas por duplicidade).`;
+            let msg = addedCount + ' transações importadas com sucesso!';
+            if (duplicateCount > 0) msg += ' (' + duplicateCount + ' ignoradas por duplicidade).';
             
             window.UI.showToast(msg, 'success');
             
-            // Dispatch para atualizar dashboards paralelos (se existirem na mesma page)
             const event = new CustomEvent('dataUpdated');
             window.dispatchEvent(event);
 
-            // Reseta UI
             document.getElementById('importActions').style.display = 'none';
             document.getElementById('importFileName').textContent = '';
             document.getElementById('importFileInput').value = '';
             this.selectedFile = null;
-
-        }, 800);
+        });
     }
 
     // ==========================================
