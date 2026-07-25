@@ -118,12 +118,19 @@ class CardsController {
                 const sign = isExpense ? '-' : '+';
                 const color = isExpense ? 'var(--danger)' : 'var(--success)';
 
+                const dueMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, card.closeDay || 1, card.dueDay || 10) : '';
+                let dueBadge = '';
+                if (dueMonthStr) {
+                    const [dYear, dMonth] = dueMonthStr.split('-');
+                    dueBadge = `<span style="font-size: 0.7rem; background: rgba(99, 102, 241, 0.15); color: #818cf8; padding: 0.15rem 0.4rem; border-radius: 4px; font-weight: 600; display: inline-block; margin-top: 0.2rem;">Venc. ${card.dueDay}/${dMonth}/${dYear}</span>`;
+                }
+
                 const item = document.createElement('div');
                 item.className = 'transaction-item';
                 item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--glass-border);';
                 item.innerHTML = `
                     <div class="tx-info" style="display: flex; align-items: center; gap: 0.75rem;">
-                        <div class="tx-icon ${iconBg}" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${isExpense ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'}; color: ${color};">
+                        <div class="tx-icon ${iconBg}" style="width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: ${isExpense ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'}; color: ${color}; flex-shrink: 0;">
                             <i class="fa-solid ${iconClass}"></i>
                         </div>
                         <div class="tx-details">
@@ -131,7 +138,10 @@ class CardsController {
                             <div class="tx-date" style="font-size: 0.75rem; color: var(--text-secondary);">${window.Utils.formatDate(tx.date)} &bull; ${window.Utils.escapeHTML(tx.category)}</div>
                         </div>
                     </div>
-                    <div class="tx-amount ${iconBg}" style="font-weight: 700; font-size: 0.95rem; color: ${color};">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
+                    <div style="text-align: right;">
+                        <div class="tx-amount ${iconBg}" style="font-weight: 700; font-size: 0.95rem; color: ${color};">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
+                        ${dueBadge}
+                    </div>
                 `;
                 listEl.appendChild(item);
             });

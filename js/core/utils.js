@@ -29,6 +29,33 @@ const Utils = {
         } catch (e) { return null; }
     },
 
+    getCardInvoiceMonth(txDateStr, closeDay = 1, dueDay = 10) {
+        if (!txDateStr) return '';
+        const d = this.parseTxDate(txDateStr);
+        if (!d) return '';
+
+        let year = d.getFullYear();
+        let month = d.getMonth();
+        const day = d.getDate();
+
+        const closeD = parseInt(closeDay) || 1;
+        const dueD = parseInt(dueDay) || 10;
+
+        if (day > closeD) {
+            month += 1;
+        }
+
+        if (dueD <= closeD) {
+            month += 1;
+        }
+
+        const dueDate = new Date(year, month, dueD);
+        const dueYear = dueDate.getFullYear();
+        const dueMonth = String(dueDate.getMonth() + 1).padStart(2, '0');
+        
+        return `${dueYear}-${dueMonth}`;
+    },
+
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     },
