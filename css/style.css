@@ -361,3 +361,64 @@ select.form-control option {
     to { transform: translateY(0); }
   }
 }
+/* =========================================
+   AGGRESSIVE MOBILE FIXES (Tarefa 10)
+   ========================================= */
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll */
+  body, html {
+    overflow-x: hidden !important;
+    width: 100%;
+    max-width: 100vw;
+  }
+
+  /* Force all inputs, selects, and textareas to 100% width to prevent overflow */
+  input, select, textarea, .form-control {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Force buttons to equal sizes */
+  .btn {
+    width: 100%;
+    margin-bottom: 0.5rem;
+    justify-content: center;
+  }
+
+  /* Exception for header/actions buttons which can be inline */
+  .header-actions .btn {
+    width: auto;
+    flex: 1;
+  }
+  
+  /* Modal fixes */
+  .modal-content {
+    width: 100vw !important;
+    padding: 1.5rem !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Card fixes */
+  .card, .glass-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    padding: 1rem !important;
+  }
+
+  /* Fix grids */
+  .summary-grid, .charts-grid, .cards-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+    gap: 1rem !important;
+  }
+
+  /* Fix overlapping text */
+  * {
+    word-break: break-word;
+  }
+}

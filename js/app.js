@@ -1,4 +1,4 @@
-class App {
+﻿class App {
     constructor() {
         this.checkAuth();
         this.bindEvents();
@@ -126,4 +126,31 @@ document.addEventListener('DOMContentLoaded', () => {
             window.TransactionsApp.init();
         }
     });
+});
+
+
+document.addEventListener('submit', (e) => {
+    const form = e.target;
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) {
+        // Prevent double submit
+        if (btn.hasAttribute('data-loading')) {
+            e.preventDefault();
+            return;
+        }
+        
+        const originalText = btn.innerHTML;
+        btn.setAttribute('data-loading', 'true');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Salvando...';
+        btn.style.opacity = '0.7';
+        btn.style.pointerEvents = 'none';
+
+        // Re-enable after 1s (enough time for local storage + modal close)
+        setTimeout(() => {
+            btn.removeAttribute('data-loading');
+            btn.innerHTML = originalText;
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+        }, 1000);
+    }
 });
