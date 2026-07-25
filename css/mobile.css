@@ -330,12 +330,33 @@
   }
 
   /* ---- Forms & Spacing in Modals ---- */
+  form {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
+    gap: 0.5rem !important;
+    height: auto !important;
+  }
+
+  .form-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    margin-bottom: 0 !important;
+  }
+
   .form-group,
+  .form-row > .form-group,
   div[class*="form-group"],
   div[style*="margin-bottom: 1.5rem"],
   div[style*="margin-bottom: 1rem"],
   div[style*="margin-bottom:1.5rem"],
   div[style*="margin-bottom:1rem"] {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
     margin-bottom: 0.5rem !important;
   }
 
@@ -343,6 +364,7 @@
   label {
     margin-bottom: 0.2rem !important;
     font-size: 0.8rem !important;
+    display: block !important;
   }
 
   .form-control,
@@ -358,6 +380,7 @@
     font-size: 0.85rem !important;
     height: auto !important;
     min-height: 38px !important;
+    box-sizing: border-box !important;
   }
 
   /* ---- Filters ---- */
@@ -396,6 +419,9 @@
     max-width: 440px !important;
     max-height: 85vh !important;
     padding: 1rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: flex-start !important;
   }
 
   .modal-header,
@@ -405,15 +431,21 @@
   }
 
   .modal-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.5rem !important;
     margin-top: 1rem !important;
     padding-top: 0.75rem !important;
-    gap: 0.5rem !important;
+    width: 100% !important;
   }
 
-  /* ---- Form Rows ---- */
-  .form-row {
-    flex-direction: column !important;
-    gap: 0.5rem !important;
+  .modal-actions .btn {
+    flex: 1 !important;
+    width: auto !important;
+    margin-bottom: 0 !important;
+    padding: 0.55rem 0.75rem !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
   }
 
   /* ---- Account Cards ---- */

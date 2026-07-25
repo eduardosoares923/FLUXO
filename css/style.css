@@ -454,7 +454,7 @@ select.form-control option {
 }
 
 .form-row > .form-group {
-  flex: 1 1 140px;
+  flex: 1 1 auto;
   min-width: 130px;
 }
 
