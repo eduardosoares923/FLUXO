@@ -1,0 +1,394 @@
+/* =================================================================
+   MOBILE.CSS — Regras agressivas para dispositivos mobile
+   Carregado por TODAS as páginas. Sobrescreve tudo abaixo de 768px.
+   ================================================================= */
+
+@media (max-width: 768px) {
+
+  /* ---- LAYOUT GERAL ---- */
+  .dashboard-layout {
+    flex-direction: column !important;
+    overflow: hidden !important;
+  }
+
+  /* ---- BOTTOM NAV (estilo Nubank) ---- */
+  .sidebar {
+    order: 2 !important;
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    height: 64px !important;
+    background: rgba(15, 23, 42, 0.97) !important;
+    backdrop-filter: blur(12px) !important;
+    border-right: none !important;
+    border-top: 1px solid rgba(255,255,255,0.1) !important;
+    z-index: 1000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    display: flex !important;
+    justify-content: center !important;
+    flex-direction: row !important;
+  }
+
+  [data-theme="light"] .sidebar {
+    background: rgba(241, 245, 249, 0.97) !important;
+    border-top: 1px solid rgba(0,0,0,0.1) !important;
+  }
+
+  .sidebar-header {
+    display: none !important;
+  }
+
+  .sidebar-nav {
+    display: flex !important;
+    flex-direction: row !important;
+    overflow-x: auto !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    width: 100% !important;
+    justify-content: space-around !important;
+    align-items: center !important;
+  }
+
+  .sidebar-nav::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  .nav-item {
+    flex-direction: column !important;
+    padding: 0.4rem 0.15rem !important;
+    font-size: 0.6rem !important;
+    white-space: nowrap !important;
+    margin-bottom: 0 !important;
+    flex: 1 !important;
+    border-radius: 0 !important;
+    text-align: center !important;
+    justify-content: center !important;
+    align-items: center !important;
+    gap: 0.15rem !important;
+    border-left: none !important;
+    min-width: 0 !important;
+  }
+
+  .nav-item i {
+    font-size: 1.1rem !important;
+    margin-bottom: 0 !important;
+  }
+
+  .nav-item.active {
+    background: transparent !important;
+    color: var(--accent-primary) !important;
+  }
+
+  /* ---- MAIN CONTENT ---- */
+  .main-content {
+    order: 1 !important;
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-bottom: 80px !important;
+  }
+
+  /* ============================================================
+     HEADER MOBILE — Linha única: Título | Ícones compactos
+     ============================================================ */
+  .top-header {
+    padding: 0.5rem 0.75rem !important;
+    height: auto !important;
+    min-height: 50px !important;
+    position: sticky !important;
+    top: 0 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.5rem !important;
+    background: rgba(15, 23, 42, 0.95) !important;
+    backdrop-filter: blur(12px) !important;
+    z-index: 900 !important;
+  }
+
+  [data-theme="light"] .top-header {
+    background: rgba(241, 245, 249, 0.95) !important;
+  }
+
+  /* Título pequeno que não quebra linha */
+  .header-title {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+  }
+
+  /* Actions em uma linha compacta */
+  .header-actions {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    gap: 0.35rem !important;
+    flex-shrink: 0 !important;
+    width: auto !important;
+  }
+
+  /* ESCONDER botões de ação no header mobile — mover para conteúdo */
+  .header-actions > .btn:not(#themeToggle):not(.btn-icon) {
+    display: none !important;
+  }
+
+  /* Theme toggle — ícone circular compacto */
+  #themeToggle,
+  .header-actions > .btn-icon {
+    width: 32px !important;
+    height: 32px !important;
+    min-width: 32px !important;
+    min-height: 32px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 50% !important;
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    padding: 0 !important;
+    font-size: 0.85rem !important;
+    flex-shrink: 0 !important;
+    color: var(--text-primary) !important;
+  }
+
+  [data-theme="light"] #themeToggle,
+  [data-theme="light"] .header-actions > .btn-icon {
+    background: rgba(0,0,0,0.05) !important;
+    border: 1px solid rgba(0,0,0,0.1) !important;
+  }
+
+  /* Perfil do usuário — só o avatar */
+  .user-profile-dropdown {
+    flex-shrink: 0 !important;
+  }
+
+  .user-profile {
+    gap: 0 !important;
+    padding: 0 !important;
+  }
+
+  .user-info {
+    display: none !important;
+  }
+
+  .user-avatar {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  /* Dropdown menu posição no mobile */
+  .dropdown-menu {
+    right: 0 !important;
+    left: auto !important;
+  }
+
+  /* ============================================================
+     CONTEÚDO PRINCIPAL MOBILE
+     ============================================================ */
+  .dashboard-container {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard Controls ---- */
+  .dashboard-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+    padding: 0.75rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  .dashboard-controls > div {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .dashboard-controls h2 {
+    font-size: 1rem !important;
+    text-align: center !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* Month Navigator */
+  .month-navigator {
+    justify-content: center !important;
+    gap: 0.25rem !important;
+  }
+
+  .month-navigator #currentMonthDisplay {
+    min-width: 110px !important;
+    font-size: 0.85rem !important;
+  }
+
+  /* Botões de ação do dashboard no mobile */
+  .dashboard-controls > div:last-child {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 0.5rem !important;
+  }
+
+  .dashboard-controls > div:last-child .btn {
+    display: flex !important;
+    flex: 1 !important;
+    justify-content: center !important;
+    font-size: 0.8rem !important;
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Summary Cards ---- */
+  .summary-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.75rem !important;
+  }
+
+  .summary-card {
+    padding: 0.75rem !important;
+  }
+
+  .card-title {
+    font-size: 0.75rem !important;
+  }
+
+  .card-value {
+    font-size: 1.1rem !important;
+  }
+
+  .trend-indicator {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Grids ---- */
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  .reports-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .accounts-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Charts ---- */
+  .chart-container {
+    min-height: 220px !important;
+  }
+
+  /* ---- Glass Panels ---- */
+  .glass-panel {
+    padding: 0.75rem !important;
+    border-radius: 10px !important;
+  }
+
+  /* ---- Tables ---- */
+  .table-responsive,
+  .transactions-table-container,
+  .table-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+  }
+
+  table,
+  .transactions-table,
+  .table {
+    min-width: 650px !important;
+  }
+
+  /* ---- Filters ---- */
+  .filters-section {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    padding: 1rem !important;
+  }
+
+  .filter-group {
+    min-width: 100% !important;
+  }
+
+  /* ---- Section Headers ---- */
+  .section-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Summary Row (Reports) ---- */
+  .summary-row {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  .summary-box {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Modals ---- */
+  .modal-content {
+    width: 95% !important;
+    max-height: 85vh !important;
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Form Rows ---- */
+  .form-row {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Account Cards ---- */
+  .account-card {
+    padding: 1rem !important;
+  }
+
+  .add-account-btn {
+    min-height: 100px !important;
+  }
+
+  /* ---- Suggestions ---- */
+  .suggestion-card {
+    flex-direction: column !important;
+    text-align: center !important;
+  }
+
+  /* Mobile action bar */
+  .mobile-action-bar {
+    display: flex !important;
+  }
+}
+
+/* Extra small screens (< 400px) */
+@media (max-width: 400px) {
+  .summary-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .nav-item {
+    font-size: 0.55rem !important;
+    padding: 0.3rem 0.1rem !important;
+  }
+
+  .nav-item i {
+    font-size: 1rem !important;
+  }
+
+  .header-title {
+    font-size: 0.85rem !important;
+  }
+}
