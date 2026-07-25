@@ -930,15 +930,23 @@ class FinanceController {
         // Prepare Data for Flow Chart (Group by Date)
         const dateMap = {};
         txs.forEach(tx => {
-            if (!dateMap[tx.date]) dateMap[tx.date] = { in: 0, out: 0 };
-            if (tx.type === 'income') dateMap[tx.date].in += tx.amount;
-            else dateMap[tx.date].out += tx.amount;
+            const parsed = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
+            if (!parsed || isNaN(parsed.getTime())) return;
+            
+            const yyyy = parsed.getFullYear();
+            const mm = String(parsed.getMonth() + 1).padStart(2, '0');
+            const dd = String(parsed.getDate()).padStart(2, '0');
+            const key = `${yyyy}-${mm}-${dd}`;
+            
+            if (!dateMap[key]) dateMap[key] = { in: 0, out: 0, label: `${dd}/${mm}` };
+            if (tx.type === 'income') dateMap[key].in += tx.amount;
+            else dateMap[key].out += tx.amount;
         });
 
-        const sortedDates = Object.keys(dateMap).sort();
-        const labels = sortedDates.map(d => window.Utils.formatDate(d).substring(0, 5));
-        const dataIn = sortedDates.map(d => dateMap[d].in);
-        const dataOut = sortedDates.map(d => dateMap[d].out);
+        const sortedKeys = Object.keys(dateMap).sort();
+        const labels = sortedKeys.map(k => dateMap[k].label);
+        const dataIn = sortedKeys.map(k => dateMap[k].in);
+        const dataOut = sortedKeys.map(k => dateMap[k].out);
 
         const ctxMain = document.getElementById('cashFlowChart') || document.getElementById('mainFlowChart');
         if (ctxMain) {
@@ -979,7 +987,8 @@ class FinanceController {
         const catMap = {};
         txs.forEach(tx => {
             if (tx.type === 'expense') {
-                catMap[tx.category] = (catMap[tx.category] || 0) + tx.amount;
+                const catName = tx.category ? tx.category.trim() : 'Outros';
+                catMap[catName] = (catMap[catName] || 0) + tx.amount;
             }
         });
         

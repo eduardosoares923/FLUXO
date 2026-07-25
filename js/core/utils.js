@@ -11,11 +11,9 @@ const Utils = {
     formatDate(dateString) {
         if (!dateString) return '-';
         try {
-            const dateOnly = String(dateString).split('T')[0].trim();
-            const [year, month, day] = dateOnly.split('-').map(Number);
-            const date = new Date(year, month - 1, day);
-            if (isNaN(date.getTime())) return '-';
-            return new Intl.DateTimeFormat('pt-BR').format(date);
+            const d = this.parseTxDate(dateString);
+            if (!d || isNaN(d.getTime())) return '-';
+            return new Intl.DateTimeFormat('pt-BR').format(d);
         } catch (e) { return '-'; }
     },
 
