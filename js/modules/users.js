@@ -286,32 +286,40 @@ class UsersApp {
 
     openEditModal(id) {
         this.loadUsers();
-        const user = this.users.find(u => String(u.id) === String(id));
+        const user = this.users.find(u => String(u.id) === String(id) || String(u.uid) === String(id) || (u.email && u.email.toLowerCase() === String(id).toLowerCase()));
         if (!user) {
             if (window.UI) window.UI.showToast('Usuário não localizado no sistema.', 'error');
             return;
         }
         
         this.editingUserId = user.id;
-        document.getElementById('userId').value = user.id;
-        document.getElementById('userNameInput').value = user.name || '';
-        document.getElementById('userUsernameInput').value = user.username || '';
-        document.getElementById('userCpfInput').value = user.cpf || '';
-        document.getElementById('userAvatarInput').value = user.avatar || '';
-        document.getElementById('userEmailInput').value = user.email || '';
+        const setVal = (elemId, val) => {
+            const el = document.getElementById(elemId);
+            if (el) el.value = val;
+        };
+
+        setVal('userId', user.id);
+        setVal('userNameInput', user.name || '');
+        setVal('userUsernameInput', user.username || '');
+        setVal('userCpfInput', user.cpf || '');
+        setVal('userAvatarInput', user.avatar || '');
+        setVal('userEmailInput', user.email || '');
         
         this.populatePersonOptions(user.person || user.name || 'Eduardo');
 
-        document.getElementById('userRoleInput').value = user.role || 'usuario';
-        document.getElementById('userStatusInput').value = user.status || 'ativo';
+        setVal('userRoleInput', user.role || 'usuario');
+        setVal('userStatusInput', user.status || 'ativo');
+        setVal('userPasswordInput', '');
+        setVal('userPasswordConfirmInput', '');
         
-        document.getElementById('userPasswordInput').value = '';
-        document.getElementById('userPasswordConfirmInput').value = '';
+        const pwdInput = document.getElementById('userPasswordInput');
+        if (pwdInput) pwdInput.required = false;
+        const pwdConfirmInput = document.getElementById('userPasswordConfirmInput');
+        if (pwdConfirmInput) pwdConfirmInput.required = false;
         
-        document.getElementById('userPasswordInput').required = false;
-        document.getElementById('userPasswordConfirmInput').required = false;
-        
-        document.getElementById('userModalTitle').textContent = 'Editar Perfil de Usuário';
+        const titleEl = document.getElementById('userModalTitle');
+        if (titleEl) titleEl.textContent = 'Editar Perfil de Usuário';
+
         this.renderPermissions(user.permissions || {});
         window.UI.openModal('userModal');
     }
