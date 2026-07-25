@@ -72,6 +72,13 @@ class AuthManager {
                     loginTime: new Date().toISOString()
                 };
                 window.Storage.set('session', this.session);
+                window.currentUser = this.session;
+
+                // Re-initialize Firestore sync NOW that user is authenticated
+                if (window.Storage && typeof window.Storage.initFirebaseSync === 'function') {
+                    window.Storage.initFirebaseSync();
+                }
+
                 if (this.isLoginPage) {
                     window.location.href = 'dashboard.html';
                 } else {
