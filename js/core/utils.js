@@ -48,6 +48,29 @@ const Utils = {
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     },
+    getPaymentMethodName(methodStr) {
+        if (!methodStr || methodStr === 'account') {
+            const accounts = window.Storage ? window.Storage.get('accounts') || [] : [];
+            const defaultAcc = accounts.find(a => a.id === 'default_account');
+            return defaultAcc ? defaultAcc.name : 'Conta Corrente';
+        }
+        
+        if (methodStr.startsWith('acc_')) {
+            const id = methodStr.replace('acc_', '');
+            const accounts = window.Storage ? window.Storage.get('accounts') || [] : [];
+            const acc = accounts.find(a => a.id === id);
+            return acc ? acc.name : 'Conta Corrente';
+        }
+        
+        if (methodStr.startsWith('card_')) {
+            const id = methodStr.replace('card_', '');
+            const cards = window.Storage ? window.Storage.get('cards') || [] : [];
+            const card = cards.find(c => c.id === id);
+            return card ? `Cartão ${card.name}` : 'Cartão de Crédito';
+        }
+        
+        return methodStr;
+    },
 
     /**
      * Extrai valores e valida um form html

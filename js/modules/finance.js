@@ -413,9 +413,8 @@ class FinanceController {
     }
 
     renderDashboardCards() {
-        const section = document.getElementById('dashboardCardsSection');
         const listEl = document.getElementById('dashboardCardsList');
-        if (!section || !listEl) return;
+        if (!listEl) return;
 
         let cards = window.Storage.get('cards') || [];
         
@@ -425,18 +424,15 @@ class FinanceController {
             }
         }
         
+        listEl.innerHTML = '';
         if (cards.length === 0) {
-            section.style.display = 'none';
+            listEl.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem; padding: 0.5rem 0;">Nenhum cartão cadastrado.</div>';
             return;
         }
 
-        section.style.display = 'block';
-        listEl.innerHTML = '';
-
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-        const currentMonthPrefix = `${currentYear}-${currentMonth}`;
+        const targetYear = this.currentNavDate.getFullYear();
+        const targetMonth = String(this.currentNavDate.getMonth() + 1).padStart(2, '0');
+        const currentMonthPrefix = `${targetYear}-${targetMonth}`;
 
         const cardTotals = this.transactions.reduce((acc, tx) => {
             if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_') && tx.date.startsWith(currentMonthPrefix)) {
@@ -447,54 +443,35 @@ class FinanceController {
         }, {});
 
         cards.forEach(card => {
-            const pct = card.limit > 0 ? (card.usedLimit / card.limit) * 100 : 0;
-            const pctDisplay = pct > 100 ? 100 : pct;
-            const isDanger = pct > 85;
-
-            let faturaAtual = cardTotals[card.id] || 0;
+            const faturaAtual = cardTotals[card.id] || 0;
 
             const cardEl = document.createElement('div');
             cardEl.style.cssText = `
-                background: linear-gradient(135deg, ${card.color} 0%, rgba(0,0,0,0.8) 150%);
-                border-radius: var(--radius-lg);
-                padding: 1.5rem;
-                color: white;
-                box-shadow: var(--shadow-md);
+                background: var(--bg-secondary);
+                border: 1px solid var(--glass-border);
+                border-left: 4px solid ${card.color || 'var(--accent-primary)'};
+                border-radius: var(--radius-md);
+                padding: 0.75rem 1rem;
                 display: flex;
-                flex-direction: column;
-                gap: 1rem;
+                align-items: center;
+                justify-content: space-between;
                 cursor: pointer;
-                transition: transform 0.2s;
-                min-width: 280px;
-                flex: 0 0 auto;
-                scroll-snap-align: start;
             `;
-            // Redirect to cards.html on click to see details
             cardEl.onclick = () => window.location.href = 'cards.html';
-            cardEl.onmouseover = () => cardEl.style.transform = 'translateY(-2px)';
-            cardEl.onmouseout = () => cardEl.style.transform = 'translateY(0)';
 
             cardEl.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-weight: 600; font-size: 1.1rem;">${window.Utils.escapeHTML(card.name)}</div>
-                    <div style="opacity: 0.8; font-size: 0.8rem;"><i class="fa-brands fa-cc-${window.Utils.escapeHTML(card.brand)}"></i> Final ${window.Utils.escapeHTML(card.last4)}</div>
-                </div>
-                <div>
-                    <div style="font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.2rem;">Fatura Atual</div>
-                    <div style="font-size: 1.5rem; font-weight: 700;">${window.Utils.formatCurrency(faturaAtual)}</div>
-                </div>
-                <div style="margin-top: auto;">
-                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.4rem; opacity: 0.9;">
-                        <span>Limite Dispo: ${window.Utils.formatCurrency(card.limit - card.usedLimit)}</span>
-                        <span>${pct.toFixed(0)}%</span>
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: ${card.color || 'var(--accent-primary)'}; display: flex; align-items: center; justify-content: center; color: white; font-size: 1rem;">
+                        <i class="fa-solid fa-credit-card"></i>
                     </div>
-                    <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden;">
-                        <div style="height: 100%; width: ${pctDisplay}%; background: ${isDanger ? 'var(--danger)' : 'white'}; border-radius: 3px;"></div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-primary);">${window.Utils.escapeHTML(card.name)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">Final ${window.Utils.escapeHTML(card.last4)} &bull; Vence dia ${window.Utils.escapeHTML(card.dueDay)}</div>
                     </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.8;">
-                    <span>Fecha: dia ${window.Utils.escapeHTML(card.closeDay)}</span>
-                    <span>Vence: dia ${window.Utils.escapeHTML(card.dueDay)}</span>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Fatura do Mês</div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--danger);">${window.Utils.formatCurrency(faturaAtual)}</div>
                 </div>
             `;
             listEl.appendChild(cardEl);
@@ -502,9 +479,8 @@ class FinanceController {
     }
 
     renderDashboardAccounts() {
-        const section = document.getElementById('dashboardAccountsSection');
         const listEl = document.getElementById('dashboardAccountsList');
-        if (!section || !listEl) return;
+        if (!listEl) return;
 
         let accounts = window.Storage.get('accounts') || [];
         
@@ -514,13 +490,11 @@ class FinanceController {
             }
         }
         
+        listEl.innerHTML = '';
         if (accounts.length === 0) {
-            section.style.display = 'none';
+            listEl.innerHTML = '<div style="color: var(--text-secondary); font-size: 0.85rem; padding: 0.5rem 0;">Nenhuma conta cadastrada.</div>';
             return;
         }
-
-        section.style.display = 'block';
-        listEl.innerHTML = '';
 
         const accountTotals = this.transactions.reduce((accMap, tx) => {
             if (tx.paymentMethod) {
@@ -534,12 +508,8 @@ class FinanceController {
         accounts.forEach(acc => {
             const accIdStr = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
             const totals = accountTotals[accIdStr] || { income: 0, expense: 0 };
-            const income = totals.income;
-            const expense = totals.expense;
-
-            // Calculate final balance: initial balance + income - expense
             const initialBalance = parseFloat(acc.balance) || 0;
-            const currentBalance = initialBalance + income - expense;
+            const currentBalance = initialBalance + totals.income - totals.expense;
 
             const iconClass = acc.type === 'wallet' ? 'fa-wallet' : (acc.type === 'savings' ? 'fa-piggy-bank' : 'fa-building-columns');
 
@@ -548,34 +518,28 @@ class FinanceController {
                 background: var(--bg-secondary);
                 border: 1px solid var(--glass-border);
                 border-left: 4px solid ${acc.color || 'var(--accent-primary)'};
-                border-radius: var(--radius-lg);
-                padding: 1.5rem;
-                box-shadow: var(--shadow-sm);
-                min-width: 280px;
-                flex: 0 0 auto;
-                scroll-snap-align: start;
+                border-radius: var(--radius-md);
+                padding: 0.75rem 1rem;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                cursor: pointer;
             `;
+            accEl.onclick = () => window.location.href = 'accounts.html';
 
             accEl.innerHTML = `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.5rem;">
-                    <div style="font-weight: 600; font-size: 1.1rem; color: var(--text-primary);">
-                        <i class="fa-solid ${iconClass}" style="color: ${window.Utils.escapeHTML(acc.color) || 'var(--accent-primary)'}; margin-right: 0.5rem;"></i> ${window.Utils.escapeHTML(acc.name)}
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <div style="width: 36px; height: 36px; border-radius: 8px; background: rgba(99,102,241,0.1); display: flex; align-items: center; justify-content: center; color: ${acc.color || 'var(--accent-primary)'}; font-size: 1rem;">
+                        <i class="fa-solid ${iconClass}"></i>
                     </div>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary);">${acc.owner ? window.Utils.escapeHTML(acc.owner) : ''}</div>
+                    <div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: var(--text-primary);">${window.Utils.escapeHTML(acc.name)}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary);">${acc.owner ? window.Utils.escapeHTML(acc.owner) : 'Titular'}</div>
+                    </div>
                 </div>
-                
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                    <span style="color: var(--text-secondary);">Entradas:</span>
-                    <span style="font-weight: 600; color: var(--success);">${window.Utils.formatCurrency(income)}</span>
-                </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
-                    <span style="color: var(--text-secondary);">Saídas:</span>
-                    <span style="font-weight: 600; color: var(--danger);">${window.Utils.formatCurrency(expense)}</span>
-                </div>
-                
-                <div style="display: flex; justify-content: space-between; margin-top: auto; padding-top: 1rem; border-top: 1px dotted var(--glass-border);">
-                    <span style="font-weight: 600;">Saldo da Conta:</span>
-                    <span style="font-weight: 700; font-size: 1.1rem; color: ${currentBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(currentBalance)}</span>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Saldo</div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: ${currentBalance >= 0 ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(currentBalance)}</div>
                 </div>
             `;
             listEl.appendChild(accEl);
@@ -718,11 +682,6 @@ class FinanceController {
     }
 
     updateDashboard() {
-        const listEl = document.getElementById('transactionList');
-        if (!listEl) return;
-        
-        listEl.innerHTML = '';
-        
         // --- 1. Global Date Filter (Month Navigation) ---
         const isDashboard = window.location.pathname.includes('dashboard.html');
         
@@ -736,10 +695,10 @@ class FinanceController {
             const targetMonth = this.currentNavDate.getMonth();
             
             startDate = new Date(targetYear, targetMonth, 1);
-            endDate = new Date(targetYear, targetMonth + 1, 0);
+            endDate = new Date(targetYear, targetMonth + 1, 0, 23, 59, 59);
             
             previousStartDate = new Date(targetYear, targetMonth - 1, 1);
-            previousEndDate = new Date(targetYear, targetMonth, 0);
+            previousEndDate = new Date(targetYear, targetMonth, 0, 23, 59, 59);
         }
 
         const currentPeriodTxs = this.transactions.filter(tx => {
@@ -752,41 +711,72 @@ class FinanceController {
             return d >= previousStartDate && d <= previousEndDate;
         });
 
-        if (currentPeriodTxs.length === 0) {
-            listEl.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhuma transação encontrada no período.</div>`;
+        // --- 2. Render Recent Transactions Table ---
+        const recentTbody = document.getElementById('recentTransactionsTableBody');
+        const legacyListEl = document.getElementById('transactionList');
+
+        if (recentTbody) {
+            recentTbody.innerHTML = '';
+            const recentTx = currentPeriodTxs.slice(0, 10);
+            if (recentTx.length === 0) {
+                recentTbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhum lançamento no período.</td></tr>`;
+            } else {
+                recentTx.forEach(tx => {
+                    const isIncome = tx.type === 'income';
+                    const sign = isIncome ? '+' : '-';
+                    const amountColor = isIncome ? 'var(--success)' : 'var(--danger)';
+                    const methodName = window.Utils.getPaymentMethodName ? window.Utils.getPaymentMethodName(tx.paymentMethod) : (tx.paymentMethod || 'Conta');
+                    
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${window.Utils.formatDate(tx.date)}</td>
+                        <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}</td>
+                        <td>${window.Utils.escapeHTML(tx.category)}</td>
+                        <td>${window.Utils.escapeHTML(methodName)}</td>
+                        <td>${window.Utils.escapeHTML(tx.person || 'Eu')}</td>
+                        <td style="color: ${amountColor}; font-weight: 600;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
+                    `;
+                    recentTbody.appendChild(tr);
+                });
+            }
+        } else if (legacyListEl) {
+            legacyListEl.innerHTML = '';
+            const recentTx = currentPeriodTxs.slice(0, 10);
+            if (recentTx.length === 0) {
+                legacyListEl.innerHTML = `<div style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhuma transação encontrada no período.</div>`;
+            } else {
+                recentTx.forEach(tx => {
+                    const iconClass = tx.type === 'income' ? 'fa-arrow-up' : 'fa-arrow-down';
+                    const iconBg = tx.type === 'income' ? 'income' : 'expense';
+                    const sign = tx.type === 'income' ? '+' : '-';
+
+                    const item = document.createElement('div');
+                    item.className = 'transaction-item';
+                    item.innerHTML = `
+                        <div class="tx-info">
+                            <div class="tx-icon ${iconBg}">
+                                <i class="fa-solid ${iconClass}"></i>
+                            </div>
+                            <div class="tx-details">
+                                <span class="tx-desc">${window.Utils.escapeHTML(tx.description)}</span>
+                                <span class="tx-date">${window.Utils.formatDate(tx.date)} &bull; ${window.Utils.escapeHTML(tx.category)}</span>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div class="tx-amount ${iconBg}">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
+                            <button class="btn btn-ghost primary btn-sm" onclick="window.financeController.openEditModal('${window.Utils.escapeHTML(tx.id)}')" title="Editar">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                        </div>
+                    `;
+                    legacyListEl.appendChild(item);
+                });
+            }
         }
 
-        const recentTx = currentPeriodTxs.slice(0, 10);
-        recentTx.forEach(tx => {
-            const iconClass = tx.type === 'income' ? 'fa-arrow-up' : 'fa-arrow-down';
-            const iconBg = tx.type === 'income' ? 'income' : 'expense';
-            const sign = tx.type === 'income' ? '+' : '-';
-
-            const item = document.createElement('div');
-            item.className = 'transaction-item';
-            item.innerHTML = `
-                <div class="tx-info">
-                    <div class="tx-icon ${iconBg}">
-                        <i class="fa-solid ${iconClass}"></i>
-                    </div>
-                    <div class="tx-details">
-                        <span class="tx-desc">${window.Utils.escapeHTML(tx.description)}</span>
-                        <span class="tx-date">${window.Utils.formatDate(tx.date)} &bull; ${window.Utils.escapeHTML(tx.category)}</span>
-                    </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <div class="tx-amount ${iconBg}">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
-                    <button class="btn btn-ghost primary btn-sm" onclick="window.financeController.openEditModal('${window.Utils.escapeHTML(tx.id)}')" title="Editar">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                </div>
-            `;
-            listEl.appendChild(item);
-        });
-
-        // --- 2. Calculate KPI Totals ---
+        // --- 3. Calculate KPI Totals ---
         let totalIncome = 0;
-        let totalExpense = 0;
+        let totalAccountExpense = 0;
         let totalCreditCard = 0;
         
         currentPeriodTxs.forEach(tx => {
@@ -796,61 +786,71 @@ class FinanceController {
                  if (tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
                      totalCreditCard += tx.amount;
                  } else {
-                     totalExpense += tx.amount;
+                     totalAccountExpense += tx.amount;
                  }
              }
         });
-        const balance = totalIncome - totalExpense;
+        
+        // Total Despesas do mês = Despesas de Conta + Despesas de Cartão
+        const totalExpense = totalAccountExpense + totalCreditCard;
+        
+        // Saldo das Contas Bancárias (Saldo Atual)
+        let accounts = window.Storage.get('accounts') || [];
+        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
+            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
+                accounts = accounts.filter(a => a.owner && window.currentUser.name && a.owner.trim().toLowerCase() === window.currentUser.name.toLowerCase());
+            }
+        }
+        
+        let currentBalance = 0;
+        if (accounts.length > 0) {
+            accounts.forEach(acc => {
+                const accIdStr = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                let accIncome = 0;
+                let accExpense = 0;
+                this.transactions.forEach(tx => {
+                    if (tx.paymentMethod === accIdStr) {
+                        if (tx.type === 'income') accIncome += tx.amount;
+                        else if (tx.type === 'expense') accExpense += tx.amount;
+                    }
+                });
+                const initial = parseFloat(acc.balance) || 0;
+                currentBalance += (initial + accIncome - accExpense);
+            });
+        } else {
+            currentBalance = totalIncome - totalAccountExpense;
+        }
 
         let prevIncome = 0;
         let prevExpense = 0;
         prevPeriodTxs.forEach(tx => {
             if (tx.type === 'income') prevIncome += tx.amount;
-            else if (!tx.paymentMethod || !tx.paymentMethod.startsWith('card_')) prevExpense += tx.amount;
+            else if (tx.type === 'expense') prevExpense += tx.amount;
         });
         const prevBalance = prevIncome - prevExpense;
 
-        document.getElementById('currentBalance').textContent = window.Utils.formatCurrency(balance);
-        document.getElementById('monthlyIncome').textContent = window.Utils.formatCurrency(totalIncome);
-        document.getElementById('monthlyExpense').textContent = window.Utils.formatCurrency(totalExpense);
+        const currBalEl = document.getElementById('currentBalance');
+        if (currBalEl) currBalEl.textContent = window.Utils.formatCurrency(currentBalance);
+        
+        const mIncEl = document.getElementById('monthlyIncome');
+        if (mIncEl) mIncEl.textContent = window.Utils.formatCurrency(totalIncome);
+        
+        const mExpEl = document.getElementById('monthlyExpense');
+        if (mExpEl) mExpEl.textContent = window.Utils.formatCurrency(totalExpense);
         
         const ccTotalEl = document.getElementById('creditCardTotal');
         if (ccTotalEl) ccTotalEl.textContent = window.Utils.formatCurrency(totalCreditCard);
 
-        // --- 3. Update Trends ---
-        this.updateTrendIndicator('balanceTrend', balance, prevBalance, true);
+        // --- 4. Update Trends ---
+        this.updateTrendIndicator('balanceTrend', currentBalance, prevBalance, true);
         this.updateTrendIndicator('incomeTrend', totalIncome, prevIncome, true);
         this.updateTrendIndicator('expenseTrend', totalExpense, prevExpense, false);
 
-        // --- 4. Render Budget Progress ---
-        // Assume default budget of 5000 for demo purposes, this should come from settings
-        const budgetLimit = window.Storage.get('budgetLimit') || 5000;
-        const totalOut = totalExpense + totalCreditCard;
-        const budgetPct = budgetLimit > 0 ? (totalOut / budgetLimit) * 100 : 0;
-        const displayPct = Math.min(budgetPct, 100).toFixed(1);
-        
-        const budgetBar = document.getElementById('budgetProgressBar');
-        const budgetStatus = document.getElementById('budgetStatusText');
-        const budgetPctText = document.getElementById('budgetPercentText');
-        
-        if (budgetBar) {
-            budgetBar.style.width = displayPct + '%';
-            if (budgetPct > 90) {
-                budgetBar.style.background = 'var(--danger-color)';
-            } else if (budgetPct > 75) {
-                budgetBar.style.background = 'var(--warning-color)';
-            } else {
-                budgetBar.style.background = 'var(--success-color)';
-            }
-            budgetStatus.textContent = `${window.Utils.formatCurrency(totalOut)} / ${window.Utils.formatCurrency(budgetLimit)}`;
-            budgetPctText.textContent = `${displayPct}% Comprometido`;
-        }
-
+        // --- 5. Render Widgets & Charts ---
         this.renderDashboardCards();
         this.renderDashboardAccounts();
         this.renderDashboardPersons();
         
-        // --- 5. Render Executive Charts ---
         if (window.Chart) {
             this.renderExecutiveCharts(currentPeriodTxs);
         }
