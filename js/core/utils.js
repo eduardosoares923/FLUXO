@@ -111,8 +111,13 @@ const Utils = {
             }
         }
 
-        // O melhor dia de compra para o ciclo vigente/próximo é sempre alinhado ao dia de fechamento!
-        const melhorDiaCompra = proximoFechamento;
+        // O melhor dia de compra do ciclo atual (ex: 23/07/2026 em Julho):
+        let melhorDiaCompra;
+        if (now < currentClosing) {
+            melhorDiaCompra = getClampedDate(year, month - 1, closeD);
+        } else {
+            melhorDiaCompra = currentClosing; // O dia 23/07/2026 em Julho!
+        }
         const proximoMelhorDia = proximoFechamento;
 
         const diffMsClose = proximoFechamento - now;
