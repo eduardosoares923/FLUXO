@@ -1,4 +1,4 @@
-class AccountsController {
+﻿class AccountsController {
     constructor() {
         this.accounts = window.Storage.get('accounts') || [];
         this.init();

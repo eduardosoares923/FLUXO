@@ -8,6 +8,57 @@ class AuthManager {
         this.verifySession();
         this.bindLoginEvents();
         this.protectUI();
+        this.initFirebaseAuthListener();
+    }
+
+    initFirebaseAuthListener() {
+        if (typeof firebase !== 'undefined') {
+            firebase.auth().onAuthStateChanged((user) => {
+                if (user) {
+                    // User is signed in via Firebase
+                    // Ensure local session exists and syncs
+                    if (!this.session || this.session.id !== user.uid) {
+                        this.syncUserSessionFromFirestore(user.uid);
+                    }
+                } else {
+                    // User is signed out
+                    if (this.session) {
+                        Storage.remove('session');
+                        this.session = null;
+                        if (!this.isLoginPage) window.location.href = 'index.html';
+                    }
+                }
+            });
+        }
+    }
+
+    async syncUserSessionFromFirestore(uid) {
+        try {
+            const doc = await firebase.firestore().collection('users').doc(uid).get();
+            if (doc.exists) {
+                const userData = doc.data();
+                this.session = {
+                    id: uid,
+                    name: userData.name,
+                    email: userData.email,
+                    avatar: userData.avatar,
+                    role: userData.role || 'usuario',
+                    permissions: userData.permissions || {},
+                    loginTime: new Date().toISOString()
+                };
+                Storage.set('session', this.session);
+                if (this.isLoginPage) {
+                    window.location.href = 'dashboard.html';
+                } else {
+                    this.protectUI();
+                }
+            } else {
+                console.error("UsuÃ¡rio autenticado nÃ£o existe no Firestore!");
+                firebase.auth().signOut();
+            }
+        } catch (e) {
+            console.error("Erro ao sincronizar sessÃ£o:", e);
+        }
     }
 
     verifySession() {
@@ -22,7 +73,6 @@ class AuthManager {
         if (!this.session) return false;
         if (this.session.role === 'admin') return true;
 
-        // Modulos de legado que ainda nÃ£o foram convertidos na UI
         if (module === 'admin') return this.session.role === 'admin';
         if (module === 'gerente') return ['admin', 'gerente'].includes(this.session.role);
         
@@ -37,7 +87,6 @@ class AuthManager {
     protectUI() {
         if (this.isLoginPage) return;
         
-        // Esconder elementos protegidos que precisam de role superior
         document.querySelectorAll('[data-requires-role]').forEach(el => {
             const requiredRole = el.getAttribute('data-requires-role');
             if (!this.hasPermission(requiredRole)) {
@@ -45,7 +94,6 @@ class AuthManager {
             }
         });
 
-        // Configurar botões de logout globais
         document.querySelectorAll('.logout-btn, #logoutBtn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -53,14 +101,20 @@ class AuthManager {
             });
         });
         
-        // Atualizar Nome/Avatar no cabeçalho se existir
         const userName = document.getElementById('userName');
         if (userName && this.session) userName.textContent = this.session.name.split(' ')[0];
     }
 
     logout() {
-        Storage.remove('session');
-        window.location.href = 'index.html';
+        if (typeof firebase !== 'undefined') {
+            firebase.auth().signOut().then(() => {
+                Storage.remove('session');
+                window.location.href = 'index.html';
+            });
+        } else {
+            Storage.remove('session');
+            window.location.href = 'index.html';
+        }
     }
 
     bindLoginEvents() {
@@ -98,7 +152,7 @@ class AuthManager {
 
     handleLogin(e) {
         e.preventDefault();
-        const loginId = document.getElementById('email').value.trim().toLowerCase();
+        const loginId = document.getElementById('email').value.trim(); // Now strictly email
         const password = document.getElementById('password').value;
         const rememberMe = document.getElementById('rememberMe').checked;
         const btn = document.getElementById('loginBtn');
@@ -106,52 +160,33 @@ class AuthManager {
         btn.classList.add('loading');
         btn.disabled = true;
 
-        setTimeout(() => {
-            const users = Storage.get('users') || [];
-            const user = users.find(u => 
-                (
-                    (u.email && u.email.toLowerCase() === loginId) || 
-                    (u.name && u.name.toLowerCase() === loginId) || 
-                    (u.cpf && u.cpf === loginId)
-                ) && 
-                u.password === password
-            );
-
-            if (user) {
-                if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
-                
-                user.lastLogin = new Date().toISOString();
-                const userIndex = users.findIndex(u => u.id === user.id);
-                if (userIndex !== -1) {
-                    users[userIndex] = user;
-                    Storage.set('users', users);
-                }
-
-                Storage.set('session', {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    avatar: user.avatar,
-                    role: user.role || 'usuario',
-                    permissions: user.permissions || {},
-                    loginTime: new Date().toISOString()
+        if (typeof firebase !== 'undefined') {
+            firebase.auth().signInWithEmailAndPassword(loginId, password)
+                .then((userCredential) => {
+                    if (window.UI) window.UI.showToast('Login realizado com sucesso!', 'success');
+                    
+                    if (rememberMe) {
+                        Storage.set('rememberedEmail', loginId);
+                    } else {
+                        Storage.remove('rememberedEmail');
+                    }
+                    
+                    // The onAuthStateChanged listener will handle redirection
+                })
+                .catch((error) => {
+                    let msg = 'E-mail ou senha incorretos.';
+                    if (error.code === 'auth/user-not-found') msg = 'UsuÃ¡rio nÃ£o encontrado.';
+                    if (window.UI) window.UI.showToast(msg, 'error');
+                    btn.classList.remove('loading');
+                    btn.disabled = false;
                 });
-
-                if (rememberMe) {
-                    Storage.set('rememberedEmail', loginId);
-                } else {
-                    Storage.remove('rememberedEmail');
-                }
-
-                setTimeout(() => window.location.href = 'dashboard.html', 800);
-            } else {
-                if (window.UI) window.UI.showToast('E-mail ou senha incorretos.', 'error');
-                btn.classList.remove('loading');
-                btn.disabled = false;
-            }
-        }, 800);
+        } else {
+            if (window.UI) window.UI.showToast('Firebase nÃ£o inicializado.', 'error');
+            btn.classList.remove('loading');
+            btn.disabled = false;
+        }
     }
 }
 
-// Inicializa Autenticação Globalmente
+// Inicializa AutenticaÃ§Ã£o Globalmente
 window.Auth = new AuthManager();

@@ -280,44 +280,65 @@
                 user.cpf = cpf;
                 user.email = email;
                 user.avatar = avatar;
-                if (password) user.password = password; // Only update if typed
+                if (password) user.password = password; 
                 
-                // Prevenir mudança de status/cargo do próprio usuário se ele for o único admin ativo
                 if (user.role === 'admin' && user.status === 'ativo' && (role !== 'admin' || status !== 'ativo')) {
                     if (this.isLastActiveAdmin(user.id)) {
-                        window.UI.showToast('Você não pode rebaixar ou desativar o último Administrador ativo.', 'error');
+                        window.UI.showToast('VocÃª nÃ£o pode rebaixar ou desativar o Ãºltimo Administrador ativo.', 'error');
                         return;
                     }
                 }
                 
-                                user.role = role;
+                user.role = role;
                 user.status = status;
                 user.notes = notes;
                 user.permissions = perms;
                 
-                this.users[userIndex] = user;
-                window.UI.showToast('Perfil atualizado com sucesso.', 'success');
+                window.Storage.saveRecord('users', user).then(() => {
+                    window.UI.showToast('Perfil atualizado com sucesso.', 'success');
+                    this.renderUsers();
+                });
             }
         } else {
-            // New
-            const newUser = {
-                id: window.Utils.generateId(),
-                name,
-                cpf,
-                email,
-                password,
-                avatar,
-                role,
-                status,
-                notes,
-                createdAt: new Date().toISOString(),
-                lastLogin: null
-            };
-            this.users.push(newUser);
-            window.UI.showToast('Novo perfil criado com sucesso.', 'success');
+            // New user via Secondary Firebase App to prevent logout
+            if (typeof firebase !== 'undefined') {
+                let secondaryApp;
+                try {
+                    secondaryApp = firebase.app("Secondary");
+                } catch(e) {
+                    secondaryApp = firebase.initializeApp(firebaseConfig, "Secondary");
+                }
+                
+                secondaryApp.auth().createUserWithEmailAndPassword(email, password)
+                    .then((userCred) => {
+                        const newUser = {
+                            id: userCred.user.uid,
+                            name,
+                            cpf,
+                            email,
+                            password,
+                            avatar,
+                            role,
+                            status,
+                            notes,
+                            permissions: perms, // Fix: pass permissions correctly
+                            createdAt: new Date().toISOString(),
+                            lastLogin: null
+                        };
+                        window.Storage.saveRecord('users', newUser).then(() => {
+                            window.UI.showToast('Novo perfil criado com sucesso.', 'success');
+                            this.renderUsers();
+                            secondaryApp.auth().signOut();
+                        });
+                    })
+                    .catch((error) => {
+                        let msg = 'Erro ao criar usuÃ¡rio.';
+                        if (error.code === 'auth/email-already-in-use') msg = 'Este e-mail jÃ¡ estÃ¡ em uso.';
+                        if (error.code === 'auth/weak-password') msg = 'A senha deve ter pelo menos 6 caracteres.';
+                        window.UI.showToast(msg, 'error');
+                    });
+            }
         }
-
-        window.Storage.set('users', this.users);
         
         // Se editou a si mesmo, atualiza a sessão local e header
         if (this.editingUserId === window.currentUser.id) {

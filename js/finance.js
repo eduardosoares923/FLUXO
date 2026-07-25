@@ -322,27 +322,18 @@
         // Restore installment option state just in case
         if (installOpt) installOpt.disabled = false;
         
-        // Merge into global transactions to prevent data loss
-        let globalTransactions = window.Storage.get('transactions') || [];
-        
-        // We added or edited in this.transactions. 
-        // We can just iterate through this.transactions and update/push to globalTransactions
-        this.transactions.forEach(tx => {
-            const index = globalTransactions.findIndex(t => t.id === tx.id);
-            if (index > -1) {
-                globalTransactions[index] = tx;
-            } else {
-                if (!tx.userId && window.currentUser) {
-                    tx.userId = window.currentUser.id;
-                }
-                globalTransactions.push(tx);
+        // Save to Firestore granularly
+        const promises = this.transactions.map(tx => {
+            if (!tx.userId && window.currentUser) {
+                tx.userId = window.currentUser.id;
             }
+            return window.Storage.saveRecord('transactions', tx);
         });
-
-        // Ordenar por data (mais recentes primeiro)
-        globalTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
         
-        window.Storage.set('transactions', globalTransactions);
+        Promise.all(promises).then(() => {
+            this.loadData();
+            this.updateDashboard();
+        });
         
         // Refilter for current view
         if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
