@@ -724,14 +724,40 @@ class FinanceController {
             previousEndDate = new Date(targetYear, targetMonth, 0, 23, 59, 59);
         }
 
+        const targetYear = this.currentNavDate.getFullYear();
+        const targetMonthStr = `${targetYear}-${String(this.currentNavDate.getMonth() + 1).padStart(2, '0')}`;
+        
+        const prevTargetYear = previousStartDate.getFullYear();
+        const prevTargetMonthStr = `${prevTargetYear}-${String(previousStartDate.getMonth() + 1).padStart(2, '0')}`;
+
+        let cardsList = window.Storage.get('accounts') ? (window.Storage.get('cards') || []) : [];
+
         const currentPeriodTxs = this.transactions.filter(tx => {
-            const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
-            return d && d >= startDate && d <= endDate;
+            if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
+                const cardId = tx.paymentMethod.replace('card_', '');
+                const card = cardsList.find(c => c.id === cardId);
+                const closeD = card ? (card.closeDay || 28) : 28;
+                const dueD = card ? (card.dueDay || 10) : 10;
+                const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
+                return invMonth === targetMonthStr;
+            } else {
+                const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
+                return d && d >= startDate && d <= endDate;
+            }
         });
 
         const prevPeriodTxs = this.transactions.filter(tx => {
-            const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
-            return d && d >= previousStartDate && d <= previousEndDate;
+            if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
+                const cardId = tx.paymentMethod.replace('card_', '');
+                const card = cardsList.find(c => c.id === cardId);
+                const closeD = card ? (card.closeDay || 28) : 28;
+                const dueD = card ? (card.dueDay || 10) : 10;
+                const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
+                return invMonth === prevTargetMonthStr;
+            } else {
+                const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
+                return d && d >= previousStartDate && d <= previousEndDate;
+            }
         });
 
         // --- 2. Render Recent Transactions Table ---
@@ -802,38 +828,16 @@ class FinanceController {
         let totalAccountExpense = 0;
         let totalCreditCard = 0;
 
-        const targetYear = this.currentNavDate.getFullYear();
-        const targetMonth = String(this.currentNavDate.getMonth() + 1).padStart(2, '0');
-        const targetMonthStr = `${targetYear}-${targetMonth}`;
-
-        let cardsList = window.Storage.get('cards') || [];
-        
         currentPeriodTxs.forEach(tx => {
-             if (tx.type === 'income') {
-                 totalIncome += tx.amount;
-             } else {
-                 if (!tx.paymentMethod || !tx.paymentMethod.startsWith('card_')) {
-                     totalAccountExpense += tx.amount;
-                 }
-             }
-        });
-
-        // Credit Card totals: Sum all credit card expenses whose invoice is DUE in targetMonthStr
-        this.transactions.forEach(tx => {
-            if (tx.type === 'expense' && tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
-                const cardId = tx.paymentMethod.replace('card_', '');
-                const card = cardsList.find(c => c.id === cardId);
-                const closeD = card ? (card.closeDay || 28) : 28;
-                const dueD = card ? (card.dueDay || 10) : 10;
-                
-                const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
-                if (invMonth === targetMonthStr) {
-                    totalCreditCard += tx.amount;
-                }
+            if (tx.type === 'income') {
+                totalIncome += tx.amount;
+            } else if (tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
+                totalCreditCard += tx.amount;
+            } else {
+                totalAccountExpense += tx.amount;
             }
         });
-        
-        // Total Despesas do mês = Despesas de Conta (do mês) + Faturas de Cartão (vencendo no mês)
+
         const totalExpense = totalAccountExpense + totalCreditCard;
         
         // Saldo das Contas Bancárias (Saldo Atual)
