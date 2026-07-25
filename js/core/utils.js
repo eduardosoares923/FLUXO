@@ -127,14 +127,34 @@ const Utils = {
         const diasParaVencimento = Math.max(0, Math.ceil(diffMsDue / (1000 * 60 * 60 * 24)));
 
         const vaiParaProxima = now >= currentClosing;
+
+        // 3. Vencimento específico para compras feitas HOJE
+        let vencimentoCompraHoje;
+        if (vaiParaProxima) {
+            const fYear = proximoFechamento.getFullYear();
+            const fMonth = proximoFechamento.getMonth();
+            if (dueD > closeD) {
+                vencimentoCompraHoje = getClampedDate(fYear, fMonth, dueD);
+            } else {
+                vencimentoCompraHoje = getClampedDate(fYear, fMonth + 1, dueD);
+            }
+        } else {
+            if (dueD > closeD) {
+                vencimentoCompraHoje = getClampedDate(year, month, dueD);
+            } else {
+                vencimentoCompraHoje = getClampedDate(year, month + 1, dueD);
+            }
+        }
+
         const formattedFechamento = this.formatDate(proximoFechamento.toISOString().split('T')[0]);
         const formattedVencimento = this.formatDate(proximoVencimento.toISOString().split('T')[0]);
+        const formattedVencimentoCompraHoje = this.formatDate(vencimentoCompraHoje.toISOString().split('T')[0]);
         const formattedMelhorDia = this.formatDate(melhorDiaCompra.toISOString().split('T')[0]);
         const formattedProximoMelhorDia = this.formatDate(proximoMelhorDia.toISOString().split('T')[0]);
 
         const destinoCompraHoje = vaiParaProxima 
-            ? `Próxima Fatura (vence em ${formattedVencimento})`
-            : `Fatura Atual (vence em ${formattedVencimento})`;
+            ? `Próxima Fatura (vence em ${formattedVencimentoCompraHoje})`
+            : `Fatura Atual (vence em ${formattedVencimentoCompraHoje})`;
 
         return {
             proximoFechamento,
