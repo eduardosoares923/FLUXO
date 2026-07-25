@@ -179,7 +179,9 @@ class FinanceController {
         const btnTodayMonth = document.getElementById('btnTodayMonth');
 
         if (btnPrevMonth) {
-            btnPrevMonth.addEventListener('click', () => {
+            btnPrevMonth.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.currentNavDate.setDate(1); // FIX: Prevent 31st day overflow
                 this.currentNavDate.setMonth(this.currentNavDate.getMonth() - 1);
                 this.updateMonthDisplay();
                 this.updateDashboard();
@@ -187,7 +189,9 @@ class FinanceController {
         }
 
         if (btnNextMonth) {
-            btnNextMonth.addEventListener('click', () => {
+            btnNextMonth.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.currentNavDate.setDate(1); // FIX: Prevent 31st day overflow
                 this.currentNavDate.setMonth(this.currentNavDate.getMonth() + 1);
                 this.updateMonthDisplay();
                 this.updateDashboard();
@@ -195,8 +199,10 @@ class FinanceController {
         }
 
         if (btnTodayMonth) {
-            btnTodayMonth.addEventListener('click', () => {
-                this.currentNavDate = new Date();
+            btnTodayMonth.addEventListener('click', (e) => {
+                e.preventDefault();
+                const now = new Date();
+                this.currentNavDate = new Date(now.getFullYear(), now.getMonth(), 1);
                 this.updateMonthDisplay();
                 this.updateDashboard();
             });
@@ -687,7 +693,7 @@ class FinanceController {
         this.transactions = allTx;
 
         // --- 1. Global Date Filter (Month Navigation) ---
-        const isDashboard = window.location.pathname.includes('dashboard.html');
+        const isDashboard = document.getElementById('currentMonthDisplay') !== null || window.location.pathname.includes('dashboard');
         
         let startDate = new Date(0);
         let endDate = new Date(3000, 0, 1);
