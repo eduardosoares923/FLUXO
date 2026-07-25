@@ -254,67 +254,87 @@ class CardsController {
 
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';
+            cardEl.style.cssText = 'background: var(--bg-secondary); border-radius: 16px; border: 1px solid var(--glass-border); padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 4px 20px rgba(0,0,0,0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;';
+
             cardEl.innerHTML = `
-                <div class="credit-card" style="background-color: ${card.color || '#6366f1'};">
-                    <div class="card-bank">
-                        <span>${window.Utils.escapeHTML(card.name)}</span>
-                        <i class="fa-solid fa-wifi" style="transform: rotate(90deg);"></i>
-                    </div>
-                    <div class="card-chip"></div>
-                    <div class="card-number">**** **** **** ${card.last4 || '0000'}</div>
-                    <div class="card-footer">
-                        <div class="card-holder">${window.Utils.escapeHTML(card.holder)}</div>
-                        <div class="card-brand">${window.Utils.escapeHTML(card.brand)}</div>
-                    </div>
-                </div>
-                <div class="card-details">
-                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-bottom: 0.5rem;">
-                        <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}">
-                            <i class="fa-solid fa-list"></i> Ver Fatura
-                        </button>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Limite Total</span>
-                        <span class="detail-value">${window.Utils.formatCurrency(cardLimit)}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Limite Disponível</span>
-                        <span class="detail-value" style="color: var(--success);">${window.Utils.formatCurrency(available)}</span>
-                    </div>
-                    <div class="progress-bar-container" style="margin: 0.5rem 0;">
-                        <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%"></div>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Fatura Atual (Usado)</span>
-                        <span class="detail-value" style="color: var(--danger); font-weight: 700;">${window.Utils.formatCurrency(totalUsed)}</span>
+                <!-- Top Header: Card Visual + Actions -->
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                    <!-- Sleek Realistic Card Badge -->
+                    <div class="credit-card" style="background: linear-gradient(135deg, ${card.color || '#8A05BE'}, ${card.color ? card.color + 'dd' : '#4a0080'}); width: 100%; max-width: 280px; height: 150px; border-radius: 12px; padding: 1rem 1.25rem; color: white; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 8px 16px rgba(0,0,0,0.25); position: relative; overflow: hidden; flex-shrink: 0;">
+                        <div style="position: absolute; right: -20px; bottom: -20px; width: 120px; height: 120px; border-radius: 50%; background: rgba(255,255,255,0.06); pointer-events: none;"></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">${window.Utils.escapeHTML(card.name)}</span>
+                            <i class="fa-solid fa-wifi" style="transform: rotate(90deg); font-size: 1rem; opacity: 0.8;"></i>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="width: 32px; height: 24px; background: linear-gradient(135deg, #ffd700, #b8860b); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3);"></div>
+                        </div>
+                        <div>
+                            <div style="font-family: monospace; font-size: 1rem; letter-spacing: 2px; opacity: 0.9;">**** **** **** ${card.last4 || '0000'}</div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 0.2rem;">
+                                <span style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85;">${window.Utils.escapeHTML(card.holder)}</span>
+                                <span style="font-weight: 700; font-style: italic; font-size: 0.9rem;">${window.Utils.escapeHTML(card.brand)}</span>
+                            </div>
+                        </div>
                     </div>
 
-                    <div style="margin-top: 0.75rem; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--glass-border); display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem;">
-                        <div class="detail-row" style="margin: 0;">
-                            <span class="detail-label" style="color: #10b981; font-weight: 600;"><i class="fa-solid fa-star"></i> Melhor Dia p/ Comprar</span>
-                            <span class="detail-value" style="color: #10b981; font-weight: 700;">${metrics.formattedMelhorDia}</span>
+                    <!-- Quick Action Buttons -->
+                    <div style="display: flex; flex-direction: flex-row; gap: 0.5rem; align-items: center;">
+                        <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${card.id}" title="Editar Cartão" style="width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center;">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" data-action="delete" data-id="${card.id}" title="Excluir Cartão" style="width: 36px; height: 36px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Clean Invoice & Limit Summary (Nubank Style) -->
+                <div style="display: flex; flex-direction: column; gap: 0.75rem; background: var(--bg-primary); border-radius: 12px; padding: 1rem; border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                        <div>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual</span>
+                            <div style="font-size: 1.4rem; font-weight: 800; color: var(--text-primary); margin-top: 0.1rem;">${window.Utils.formatCurrency(totalUsed)}</div>
                         </div>
-                        <div class="detail-row" style="margin: 0;">
-                            <span class="detail-label"><i class="fa-regular fa-calendar-xmark"></i> Próximo Fechamento</span>
-                            <span class="detail-value" style="font-weight: 600;">${metrics.formattedFechamento} <small style="color: var(--text-secondary);">(${metrics.diasParaFechamento === 0 ? 'Hoje!' : metrics.diasParaFechamento + ' dias'})</small></span>
+                        <button class="btn btn-primary btn-sm" data-action="invoice" data-id="${card.id}" style="padding: 0.4rem 1rem; border-radius: 20px; font-weight: 600;">
+                            <i class="fa-solid fa-list-ul"></i> Ver Fatura
+                        </button>
+                    </div>
+
+                    <!-- Sleek Limit Progress Bar -->
+                    <div>
+                        <div class="progress-bar-container" style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 0.35rem;">
+                            <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%; height: 100%; border-radius: 3px;"></div>
                         </div>
-                        <div class="detail-row" style="margin: 0;">
-                            <span class="detail-label"><i class="fa-regular fa-calendar-check"></i> Próximo Vencimento</span>
-                            <span class="detail-value" style="font-weight: 600; color: var(--accent-primary);">${metrics.formattedVencimento} <small style="color: var(--text-secondary);">(${metrics.diasParaVencimento} dias)</small></span>
-                        </div>
-                        <div style="margin-top: 0.25rem; padding-top: 0.4rem; border-top: 1px dashed var(--glass-border); font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center;">
-                            <span style="color: var(--text-secondary);">Compras HOJE vão para:</span>
-                            <span style="font-weight: 700; color: ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'};">${metrics.destinoCompraHoje}</span>
+                        <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-secondary);">
+                            <span>Disponível: <strong style="color: var(--success);">${window.Utils.formatCurrency(available)}</strong></span>
+                            <span>Limite: ${window.Utils.formatCurrency(cardLimit)}</span>
                         </div>
                     </div>
                 </div>
-                <div class="card-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; padding: 1rem; border-top: 1px solid var(--glass-border);">
-                    <button class="btn btn-secondary btn-sm" data-action="edit" data-id="${card.id}">
-                        <i class="fa-solid fa-pen"></i> Editar
-                    </button>
-                    <button class="btn btn-danger btn-sm" data-action="delete" data-id="${card.id}">
-                        <i class="fa-solid fa-trash"></i> Excluir
-                    </button>
+
+                <!-- Smart Date Badges Grid (Clean Pills) -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem;">
+                    <div style="background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2); border-radius: 8px; padding: 0.5rem 0.75rem;">
+                        <div style="font-size: 0.7rem; color: #10b981; font-weight: 700; text-transform: uppercase;"><i class="fa-solid fa-star"></i> Melhor Dia</div>
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedMelhorDia}</div>
+                    </div>
+
+                    <div style="background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.5rem 0.75rem;">
+                        <div style="font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Fechamento</div>
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedFechamento}</div>
+                    </div>
+
+                    <div style="background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 8px; padding: 0.5rem 0.75rem;">
+                        <div style="font-size: 0.7rem; color: #818cf8; font-weight: 700; text-transform: uppercase;">Vencimento</div>
+                        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${metrics.formattedVencimento}</div>
+                    </div>
+                </div>
+
+                <!-- Destination Status Banner -->
+                <div style="font-size: 0.78rem; padding: 0.5rem 0.75rem; background: var(--bg-primary); border-radius: 8px; border-left: 3px solid ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'}; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.25rem;">
+                    <span style="color: var(--text-secondary);">Compras hoje entram na:</span>
+                    <strong style="color: ${metrics.vaiParaProxima ? '#818cf8' : '#10b981'};">${metrics.destinoCompraHoje}</strong>
                 </div>
             `;
             container.appendChild(cardEl);
