@@ -205,7 +205,8 @@
   position: absolute;
   top: 110%;
   right: 0;
-  width: 200px;
+  width: 220px;
+  min-width: 200px;
   background: var(--bg-secondary);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
@@ -214,8 +215,9 @@
   visibility: hidden;
   transform: translateY(-10px);
   transition: all 0.2s ease;
-  z-index: 100;
+  z-index: 99999;
   padding: 0.5rem 0;
+  box-sizing: border-box;
 }
 
 .dropdown-menu.active {

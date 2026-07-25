@@ -169,12 +169,14 @@
 
   /* Perfil do usuário — só o avatar */
   .user-profile-dropdown {
+    position: relative !important;
     flex-shrink: 0 !important;
   }
 
   .user-profile {
     gap: 0 !important;
     padding: 0 !important;
+    cursor: pointer !important;
   }
 
   .user-info {
@@ -182,14 +184,39 @@
   }
 
   .user-avatar {
-    width: 32px !important;
-    height: 32px !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 50% !important;
   }
 
-  /* Dropdown menu posição no mobile */
+  /* Dropdown menu posição e largura no mobile */
   .dropdown-menu {
+    position: absolute !important;
+    top: 100% !important;
     right: 0 !important;
     left: auto !important;
+    width: 220px !important;
+    min-width: 200px !important;
+    max-width: 85vw !important;
+    background: var(--bg-secondary) !important;
+    border: 1px solid var(--glass-border) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+    z-index: 99999 !important;
+    padding: 0.5rem 0 !important;
+  }
+
+  .dropdown-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    padding: 0.75rem 1rem !important;
+    color: var(--text-primary) !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
+    text-decoration: none !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   /* ============================================================
