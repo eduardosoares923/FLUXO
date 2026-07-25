@@ -73,6 +73,18 @@ const Utils = {
             return new Date(y, m, validDay, 0, 0, 0, 0);
         };
 
+        // Trata ajuste de finais de semana se necessário
+        const getBusinessDay = (date, rollForward = true) => {
+            const d = new Date(date);
+            const dayOfWeek = d.getDay();
+            if (dayOfWeek === 6) { // Sábado -> antecipa para sexta ou joga pra segunda
+                d.setDate(d.getDate() + (rollForward ? 2 : -1));
+            } else if (dayOfWeek === 0) { // Domingo
+                d.setDate(d.getDate() + (rollForward ? 1 : -2));
+            }
+            return d;
+        };
+
         const currentClosing = getClampedDate(year, month, closeD);
 
         // 1. Fechamento recente e próximo fechamento
