@@ -7,10 +7,7 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/login.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-<script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
-
-    
-    
+    <script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
 </head>
 <body class="login-body">
 
@@ -24,10 +21,10 @@
 
         <form id="loginForm" class="login-form">
             <div class="form-group">
-                <label for="email" class="form-label">Acesso (E-mail, Nome ou CPF)</label>
+                <label for="email" class="form-label">Acesso (E-mail)</label>
                 <div class="input-with-icon">
                     <i class="fa-solid fa-user"></i>
-                    <input type="text" id="email" class="form-control" placeholder="Digite seu acesso..." required autocomplete="username">
+                    <input type="text" id="email" class="form-control" placeholder="Digite seu e-mail..." required autocomplete="username">
                 </div>
             </div>
 
@@ -57,12 +54,55 @@
     <!-- Toast Notifications Container -->
     <div id="toastContainer" class="toast-container"></div>
 
-        <!-- Firebase Compat SDKs (v10) -->
+    <!-- Debug Log Panel -->
+    <div id="debugPanel" style="position:fixed;bottom:0;left:0;right:0;max-height:200px;overflow-y:auto;background:#111;color:#0f0;font-family:monospace;font-size:12px;padding:8px;z-index:99999;border-top:2px solid #0f0;"></div>
+
+    <!-- Firebase Compat SDKs (v10) -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="js/firebase-init.js"></script>
     <script src="js/storage.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/ui.js"></script>
+    <script>
+    function dbg(msg) {
+        var p = document.getElementById('debugPanel');
+        if (p) {
+            var line = document.createElement('div');
+            line.textContent = new Date().toLocaleTimeString() + ' > ' + msg;
+            p.appendChild(line);
+            p.scrollTop = p.scrollHeight;
+        }
+        console.log('[LOGIN DEBUG]', msg);
+    }
+    dbg('Todos os scripts base carregados');
+    dbg('firebase definido? ' + (typeof firebase !== 'undefined'));
+    if (typeof firebase !== 'undefined') {
+        dbg('firebase.apps.length = ' + firebase.apps.length);
+        dbg('firebase.auth = ' + (typeof firebase.auth));
+        dbg('firebase.firestore = ' + (typeof firebase.firestore));
+    }
+    dbg('window.Storage = ' + (typeof window.Storage));
+    dbg('window.UI = ' + (typeof window.UI));
+    </script>
     <script src="js/auth.js"></script>
+    <script>
+    dbg('auth.js carregado');
+    dbg('window.Auth existe? ' + (!!window.Auth));
+    if (window.Auth) {
+        dbg('Auth.isLoginPage = ' + window.Auth.isLoginPage);
+        dbg('Auth.session = ' + JSON.stringify(window.Auth.session));
+    }
+    if (typeof firebase !== 'undefined') {
+        firebase.auth().onAuthStateChanged(function(user) {
+            if (user) {
+                dbg('onAuthStateChanged: LOGADO como ' + user.email + ' uid=' + user.uid);
+            } else {
+                dbg('onAuthStateChanged: SEM USUARIO');
+            }
+        });
+    }
+    </script>
 </body>
 </html>
