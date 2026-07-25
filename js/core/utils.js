@@ -23,6 +23,16 @@ const Utils = {
         if (!dateString) return null;
         try {
             const dateOnly = String(dateString).split('T')[0].trim();
+            // Handle DD/MM/YYYY (Brazilian format)
+            if (dateOnly.includes('/')) {
+                const parts = dateOnly.split('/').map(Number);
+                if (parts.length === 3) {
+                    const [day, month, year] = parts;
+                    if (!year || !month || !day) return null;
+                    return new Date(year, month - 1, day, 12, 0, 0);
+                }
+            }
+            // Handle YYYY-MM-DD (ISO format)
             const [year, month, day] = dateOnly.split('-').map(Number);
             if (!year || !month || !day) return null;
             return new Date(year, month - 1, day, 12, 0, 0);
