@@ -1,7 +1,7 @@
-﻿class AuthManager {
+class AuthManager {
     constructor() {
         this.session = window.Storage.get('session');
-        this.isLoginPage = window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/');
+        this.isLoginPage = window.location.pathname.includes('index.html') || window.location.pathname === '/' || window.location.pathname === '';
         
         this.verifySession();
         this.bindLoginEvents();
