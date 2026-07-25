@@ -179,14 +179,14 @@
         const balance = parseFloat(document.getElementById('accBalance').value);
         const color = document.getElementById('accColor').value;
 
+        let acc = {};
         if (editId) {
-            const index = this.accounts.findIndex(a => a.id === editId);
-            if (index !== -1) {
-                // If the balance changed, we might want to create a transaction, but for simplicity we just update it.
-                this.accounts[index] = { ...this.accounts[index], name, type, owner, balance, color };
+            const existing = this.accounts.find(a => a.id === editId);
+            if (existing) {
+                acc = { ...existing, name, type, owner, balance, color };
             }
         } else {
-            const acc = {
+            acc = {
                 id: window.Utils.generateId(),
                 name,
                 type,
@@ -194,11 +194,11 @@
                 balance,
                 color
             };
-            this.accounts.push(acc);
         }
 
-        window.Storage.set('accounts', this.accounts);
-        this.renderAccounts();
+        window.Storage.saveRecord('accounts', acc).then(() => {
+            window.UI.showToast('Conta salva com sucesso.', 'success');
+        });
     }
 
     renderAccounts() {

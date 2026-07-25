@@ -1,4 +1,4 @@
-class TransactionsController {
+﻿class TransactionsController {
     constructor() {
         let globalTx = window.Storage.get('transactions') || [];
         
@@ -73,18 +73,16 @@ class TransactionsController {
         const btnDeleteAll = document.getElementById('btnDeleteAllTransactions');
         if (btnDeleteAll) {
             btnDeleteAll.addEventListener('click', () => {
-                if (this.allTransactions.length === 0) {
-                    window.UI.showToast('Nenhum lançamento para excluir.', 'warning');
-                    return;
-                }
-                
-                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lançamentos? Esta ação não pode ser desfeita!', 'Atenção Crítica', () => {
-                    window.Storage.set('transactions', []);
-                    this.allTransactions = [];
-                    this.filteredTransactions = [];
-                    this.renderTable();
-                    window.UI.showToast('Todos os lançamentos foram excluídos com sucesso.', 'success');
+                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lanÃ§amentos na visÃ£o atual?', 'AtenÃ§Ã£o CrÃ­tica', () => {
+                    const promises = this.allTransactions.map(tx => window.Storage.deleteRecord('transactions', tx.id));
+                    Promise.all(promises).then(() => {
+                        this.allTransactions = [];
+                        window.UI.showToast('Todos os lanÃ§amentos foram excluÃ­dos!', 'success');
+                        this.renderTable();
+                    });
                 });
+            });
+        }
             });
         }
     }
@@ -111,11 +109,13 @@ class TransactionsController {
     }
 
     deleteTransaction(id) {
-        window.UI.confirmDialog('Deseja realmente excluir este lançamento? Esta ação afeta seu saldo e limites de cartão.', 'Confirmação', () => {
+        window.UI.confirmDialog('Deseja realmente excluir este lanÃ§amento? Esta aÃ§Ã£o afeta seu saldo e limites de cartÃ£o.', 'ConfirmaÃ§Ã£o', () => {
             const txIndex = this.allTransactions.findIndex(t => t.id === id);
             if (txIndex > -1) {
                 const tx = this.allTransactions[txIndex];
                 
+                let promise = Promise.resolve();
+
                 // Refund credit card limits if it was a card expense
                 if (tx.paymentMethod && tx.paymentMethod.startsWith('card_') && tx.type === 'expense') {
                     const cardId = tx.paymentMethod.replace('card_', '');
@@ -123,24 +123,13 @@ class TransactionsController {
                     if (cardIndex > -1) {
                         this.cards[cardIndex].usedLimit -= tx.amount;
                         if (this.cards[cardIndex].usedLimit < 0) this.cards[cardIndex].usedLimit = 0;
-                        window.Storage.set('cards', this.cards);
+                        promise = window.Storage.saveRecord('cards', this.cards[cardIndex]);
                     }
                 }
                 
-                // Remove from array and global storage
-                this.allTransactions.splice(txIndex, 1);
-                
-                let globalTx = window.Storage.get('transactions') || [];
-                const globalIndex = globalTx.findIndex(t => t.id === id);
-                if (globalIndex > -1) {
-                    globalTx.splice(globalIndex, 1);
-                    window.Storage.set('transactions', globalTx);
-                }
-                
-                window.UI.showToast('Lançamento excluído com sucesso!', 'success');
-                
-                // Re-apply filters to update UI
-                document.getElementById('btnFilter').click();
+                promise.then(() => window.Storage.deleteRecord('transactions', id)).then(() => {
+                    window.UI.showToast('LanÃ§amento excluÃ­do com sucesso!', 'success');
+                });
             }
         });
     }

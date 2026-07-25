@@ -218,13 +218,16 @@
         const isInstallment = (installOpt && !installOpt.disabled) ? installOpt.value === 'yes' : false;
         const installmentsCount = document.getElementById('txInstallments') ? parseInt(document.getElementById('txInstallments').value) : 1;
 
+        let modifiedTx = [];
+        let promises = [];
+
         if (editId) {
             // EDIT LOGIC
             const txIndex = this.transactions.findIndex(t => t.id === editId);
             if (txIndex > -1) {
                 const oldTx = this.transactions[txIndex];
                 
-                // 1. Estornar limite antigo se era cartão
+                // 1. Estornar limite antigo se era cartÃ£o
                 if (oldTx.paymentMethod && oldTx.paymentMethod.startsWith('card_')) {
                     const oldCardId = oldTx.paymentMethod.replace('card_', '');
                     const cards = window.Storage.get('cards') || [];
@@ -232,15 +235,15 @@
                     if (oldCardIndex > -1) {
                         cards[oldCardIndex].usedLimit -= oldTx.amount;
                         if (cards[oldCardIndex].usedLimit < 0) cards[oldCardIndex].usedLimit = 0;
-                        window.Storage.set('cards', cards);
+                        promises.push(window.Storage.saveRecord('cards', cards[oldCardIndex]));
                     }
                 }
                 
-                // 2. Atualizar transação
+                // 2. Atualizar transaÃ§Ã£o
                 this.transactions[txIndex] = {
                     ...oldTx,
                     type,
-                    description: desc, // Note: se for parcela, perderia o (1/2), mas aceitamos isso na edição simples
+                    description: desc,
                     amount: totalAmount,
                     date: dateStr,
                     category,
@@ -248,15 +251,16 @@
                     person,
                     updatedAt: new Date().toISOString()
                 };
+                modifiedTx.push(this.transactions[txIndex]);
 
-                // 3. Aplicar novo limite se o novo método for cartão
+                // 3. Aplicar novo limite se o novo mÃ©todo for cartÃ£o
                 if (paymentMethod.startsWith('card_')) {
                     const newCardId = paymentMethod.replace('card_', '');
                     const cards = window.Storage.get('cards') || [];
                     const newCardIndex = cards.findIndex(c => c.id === newCardId);
                     if (newCardIndex > -1) {
                         cards[newCardIndex].usedLimit += totalAmount;
-                        window.Storage.set('cards', cards);
+                        promises.push(window.Storage.saveRecord('cards', cards[newCardIndex]));
                     }
                 }
             }
@@ -277,12 +281,12 @@
                     const mm = String(txDate.getMonth() + 1).padStart(2, '0');
                     const dd = String(txDate.getDate()).padStart(2, '0');
 
-                    this.transactions.push({
+                    const newTx = {
                         id: window.Utils.generateId(),
                         type,
-                        description: `${desc} (${i}/${installmentsCount})`,
+                        description: ` (/)`,
                         amount: roundedAmount,
-                        date: `${yyyy}-${mm}-${dd}`,
+                        date: `--`,
                         category,
                         paymentMethod,
                         person,
@@ -290,10 +294,12 @@
                         isInstallment: true,
                         installmentIndex: i,
                         totalInstallments: installmentsCount
-                    });
+                    };
+                    this.transactions.push(newTx);
+                    modifiedTx.push(newTx);
                 }
             } else {
-                this.transactions.push({
+                const newTx = {
                     id: window.Utils.generateId(),
                     type,
                     description: desc,
@@ -304,7 +310,9 @@
                     person,
                     createdAt: new Date().toISOString(),
                     isInstallment: false
-                });
+                };
+                this.transactions.push(newTx);
+                modifiedTx.push(newTx);
             }
             
             // Increment card limit for new transaction
@@ -314,40 +322,21 @@
                 const cardIndex = cards.findIndex(c => c.id === cardId);
                 if (cardIndex > -1) {
                     cards[cardIndex].usedLimit += totalAmount;
-                    window.Storage.set('cards', cards);
+                    promises.push(window.Storage.saveRecord('cards', cards[cardIndex]));
                 }
             }
         }
         
-        // Restore installment option state just in case
         if (installOpt) installOpt.disabled = false;
         
-        // Save to Firestore granularly
-        const promises = this.transactions.map(tx => {
-            if (!tx.userId && window.currentUser) {
-                tx.userId = window.currentUser.id;
-            }
-            return window.Storage.saveRecord('transactions', tx);
+        modifiedTx.forEach(tx => {
+            if (!tx.userId && window.currentUser) tx.userId = window.currentUser.id;
+            promises.push(window.Storage.saveRecord('transactions', tx));
         });
         
         Promise.all(promises).then(() => {
-            this.loadData();
-            this.updateDashboard();
+            window.dispatchEvent(new Event('dataUpdated'));
         });
-        
-        // Refilter for current view
-        if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-            if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                this.transactions = globalTransactions.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
-            } else {
-                this.transactions = globalTransactions;
-            }
-        } else {
-            this.transactions = globalTransactions;
-        }
-
-        this.updateDashboard();
-        window.dispatchEvent(new Event('dataUpdated'));
     }
 
     renderDashboardCards() {
