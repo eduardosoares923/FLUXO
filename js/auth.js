@@ -39,9 +39,9 @@ class AuthManager {
                 const userData = doc.data();
                 this.session = {
                     id: uid,
-                    name: userData.name,
-                    email: userData.email,
-                    avatar: userData.avatar,
+                    name: userData.name || 'UsuÃ¡rio',
+                    email: userData.email || firebase.auth().currentUser.email,
+                    avatar: userData.avatar || 'https://ui-avatars.com/api/?name=User',
                     role: userData.role || 'usuario',
                     permissions: userData.permissions || {},
                     loginTime: new Date().toISOString()
@@ -53,8 +53,35 @@ class AuthManager {
                     this.protectUI();
                 }
             } else {
-                console.error("UsuÃ¡rio autenticado nÃ£o existe no Firestore!");
-                firebase.auth().signOut();
+                // FALLBACK: O usuÃ¡rio foi criado manualmente no Firebase Auth, mas nÃ£o existe no Firestore ainda.
+                // Vamos criar automaticamente como ADMIN para nÃ£o bloquear o acesso do dono do sistema.
+                const userEmail = firebase.auth().currentUser.email;
+                const newAdmin = {
+                    id: uid,
+                    name: 'Administrador Principal',
+                    email: userEmail,
+                    role: 'admin',
+                    status: 'ativo',
+                    avatar: https://ui-avatars.com/api/?name=Admin&background=random&color=fff,
+                    createdAt: new Date().toISOString(),
+                    lastLogin: new Date().toISOString()
+                };
+                
+                await firebase.firestore().collection('users').doc(uid).set(newAdmin);
+                
+                this.session = {
+                    id: uid,
+                    name: newAdmin.name,
+                    email: newAdmin.email,
+                    avatar: newAdmin.avatar,
+                    role: newAdmin.role,
+                    permissions: {},
+                    loginTime: new Date().toISOString()
+                };
+                Storage.set('session', this.session);
+                if (this.isLoginPage) {
+                    window.location.href = 'dashboard.html';
+                }
             }
         } catch (e) {
             console.error("Erro ao sincronizar sessÃ£o:", e);
