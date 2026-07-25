@@ -178,10 +178,8 @@ class FinanceController {
         
         const refreshHandler = () => {
             let allTx = window.Storage.get('transactions') || [];
-            if (window.currentUser && window.Auth && !window.Auth.hasPermission('config_system')) {
-                if (window.currentUser.role === 'usuario' || window.currentUser.role === 'visitante') {
-                    allTx = allTx.filter(tx => tx.userId === window.currentUser.id || tx.person === window.currentUser.name);
-                }
+            if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+                allTx = allTx.filter(tx => window.Auth.canAccessPerson(tx.person));
             }
             this.transactions = allTx;
             this.updateDashboard();
