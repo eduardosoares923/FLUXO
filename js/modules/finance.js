@@ -1002,7 +1002,9 @@ class FinanceController {
 }
 
 const initFinance = () => {
-    if (!window.financeController && (document.getElementById('transactionForm') || document.getElementById('recentTransactionsTableBody') || document.getElementById('currentBalance'))) {
+    const hasDashboard = document.getElementById('currentMonthDisplay') || document.getElementById('btnPrevMonth') || document.getElementById('currentBalance');
+    const hasTransactions = document.getElementById('transactionForm') || document.getElementById('recentTransactionsTableBody');
+    if (!window.financeController && (hasDashboard || hasTransactions)) {
         window.financeController = new FinanceController();
         
         const filter = document.getElementById('globalDateFilter');
