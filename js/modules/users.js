@@ -243,8 +243,8 @@ class UsersApp {
         let avatar = document.getElementById('userAvatarInput').value.trim();
         const password = document.getElementById('userPasswordInput').value;
         const confirmPassword = document.getElementById('userPasswordConfirmInput').value;
-        const role = document.getElementById('userRoleInput').value;
-        const status = document.getElementById('userStatusInput').value;
+        const role = (document.getElementById('userRoleInput')?.value) || 'usuario';
+        const status = (document.getElementById('userStatusInput')?.value) || 'ativo';
                 const notes = document.getElementById('userNotesInput').value.trim();
         
         // Extract permissions

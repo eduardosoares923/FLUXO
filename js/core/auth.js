@@ -29,14 +29,32 @@ class AuthManager {
 
     async syncUserSessionFromFirestore(uid) {
         try {
-            const doc = await firebase.firestore().collection('users').doc(uid).get();
+            const db = firebase.firestore();
+            const userEmail = (firebase.auth().currentUser && firebase.auth().currentUser.email) ? firebase.auth().currentUser.email.toLowerCase() : '';
+
+            let userData = null;
+            let userDocId = uid;
+
+            // 1. Try fetching doc by UID
+            const doc = await db.collection('users').doc(uid).get();
             if (doc.exists) {
-                const userData = doc.data();
+                userData = doc.data();
+            } else if (userEmail) {
+                // 2. Fallback: Search by email if created beforehand in Users management
+                const querySnap = await db.collection('users').where('email', '==', userEmail).get();
+                if (!querySnap.empty) {
+                    const matchDoc = querySnap.docs[0];
+                    userData = matchDoc.data();
+                    userDocId = matchDoc.id;
+                }
+            }
+
+            if (userData) {
                 this.session = {
-                    id: uid,
-                    name: userData.name || 'UsuÃ¡rio',
-                    email: userData.email || firebase.auth().currentUser.email,
-                    avatar: userData.avatar || 'https://ui-avatars.com/api/?name=User',
+                    id: userDocId,
+                    name: userData.name || 'Usuário',
+                    email: userData.email || userEmail,
+                    avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}`,
                     role: userData.role || 'usuario',
                     permissions: userData.permissions || {},
                     loginTime: new Date().toISOString()
@@ -48,26 +66,32 @@ class AuthManager {
                     this.protectUI();
                 }
             } else {
-                const userEmail = firebase.auth().currentUser.email;
-                const newAdmin = {
+                // 3. New User Registration Fallback: Check if system is empty
+                const allUsersSnap = await db.collection('users').get();
+                const isFirstSystemUser = allUsersSnap.empty;
+
+                const newUserRole = isFirstSystemUser ? 'admin' : 'usuario';
+                const newUserName = isFirstSystemUser ? 'Administrador Principal' : (userEmail.split('@')[0]);
+
+                const newUserRecord = {
                     id: uid,
-                    name: 'Administrador Principal',
+                    name: newUserName,
                     email: userEmail,
-                    role: 'admin',
+                    role: newUserRole,
                     status: 'ativo',
-                    avatar: 'https://ui-avatars.com/api/?name=Admin&background=random&color=fff',
+                    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(newUserName)}&background=random&color=fff`,
                     createdAt: new Date().toISOString(),
                     lastLogin: new Date().toISOString()
                 };
                 
-                await firebase.firestore().collection('users').doc(uid).set(newAdmin);
+                await db.collection('users').doc(uid).set(newUserRecord);
                 
                 this.session = {
                     id: uid,
-                    name: newAdmin.name,
-                    email: newAdmin.email,
-                    avatar: newAdmin.avatar,
-                    role: newAdmin.role,
+                    name: newUserRecord.name,
+                    email: newUserRecord.email,
+                    avatar: newUserRecord.avatar,
+                    role: newUserRecord.role,
                     permissions: {},
                     loginTime: new Date().toISOString()
                 };
