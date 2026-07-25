@@ -146,3 +146,32 @@
     font-weight: 600;
     color: var(--accent-primary);
 }
+
+/* Mobile Reports */
+@media (max-width: 768px) {
+  .summary-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .summary-box {
+    padding: 1rem;
+  }
+
+  .summary-value {
+    font-size: 1.2rem;
+  }
+
+  .chart-card {
+    padding: 1rem;
+  }
+
+  .chart-title {
+    font-size: 0.95rem;
+    word-wrap: break-word;
+  }
+
+  .chart-container {
+    min-height: 250px;
+  }
+}

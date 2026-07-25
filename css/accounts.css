@@ -112,3 +112,23 @@
     font-size: 2.5rem;
     margin-bottom: 1rem;
 }
+
+/* Mobile Accounts */
+@media (max-width: 768px) {
+  .accounts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .account-card {
+    padding: 1rem;
+  }
+
+  .balance-value {
+    font-size: 1.3rem;
+  }
+
+  .add-account-btn {
+    min-height: 120px;
+  }
+}
