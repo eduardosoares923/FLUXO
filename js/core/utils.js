@@ -242,9 +242,39 @@ const Utils = {
 
         const melhorDiaDate = fechamentoDate;
 
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const currentClosingForToday = getClampedDate(today.getFullYear(), today.getMonth(), closeD);
+        const vaiParaProxima = today >= currentClosingForToday;
+
+        let vencimentoCompraHoje;
+        const tYear = today.getFullYear();
+        const tMonth = today.getMonth();
+        if (vaiParaProxima) {
+            const nextClosing = getClampedDate(tYear, tMonth + 1, closeD);
+            const fYear = nextClosing.getFullYear();
+            const fMonth = nextClosing.getMonth();
+            if (dueD > closeD) {
+                vencimentoCompraHoje = getClampedDate(fYear, fMonth, dueD);
+            } else {
+                vencimentoCompraHoje = getClampedDate(fYear, fMonth + 1, dueD);
+            }
+        } else {
+            if (dueD > closeD) {
+                vencimentoCompraHoje = getClampedDate(tYear, tMonth, dueD);
+            } else {
+                vencimentoCompraHoje = getClampedDate(tYear, tMonth + 1, dueD);
+            }
+        }
+
         const formattedFechamento = this.formatDate(fechamentoDate.toISOString().split('T')[0]);
         const formattedVencimento = this.formatDate(vencimentoDate.toISOString().split('T')[0]);
         const formattedMelhorDia = this.formatDate(melhorDiaDate.toISOString().split('T')[0]);
+        const formattedVencimentoCompraHoje = this.formatDate(vencimentoCompraHoje.toISOString().split('T')[0]);
+
+        const destinoCompraHoje = vaiParaProxima 
+            ? `Próxima Fatura (vence em ${formattedVencimentoCompraHoje})`
+            : `Fatura Atual (vence em ${formattedVencimentoCompraHoje})`;
 
         return {
             fechamentoDate,
@@ -252,7 +282,9 @@ const Utils = {
             melhorDiaDate,
             formattedFechamento,
             formattedVencimento,
-            formattedMelhorDia
+            formattedMelhorDia,
+            vaiParaProxima,
+            destinoCompraHoje
         };
     },
 
