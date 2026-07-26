@@ -84,15 +84,23 @@ class TransactionsController {
             txForm.addEventListener('submit', (e) => this.saveTransaction(e));
         }
 
-        const modeSelect = document.getElementById('txPaymentMode');
-        const countSelect = document.getElementById('txInstallmentsCount');
-        const typeSelect = document.getElementById('txInstallmentValueType');
-        const amountInput = document.getElementById('txAmount');
-
-        if (modeSelect) modeSelect.addEventListener('change', () => this.updateInstallmentPreview());
-        if (countSelect) countSelect.addEventListener('change', () => this.updateInstallmentPreview());
-        if (typeSelect) typeSelect.addEventListener('change', () => this.updateInstallmentPreview());
-        if (amountInput) amountInput.addEventListener('input', () => this.updateInstallmentPreview());
+        // Installment mode toggle
+        const paymentModeSelect = document.getElementById('txPaymentMode');
+        const installmentsGroup = document.getElementById('txInstallmentsGroup');
+        if (paymentModeSelect) {
+            paymentModeSelect.addEventListener('change', () => {
+                if (installmentsGroup) {
+                    installmentsGroup.style.display = paymentModeSelect.value === 'installments' ? 'block' : 'none';
+                }
+                this.updateInstallmentPreview();
+            });
+        }
+        const txInstCount = document.getElementById('txInstallmentsCount');
+        const txInstValType = document.getElementById('txInstallmentValueType');
+        const txAmountInput = document.getElementById('txAmount');
+        if (txInstCount) txInstCount.addEventListener('change', () => this.updateInstallmentPreview());
+        if (txInstValType) txInstValType.addEventListener('change', () => this.updateInstallmentPreview());
+        if (txAmountInput) txAmountInput.addEventListener('input', () => this.updateInstallmentPreview());
 
         // Event Delegation for Table Actions
         const tbody = document.getElementById('transactionsTableBody');
@@ -120,116 +128,97 @@ class TransactionsController {
         }
     }
 
-    updateInstallmentPreview() {
-        const mode = document.getElementById('txPaymentMode')?.value || 'single';
-        const group = document.getElementById('txInstallmentsGroup');
-        const preview = document.getElementById('txInstallmentPreview');
-        const amountVal = parseFloat(document.getElementById('txAmount')?.value) || 0;
-        const count = parseInt(document.getElementById('txInstallmentsCount')?.value) || 2;
-        const valueType = document.getElementById('txInstallmentValueType')?.value || 'total';
+    populateTxModalOptions() {
+        const paymentSelect = document.getElementById('txPaymentMethod');
+        const personSelect = document.getElementById('txPerson');
 
-        if (!group) return;
+        const accounts = window.Storage.get('accounts') || [];
+        const cards = window.Storage.get('cards') || [];
+        const persons = window.Storage.get('persons') || [];
 
-        if (mode === 'installments') {
-            group.style.display = 'block';
-            if (amountVal > 0) {
-                if (valueType === 'total') {
-                    const monthly = (amountVal / count).toFixed(2);
-                    preview.textContent = `Resumo: ${count}x de R$ ${monthly} / mês (Total: R$ ${amountVal.toFixed(2)})`;
-                } else {
-                    const total = (amountVal * count).toFixed(2);
-                    preview.textContent = `Resumo: ${count}x de R$ ${amountVal.toFixed(2)} / mês (Total: R$ ${total})`;
-                }
-            } else {
-                preview.textContent = `Escolha a quantidade de parcelas e informe o valor.`;
+        if (paymentSelect) {
+            paymentSelect.innerHTML = '';
+            
+            const groupAcc = document.createElement('optgroup');
+            groupAcc.label = "Contas";
+            accounts.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                opt.textContent = `Conta: ${acc.name}`;
+                groupAcc.appendChild(opt);
+            });
+            paymentSelect.appendChild(groupAcc);
+
+            if (cards.length > 0) {
+                const groupCard = document.createElement('optgroup');
+                groupCard.label = "Cartões de Crédito";
+                cards.forEach(card => {
+                    const opt = document.createElement('option');
+                    opt.value = `card_${card.id}`;
+                    opt.textContent = `Cartão: ${card.name}`;
+                    groupCard.appendChild(opt);
+                });
+                paymentSelect.appendChild(groupCard);
             }
-        } else {
-            group.style.display = 'none';
+        }
+
+        if (personSelect) {
+            personSelect.innerHTML = '';
+            let personNames = persons.map(p => p.name.trim());
+            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+            
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                personSelect.appendChild(opt);
+            });
+        }
+
+        const dateInput = document.getElementById('txDate');
+        if (dateInput && !dateInput.value) {
+            dateInput.value = new Date().toISOString().split('T')[0];
         }
     }
 
-    populateTxModalOptions() {
-        try {
-            const paymentSelect = document.getElementById('txPaymentMethod');
-            const personSelect = document.getElementById('txPerson');
-
-            const accounts = window.Storage.get('accounts') || [];
-            const cards = window.Storage.get('cards') || [];
-            const persons = window.Storage.get('persons') || [];
-
-            if (paymentSelect) {
-                paymentSelect.innerHTML = '';
-                
-                const groupAcc = document.createElement('optgroup');
-                groupAcc.label = "Contas";
-                accounts.forEach(acc => {
-                    if (acc && acc.name) {
-                        const opt = document.createElement('option');
-                        opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
-                        opt.textContent = `Conta: ${acc.name}`;
-                        groupAcc.appendChild(opt);
-                    }
-                });
-                paymentSelect.appendChild(groupAcc);
-
-                if (cards.length > 0) {
-                    const groupCards = document.createElement('optgroup');
-                    groupCards.label = "Cartões de Crédito";
-                    cards.forEach(c => {
-                        if (c && c.name) {
-                            const opt = document.createElement('option');
-                            opt.value = `card_${c.id}`;
-                            opt.textContent = `Cartão: ${c.name}`;
-                            groupCards.appendChild(opt);
-                        }
-                    });
-                    paymentSelect.appendChild(groupCards);
-                }
-            }
-
-            if (personSelect) {
-                personSelect.innerHTML = '';
-                let personNames = persons.filter(p => p && p.name).map(p => String(p.name).trim());
-                if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
-                
-                personNames.forEach(p => {
-                    const opt = document.createElement('option');
-                    opt.value = p;
-                    opt.textContent = p;
-                    personSelect.appendChild(opt);
-                });
-            }
-
-            const dateInput = document.getElementById('txDate');
-            if (dateInput && !dateInput.value) {
-                dateInput.value = new Date().toISOString().split('T')[0];
-            }
-        } catch (e) {
-            console.error('Error populating modal options:', e);
+    updateInstallmentPreview() {
+        const preview = document.getElementById('txInstallmentPreview');
+        const paymentMode = document.getElementById('txPaymentMode');
+        if (!preview || !paymentMode || paymentMode.value !== 'installments') {
+            if (preview) preview.textContent = '';
+            return;
         }
+        const amountVal = parseFloat(document.getElementById('txAmount')?.value) || 0;
+        const count = parseInt(document.getElementById('txInstallmentsCount')?.value) || 2;
+        const valType = document.getElementById('txInstallmentValueType')?.value || 'total';
+        if (amountVal <= 0) { preview.textContent = ''; return; }
+        let perMonth, total;
+        if (valType === 'total') {
+            total = amountVal;
+            perMonth = Math.round((amountVal / count) * 100) / 100;
+        } else {
+            perMonth = amountVal;
+            total = Math.round((amountVal * count) * 100) / 100;
+        }
+        preview.textContent = `Resumo: ${count}x de ${window.Utils.formatCurrency(perMonth)} / mês (Total: ${window.Utils.formatCurrency(total)})`;
     }
 
     openNovaTransacaoModal() {
-        try {
-            const form = document.getElementById('txForm');
-            if (form) form.reset();
+        const form = document.getElementById('txForm');
+        if (form) form.reset();
 
-            this.populateTxModalOptions();
+        this.populateTxModalOptions();
 
-            const dateInput = document.getElementById('txDate');
-            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+        const dateInput = document.getElementById('txDate');
+        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
-            this.updateInstallmentPreview();
-        } catch (e) {
-            console.error('Error opening modal:', e);
-        }
+        // Reset installment UI
+        const installmentsGroup = document.getElementById('txInstallmentsGroup');
+        if (installmentsGroup) installmentsGroup.style.display = 'none';
+        const preview = document.getElementById('txInstallmentPreview');
+        if (preview) preview.textContent = '';
 
-        if (window.UI) {
-            window.UI.openModal('txModal');
-        } else {
-            const m = document.getElementById('txModal');
-            if (m) m.classList.add('active');
-        }
+        window.UI.openModal('txModal');
     }
 
     async saveTransaction(e) {
@@ -242,7 +231,6 @@ class TransactionsController {
         const paymentMethod = document.getElementById('txPaymentMethod')?.value || 'account';
         const person = document.getElementById('txPerson')?.value || 'Eduardo';
         const dateStr = document.getElementById('txDate')?.value || new Date().toISOString().split('T')[0];
-        
         const paymentMode = document.getElementById('txPaymentMode')?.value || 'single';
         const installmentsCount = parseInt(document.getElementById('txInstallmentsCount')?.value) || 2;
         const installmentValueType = document.getElementById('txInstallmentValueType')?.value || 'total';
@@ -263,9 +251,8 @@ class TransactionsController {
 
         try {
             if (paymentMode === 'installments' && installmentsCount >= 2) {
-                let installmentAmount = 0;
-                let totalAmount = 0;
-
+                // Parcelado
+                let installmentAmount, totalAmount;
                 if (installmentValueType === 'total') {
                     totalAmount = rawAmount;
                     installmentAmount = Math.round((rawAmount / installmentsCount) * 100) / 100;
@@ -280,12 +267,10 @@ class TransactionsController {
                 const baseDay = parseInt(baseDateParts[2]);
 
                 const savePromises = [];
-
                 for (let i = 0; i < installmentsCount; i++) {
                     const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
                     const validDay = Math.min(baseDay, lastDayOfTargetMonth);
                     const finalInstDate = new Date(baseYear, baseMonth + i, validDay);
-
                     const instYear = finalInstDate.getFullYear();
                     const instMonth = String(finalInstDate.getMonth() + 1).padStart(2, '0');
                     const instDay = String(finalInstDate.getDate()).padStart(2, '0');
@@ -305,10 +290,8 @@ class TransactionsController {
                         userId,
                         createdAt: new Date().toISOString()
                     };
-
                     savePromises.push(window.Storage.saveRecord('transactions', instTx));
                 }
-
                 await Promise.all(savePromises);
 
                 if (paymentMethod.startsWith('card_') && type === 'expense') {
@@ -319,6 +302,10 @@ class TransactionsController {
                         card.usedLimit = (card.usedLimit || 0) + totalAmount;
                         await window.Storage.saveRecord('cards', card);
                     }
+                }
+
+                if (window.Audit) {
+                    window.Audit.log('TRANSACTION_CREATE', { description, amount: totalAmount, type, installments: installmentsCount });
                 }
 
                 window.UI.closeModal('txModal');
@@ -351,12 +338,12 @@ class TransactionsController {
                     }
                 }
 
+                if (window.Audit) {
+                    window.Audit.log('TRANSACTION_CREATE', { description, amount: rawAmount, type });
+                }
+
                 window.UI.closeModal('txModal');
                 window.UI.showToast('Lançamento realizado com sucesso!', 'success');
-            }
-
-            if (window.Audit) {
-                window.Audit.log('TRANSACTION_CREATE', { description, amount: rawAmount, type, paymentMode });
             }
 
             let globalTx = window.Storage.get('transactions') || [];
@@ -471,31 +458,8 @@ const initTransactions = () => {
     }
 };
 
-window.openNovaTransacaoModal = () => {
-    if (!window.transactionsController) {
-        if (document.getElementById('transactionsTableBody')) {
-            window.transactionsController = new TransactionsController();
-        } else {
-            window.location.href = 'transactions.html';
-            return;
-        }
-    }
-    window.transactionsController.openNovaTransacaoModal();
-};
-
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initTransactions);
 } else {
     initTransactions();
 }
-
-window.addEventListener('fluxo:dataChanged', () => {
-    if (window.transactionsController) {
-        let globalTx = window.Storage.get('transactions') || [];
-        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-            globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
-        }
-        window.transactionsController.allTransactions = globalTx;
-        window.transactionsController.applyFilters();
-    }
-});

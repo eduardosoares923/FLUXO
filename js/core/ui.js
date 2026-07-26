@@ -43,10 +43,6 @@ class UIManager {
     openModal(modalId) {
         const modal = document.getElementById(modalId);
         if (modal) {
-            modal.style.display = 'flex';
-            modal.style.opacity = '1';
-            modal.style.visibility = 'visible';
-            modal.style.pointerEvents = 'auto';
             modal.classList.add('active');
         }
     }
@@ -55,14 +51,6 @@ class UIManager {
         const modal = document.getElementById(modalId);
         if (modal) {
             modal.classList.remove('active');
-            modal.style.opacity = '0';
-            modal.style.visibility = 'hidden';
-            modal.style.pointerEvents = 'none';
-            setTimeout(() => {
-                if (!modal.classList.contains('active')) {
-                    modal.style.display = 'none';
-                }
-            }, 250);
             
             // Auto clear forms inside modal
             const form = modal.querySelector('form');
