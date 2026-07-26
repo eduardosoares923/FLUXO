@@ -448,9 +448,19 @@ class TransactionsController {
 }
 
 const initTransactions = () => {
-    if (!window.transactionsController && document.getElementById('transactionsTableBody')) {
+    if (!window.transactionsController) {
+        window.transactionsController = new TransactionsController();
+    } else {
+        window.transactionsController.populateTxModalOptions();
+        window.transactionsController.applyFilters();
+    }
+};
+
+window.openNovaTransacaoModal = () => {
+    if (!window.transactionsController) {
         window.transactionsController = new TransactionsController();
     }
+    window.transactionsController.openNovaTransacaoModal();
 };
 
 if (document.readyState === 'loading') {
@@ -458,3 +468,14 @@ if (document.readyState === 'loading') {
 } else {
     initTransactions();
 }
+
+window.addEventListener('fluxo:dataChanged', () => {
+    if (window.transactionsController) {
+        let globalTx = window.Storage.get('transactions') || [];
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
+        }
+        window.transactionsController.allTransactions = globalTx;
+        window.transactionsController.applyFilters();
+    }
+});
