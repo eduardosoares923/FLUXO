@@ -149,69 +149,87 @@ class TransactionsController {
     }
 
     populateTxModalOptions() {
-        const paymentSelect = document.getElementById('txPaymentMethod');
-        const personSelect = document.getElementById('txPerson');
+        try {
+            const paymentSelect = document.getElementById('txPaymentMethod');
+            const personSelect = document.getElementById('txPerson');
 
-        const accounts = window.Storage.get('accounts') || [];
-        const cards = window.Storage.get('cards') || [];
-        const persons = window.Storage.get('persons') || [];
+            const accounts = window.Storage.get('accounts') || [];
+            const cards = window.Storage.get('cards') || [];
+            const persons = window.Storage.get('persons') || [];
 
-        if (paymentSelect) {
-            paymentSelect.innerHTML = '';
-            
-            const groupAcc = document.createElement('optgroup');
-            groupAcc.label = "Contas";
-            accounts.forEach(acc => {
-                const opt = document.createElement('option');
-                opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
-                opt.textContent = `Conta: ${acc.name}`;
-                groupAcc.appendChild(opt);
-            });
-            paymentSelect.appendChild(groupAcc);
-
-            if (cards.length > 0) {
-                const groupCards = document.createElement('optgroup');
-                groupCards.label = "Cartões de Crédito";
-                cards.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = `card_${c.id}`;
-                    opt.textContent = `Cartão: ${c.name}`;
-                    groupCards.appendChild(opt);
+            if (paymentSelect) {
+                paymentSelect.innerHTML = '';
+                
+                const groupAcc = document.createElement('optgroup');
+                groupAcc.label = "Contas";
+                accounts.forEach(acc => {
+                    if (acc && acc.name) {
+                        const opt = document.createElement('option');
+                        opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                        opt.textContent = `Conta: ${acc.name}`;
+                        groupAcc.appendChild(opt);
+                    }
                 });
-                paymentSelect.appendChild(groupCards);
+                paymentSelect.appendChild(groupAcc);
+
+                if (cards.length > 0) {
+                    const groupCards = document.createElement('optgroup');
+                    groupCards.label = "Cartões de Crédito";
+                    cards.forEach(c => {
+                        if (c && c.name) {
+                            const opt = document.createElement('option');
+                            opt.value = `card_${c.id}`;
+                            opt.textContent = `Cartão: ${c.name}`;
+                            groupCards.appendChild(opt);
+                        }
+                    });
+                    paymentSelect.appendChild(groupCards);
+                }
             }
-        }
 
-        if (personSelect) {
-            personSelect.innerHTML = '';
-            let personNames = persons.map(p => p.name.trim());
-            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
-            
-            personNames.forEach(p => {
-                const opt = document.createElement('option');
-                opt.value = p;
-                opt.textContent = p;
-                personSelect.appendChild(opt);
-            });
-        }
+            if (personSelect) {
+                personSelect.innerHTML = '';
+                let personNames = persons.filter(p => p && p.name).map(p => String(p.name).trim());
+                if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+                
+                personNames.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p;
+                    personSelect.appendChild(opt);
+                });
+            }
 
-        const dateInput = document.getElementById('txDate');
-        if (dateInput && !dateInput.value) {
-            dateInput.value = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('txDate');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = new Date().toISOString().split('T')[0];
+            }
+        } catch (e) {
+            console.error('Error populating modal options:', e);
         }
     }
 
     openNovaTransacaoModal() {
-        const form = document.getElementById('txForm');
-        if (form) form.reset();
+        try {
+            const form = document.getElementById('txForm');
+            if (form) form.reset();
 
-        this.populateTxModalOptions();
+            this.populateTxModalOptions();
 
-        const dateInput = document.getElementById('txDate');
-        if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
+            const dateInput = document.getElementById('txDate');
+            if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
-        this.updateInstallmentPreview();
-        window.UI.openModal('txModal');
+            this.updateInstallmentPreview();
+        } catch (e) {
+            console.error('Error opening modal:', e);
+        }
+
+        if (window.UI) {
+            window.UI.openModal('txModal');
+        } else {
+            const m = document.getElementById('txModal');
+            if (m) m.classList.add('active');
+        }
     }
 
     async saveTransaction(e) {
