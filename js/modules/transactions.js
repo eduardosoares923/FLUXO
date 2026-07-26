@@ -106,9 +106,15 @@ class TransactionsController {
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
             tbody.addEventListener('click', (e) => {
-                const btn = e.target.closest('[data-action="delete"]');
-                if (btn) {
-                    this.deleteTransaction(btn.dataset.id);
+                const btnDelete = e.target.closest('[data-action="delete"]');
+                if (btnDelete) {
+                    this.deleteTransaction(btnDelete.dataset.id);
+                    return;
+                }
+                const btnEdit = e.target.closest('[data-action="edit"]');
+                if (btnEdit) {
+                    this.editTransaction(btnEdit.dataset.id);
+                    return;
                 }
             });
         }
@@ -207,6 +213,12 @@ class TransactionsController {
         const form = document.getElementById('txForm');
         if (form) form.reset();
 
+        const editIdInput = document.getElementById('txEditId');
+        if (editIdInput) editIdInput.value = '';
+
+        const modalTitle = document.getElementById('txModalTitle');
+        if (modalTitle) modalTitle.textContent = 'Novo Lançamento';
+
         this.populateTxModalOptions();
 
         const dateInput = document.getElementById('txDate');
@@ -221,9 +233,58 @@ class TransactionsController {
         window.UI.openModal('txModal');
     }
 
+    editTransaction(id) {
+        const tx = this.allTransactions.find(t => t.id === id);
+        if (!tx) return;
+
+        const form = document.getElementById('txForm');
+        if (form) form.reset();
+
+        this.populateTxModalOptions();
+
+        const editIdInput = document.getElementById('txEditId');
+        if (editIdInput) editIdInput.value = tx.id;
+
+        const modalTitle = document.getElementById('txModalTitle');
+        if (modalTitle) modalTitle.textContent = 'Editar Lançamento';
+
+        const typeSelect = document.getElementById('txType');
+        if (typeSelect) typeSelect.value = tx.type || 'expense';
+
+        const descInput = document.getElementById('txDescription');
+        if (descInput) descInput.value = tx.description || '';
+
+        const amountInput = document.getElementById('txAmount');
+        if (amountInput) amountInput.value = tx.amount || 0;
+
+        const catSelect = document.getElementById('txCategory');
+        if (catSelect) catSelect.value = tx.category || 'Outros';
+
+        const methodSelect = document.getElementById('txPaymentMethod');
+        if (methodSelect) methodSelect.value = tx.paymentMethod || 'account';
+
+        const personSelect = document.getElementById('txPerson');
+        if (personSelect) personSelect.value = tx.person || 'Eduardo';
+
+        const dateInput = document.getElementById('txDate');
+        if (dateInput) dateInput.value = tx.date || new Date().toISOString().split('T')[0];
+
+        const modeSelect = document.getElementById('txPaymentMode');
+        if (modeSelect) modeSelect.value = 'single';
+
+        const installmentsGroup = document.getElementById('txInstallmentsGroup');
+        if (installmentsGroup) installmentsGroup.style.display = 'none';
+
+        const preview = document.getElementById('txInstallmentPreview');
+        if (preview) preview.textContent = '';
+
+        window.UI.openModal('txModal');
+    }
+
     async saveTransaction(e) {
         e.preventDefault();
 
+        const editId = document.getElementById('txEditId')?.value;
         const type = document.getElementById('txType')?.value || 'expense';
         const description = document.getElementById('txDescription')?.value.trim();
         const amountStr = document.getElementById('txAmount')?.value;
@@ -250,6 +311,63 @@ class TransactionsController {
         const userId = currentUser ? currentUser.id : '1';
 
         try {
+            if (editId) {
+                // Modo Edição
+                const existingTx = this.allTransactions.find(t => t.id === editId);
+                if (existingTx) {
+                    // Estornar limite do cartão anterior se era despesa de cartão
+                    if (existingTx.paymentMethod && existingTx.paymentMethod.startsWith('card_') && existingTx.type === 'expense') {
+                        const oldCardId = existingTx.paymentMethod.replace('card_', '');
+                        const cards = window.Storage.get('cards') || [];
+                        const oldCard = cards.find(c => c.id === oldCardId);
+                        if (oldCard) {
+                            oldCard.usedLimit = Math.max(0, (oldCard.usedLimit || 0) - existingTx.amount);
+                            await window.Storage.saveRecord('cards', oldCard);
+                        }
+                    }
+
+                    const updatedTx = {
+                        ...existingTx,
+                        type,
+                        description,
+                        amount: rawAmount,
+                        category,
+                        paymentMethod,
+                        person,
+                        date: dateStr,
+                        updatedAt: new Date().toISOString()
+                    };
+
+                    await window.Storage.saveRecord('transactions', updatedTx);
+
+                    // Debitar limite do novo cartão se for despesa de cartão
+                    if (paymentMethod.startsWith('card_') && type === 'expense') {
+                        const newCardId = paymentMethod.replace('card_', '');
+                        const cards = window.Storage.get('cards') || [];
+                        const newCard = cards.find(c => c.id === newCardId);
+                        if (newCard) {
+                            newCard.usedLimit = (newCard.usedLimit || 0) + rawAmount;
+                            await window.Storage.saveRecord('cards', newCard);
+                        }
+                    }
+
+                    if (window.Audit) {
+                        window.Audit.log('TRANSACTION_EDIT', { id: editId, description, amount: rawAmount });
+                    }
+
+                    window.UI.closeModal('txModal');
+                    window.UI.showToast('Lançamento atualizado com sucesso! ✏️', 'success');
+
+                    let globalTx = window.Storage.get('transactions') || [];
+                    if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+                        globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
+                    }
+                    this.allTransactions = globalTx;
+                    this.applyFilters();
+                    return;
+                }
+            }
+
             if (paymentMode === 'installments' && installmentsCount >= 2) {
                 // Parcelado
                 let installmentAmount, totalAmount;
@@ -435,7 +553,10 @@ class TransactionsController {
                     <td>${window.Utils.escapeHTML(this.getPaymentMethodName(tx.paymentMethod))}</td>
                     <td><span class="tx-badge ${badgeClass}">${badgeText}</span></td>
                     <td style="color: ${amountColor}; font-weight: 600;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
-                    <td class="tx-actions">
+                    <td class="tx-actions" style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+                        <button class="btn btn-ghost primary btn-sm" title="Editar" data-action="edit" data-id="${tx.id}">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
                         <button class="btn btn-ghost danger btn-sm" title="Excluir" data-action="delete" data-id="${tx.id}">
                             <i class="fa-solid fa-trash"></i>
                         </button>
