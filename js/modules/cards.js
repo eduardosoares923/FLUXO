@@ -207,6 +207,8 @@ class CardsController {
         const paidInvoices = window.Storage.get('paidInvoices') || [];
         const isPaid = paidInvoices.some(p => p.cardId === id && p.monthStr === currentMonthStr);
 
+        const metrics = window.Utils.getCardMetricsForInvoiceMonth ? window.Utils.getCardMetricsForInvoiceMonth(currentMonthStr, closeD, dueD) : window.Utils.getCardMetrics(closeD, dueD);
+
         // 1. Invoice Month Navigation Banner inside Modal
         const monthNavBox = document.createElement('div');
         monthNavBox.style.cssText = 'background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 12px; padding: 0.65rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;';
@@ -232,7 +234,7 @@ class CardsController {
                 <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total da Fatura</div>
                 <div style="font-size: 1.3rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(totalInvoice)}</div>
                 <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">
-                    Fechamento: <strong>Dia ${closeD}</strong> &bull; Vencimento: <strong style="color: var(--accent-primary);">Dia ${dueD}</strong>
+                    Fechamento: <strong style="color: var(--text-primary);">${metrics.formattedFechamento}</strong> &bull; Vencimento: <strong style="color: var(--accent-primary);">${metrics.formattedVencimento}</strong>
                 </div>
             </div>
             <div>
@@ -408,7 +410,7 @@ class CardsController {
             if (percentage > 80) barClass = 'danger';
             else if (percentage > 50) barClass = 'warning';
 
-            const metrics = window.Utils.getCardMetrics(card.closeDay, card.dueDay);
+            const metrics = window.Utils.getCardMetricsForInvoiceMonth ? window.Utils.getCardMetricsForInvoiceMonth(currentMonthStr, card.closeDay, card.dueDay) : window.Utils.getCardMetrics(card.closeDay, card.dueDay);
 
             const cardEl = document.createElement('div');
             cardEl.className = 'card-wrapper';

@@ -210,6 +210,52 @@ const Utils = {
         };
     },
 
+    getCardMetricsForInvoiceMonth(invMonthStr, closeDay = 28, dueDay = 10) {
+        const closeD = parseInt(closeDay) || 28;
+        const dueD = parseInt(dueDay) || 10;
+        
+        let year, month;
+        if (invMonthStr && invMonthStr.includes('-')) {
+            const parts = invMonthStr.split('-');
+            year = parseInt(parts[0]);
+            month = parseInt(parts[1]) - 1;
+        } else {
+            const now = new Date();
+            year = now.getFullYear();
+            month = now.getMonth();
+        }
+
+        const getClampedDate = (y, m, d) => {
+            const lastDay = new Date(y, m + 1, 0).getDate();
+            const validDay = Math.min(d, lastDay);
+            return new Date(y, m, validDay, 0, 0, 0, 0);
+        };
+
+        const vencimentoDate = getClampedDate(year, month, dueD);
+        let fechamentoDate;
+
+        if (dueD > closeD) {
+            fechamentoDate = getClampedDate(year, month, closeD);
+        } else {
+            fechamentoDate = getClampedDate(year, month - 1, closeD);
+        }
+
+        const melhorDiaDate = fechamentoDate;
+
+        const formattedFechamento = this.formatDate(fechamentoDate.toISOString().split('T')[0]);
+        const formattedVencimento = this.formatDate(vencimentoDate.toISOString().split('T')[0]);
+        const formattedMelhorDia = this.formatDate(melhorDiaDate.toISOString().split('T')[0]);
+
+        return {
+            fechamentoDate,
+            vencimentoDate,
+            melhorDiaDate,
+            formattedFechamento,
+            formattedVencimento,
+            formattedMelhorDia
+        };
+    },
+
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     },
