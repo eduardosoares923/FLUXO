@@ -1,12 +1,57 @@
 class CardsController {
     constructor() {
         this.cards = window.Storage.get('cards') || [];
+        this.activeInvoiceMonths = {};
         this.init();
         this.bindEvents();
     }
 
     init() {
         this.renderCards();
+    }
+
+    getCardMonthStr(cardId) {
+        if (this.activeInvoiceMonths && this.activeInvoiceMonths[cardId]) {
+            return this.activeInvoiceMonths[cardId];
+        }
+        const card = this.cards.find(c => c.id === cardId);
+        const closeD = card ? (card.closeDay || 28) : 28;
+        const dueD = card ? (card.dueDay || 10) : 10;
+        const now = new Date();
+        return window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    changeCardMonth(cardId, offset) {
+        const currentStr = this.getCardMonthStr(cardId);
+        const parts = currentStr.split('-');
+        let year = parseInt(parts[0]);
+        let month = parseInt(parts[1]) - 1;
+
+        const date = new Date(year, month + offset, 1);
+        const newYear = date.getFullYear();
+        const newMonth = String(date.getMonth() + 1).padStart(2, '0');
+        const newStr = `${newYear}-${newMonth}`;
+
+        if (!this.activeInvoiceMonths) this.activeInvoiceMonths = {};
+        this.activeInvoiceMonths[cardId] = newStr;
+
+        this.renderCards();
+
+        const modal = document.getElementById('invoiceModal');
+        if (modal && (modal.classList.contains('active') || modal.style.display === 'block')) {
+            this.openInvoiceModal(cardId);
+        }
+    }
+
+    formatMonthLabel(monthStr) {
+        if (!monthStr) return '';
+        const [year, month] = monthStr.split('-');
+        const monthNames = [
+            'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+            'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
+        const monthIndex = parseInt(month) - 1;
+        return `${monthNames[monthIndex] || month} de ${year}`;
     }
 
     bindEvents() {
@@ -67,19 +112,20 @@ class CardsController {
         const card = this.cards.find(c => c.id === id);
         if (!card) return;
 
-        const now = new Date();
+        const currentMonthStr = this.getCardMonthStr(id);
         const closeD = card.closeDay || 28;
         const dueD = card.dueDay || 10;
-        const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
         const paidRecordId = `inv_${id}_${currentMonthStr}`;
         const paidInvoices = window.Storage.get('paidInvoices') || [];
         const existing = paidInvoices.find(p => p.id === paidRecordId || (p.cardId === id && p.monthStr === currentMonthStr));
 
+        const formattedLabel = this.formatMonthLabel(currentMonthStr);
+
         if (existing) {
             try {
                 await window.Storage.deleteRecord('paidInvoices', existing.id);
-                window.UI.showToast(`Fatura do cartão ${card.name} reaberta!`, 'info');
+                window.UI.showToast(`Fatura de ${formattedLabel} do cartão ${card.name} reaberta!`, 'info');
             } catch (err) {
                 console.error(err);
                 window.UI.showToast('Erro ao reabrir fatura', 'error');
@@ -103,7 +149,7 @@ class CardsController {
 
             try {
                 await window.Storage.saveRecord('paidInvoices', record);
-                window.UI.showToast(`Fatura de ${window.Utils.formatCurrency(totalInvoice)} do cartão ${card.name} marcada como PAGA! 🎉`, 'success');
+                window.UI.showToast(`Fatura de ${formattedLabel} (${window.Utils.formatCurrency(totalInvoice)}) do cartão ${card.name} marcada como PAGA! 🎉`, 'success');
             } catch (err) {
                 console.error(err);
                 window.UI.showToast('Erro ao marcar fatura como paga', 'error');
@@ -112,7 +158,7 @@ class CardsController {
 
         this.renderCards();
         const modal = document.getElementById('invoiceModal');
-        if (modal && modal.classList.contains('active')) {
+        if (modal && (modal.classList.contains('active') || modal.style.display === 'block')) {
             this.openInvoiceModal(id);
         }
         window.dispatchEvent(new Event('dataUpdated'));
@@ -139,46 +185,70 @@ class CardsController {
         const card = this.cards.find(c => c.id === id);
         if (!card) return;
 
-        document.getElementById('invoiceModalTitle').textContent = `Fatura: ${card.name} (Dia ${card.closeDay || 1} / Venc. ${card.dueDay || 10})`;
+        const currentMonthStr = this.getCardMonthStr(id);
+        const formattedMonthLabel = this.formatMonthLabel(currentMonthStr);
+        const closeD = card.closeDay || 28;
+        const dueD = card.dueDay || 10;
+
+        document.getElementById('invoiceModalTitle').textContent = `Fatura: ${card.name}`;
         
         const listEl = document.getElementById('invoiceTransactionList');
         listEl.innerHTML = '';
 
         const allTransactions = window.Storage.get('transactions') || [];
-        const cardTransactions = allTransactions.filter(tx => tx.paymentMethod === `card_${id}`);
+        const cardTransactions = allTransactions.filter(tx => {
+            if (tx.paymentMethod !== `card_${id}`) return false;
+            const invMonth = window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD);
+            return invMonth === currentMonthStr;
+        });
+
         const totalInvoice = cardTransactions.reduce((sum, tx) => sum + (tx.type === 'expense' ? parseFloat(tx.amount) : -parseFloat(tx.amount)), 0);
 
         const paidInvoices = window.Storage.get('paidInvoices') || [];
-        const now = new Date();
-        const closeD = card.closeDay || 28;
-        const dueD = card.dueDay || 10;
-        const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const isPaid = paidInvoices.some(p => p.cardId === id && p.monthStr === currentMonthStr);
 
+        // 1. Invoice Month Navigation Banner inside Modal
+        const monthNavBox = document.createElement('div');
+        monthNavBox.style.cssText = 'background: var(--bg-primary); border: 1px solid var(--glass-border); border-radius: 12px; padding: 0.65rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;';
+        monthNavBox.innerHTML = `
+            <button class="btn btn-ghost btn-sm" onclick="window.cardsController.changeCardMonth('${card.id}', -1)" style="font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
+                <i class="fa-solid fa-chevron-left"></i> Fatura Anterior
+            </button>
+            <div style="text-align: center;">
+                <div style="font-size: 0.68rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Mês da Fatura</div>
+                <div style="font-size: 1.05rem; font-weight: 800; color: var(--accent-primary); text-transform: capitalize;">${formattedMonthLabel}</div>
+            </div>
+            <button class="btn btn-ghost btn-sm" onclick="window.cardsController.changeCardMonth('${card.id}', 1)" style="font-weight: 600; display: flex; align-items: center; gap: 0.35rem;">
+                Próxima Fatura <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        `;
+        listEl.appendChild(monthNavBox);
+
+        // 2. Summary Info Box & Payment Toggle
         const headerInfo = document.createElement('div');
         headerInfo.style.cssText = 'padding: 0.85rem 1rem; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; border: 1px solid var(--glass-border); flex-wrap: wrap; gap: 0.5rem;';
         headerInfo.innerHTML = `
             <div>
-                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total da Fatura (${currentMonthStr})</div>
+                <div style="font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Total da Fatura</div>
                 <div style="font-size: 1.3rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--danger)'};">${window.Utils.formatCurrency(totalInvoice)}</div>
-                ${isPaid ? '<span style="font-size: 0.75rem; color: var(--success); font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Fatura Paga</span>' : ''}
+                <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                    Fechamento: <strong>Dia ${closeD}</strong> &bull; Vencimento: <strong style="color: var(--accent-primary);">Dia ${dueD}</strong>
+                </div>
             </div>
             <div>
-                <button class="btn ${isPaid ? 'btn-success' : 'btn-outline-success'} btn-sm" onclick="window.cardsController.togglePaidInvoice('${card.id}')" style="border-radius: 20px; font-weight: 700; padding: 0.4rem 0.9rem;">
-                    <i class="fa-solid ${isPaid ? 'fa-circle-check' : 'fa-check'}"></i> ${isPaid ? 'Fatura Paga (Desmarcar)' : 'Marcar Fatura como PAGA'}
+                <button class="btn ${isPaid ? 'btn-success' : 'btn-outline-success'} btn-sm" onclick="window.cardsController.togglePaidInvoice('${card.id}')" style="border-radius: 20px; font-weight: 700; padding: 0.45rem 1rem;">
+                    <i class="fa-solid ${isPaid ? 'fa-circle-check' : 'fa-check'}"></i> ${isPaid ? '✓ Fatura Paga (Desmarcar)' : 'Marcar Fatura como PAGA'}
                 </button>
             </div>
         `;
+        listEl.appendChild(headerInfo);
 
         if (cardTransactions.length === 0) {
-            listEl.appendChild(headerInfo);
             const emptyEl = document.createElement('div');
-            emptyEl.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary);';
-            emptyEl.textContent = 'Nenhuma compra registrada neste cartão.';
+            emptyEl.style.cssText = 'text-align: center; padding: 2rem; color: var(--text-secondary); background: var(--bg-secondary); border-radius: 12px; border: 1px dashed var(--glass-border);';
+            emptyEl.innerHTML = `<i class="fa-solid fa-receipt" style="font-size: 2rem; margin-bottom: 0.5rem; display: block; opacity: 0.5;"></i> Nenhuma compra nesta fatura (${formattedMonthLabel}).`;
             listEl.appendChild(emptyEl);
         } else {
-            listEl.appendChild(headerInfo);
-
             cardTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
 
             cardTransactions.forEach(tx => {
@@ -188,7 +258,7 @@ class CardsController {
                 const sign = isExpense ? '-' : '+';
                 const color = isExpense ? 'var(--danger)' : 'var(--success)';
 
-                const dueMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, card.closeDay || 1, card.dueDay || 10) : '';
+                const dueMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, card.closeDay || 28, card.dueDay || 10) : '';
                 let dueBadge = '';
                 if (dueMonthStr) {
                     const [dYear, dMonth] = dueMonthStr.split('-');
@@ -315,12 +385,13 @@ class CardsController {
 
         const allTransactions = window.Storage.get('transactions') || [];
         const paidInvoices = window.Storage.get('paidInvoices') || [];
-        const now = new Date();
 
         visibleCards.forEach(card => {
+            const currentMonthStr = this.getCardMonthStr(card.id);
+            const formattedMonthLabel = this.formatMonthLabel(currentMonthStr);
             const closeD = card.closeDay || 28;
             const dueD = card.dueDay || 10;
-            const currentMonthStr = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(now, closeD, dueD) : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
             const isPaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === currentMonthStr);
 
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
@@ -380,12 +451,20 @@ class CardsController {
                     </div>
                 </div>
 
-                <!-- Clean Invoice & Limit Summary (Nubank Style) -->
+                <!-- Clean Invoice & Limit Summary (Nubank Style with Month Nav) -->
                 <div style="display: flex; flex-direction: column; gap: 0.6rem; background: var(--bg-primary); border-radius: 12px; padding: 0.85rem; border: 1px solid var(--glass-border);">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                        <div style="min-width: 120px;">
-                            <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura Atual (${currentMonthStr})</span>
-                            <div style="font-size: 1.25rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--text-primary)'}; margin-top: 0.1rem; white-space: nowrap; word-break: keep-all;">${window.Utils.formatCurrency(totalUsed)}</div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura (${formattedMonthLabel})</span>
+                                <div style="display: flex; gap: 0.15rem;">
+                                    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); window.cardsController.changeCardMonth('${card.id}', -1)" title="Fatura Anterior" style="padding: 0.1rem 0.35rem; font-size: 0.7rem; height: 22px; width: 22px; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-chevron-left"></i></button>
+                                    <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); window.cardsController.changeCardMonth('${card.id}', 1)" title="Próxima Fatura" style="padding: 0.1rem 0.35rem; font-size: 0.7rem; height: 22px; width: 22px; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-chevron-right"></i></button>
+                                </div>
+                            </div>
+                            <div style="font-size: 1.25rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--text-primary)'}; margin-top: 0.1rem; white-space: nowrap;">
+                                ${window.Utils.formatCurrency(totalUsed)}
+                            </div>
                         </div>
                         <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
                             <button class="btn ${isPaid ? 'btn-success' : 'btn-outline-success'} btn-sm" data-action="togglePaid" data-id="${card.id}" title="${isPaid ? 'Fatura Paga (Clique para Reabrir)' : 'Marcar Fatura como PAGA'}" style="padding: 0.4rem 0.75rem; border-radius: 20px; font-weight: 700; white-space: nowrap; font-size: 0.78rem;">
