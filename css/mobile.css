@@ -566,6 +566,10 @@
   }
 
   /* ---- Modals ---- */
+  .modal-overlay {
+    z-index: 100000 !important;
+  }
+
   .modal-content,
   .modal-overlay .glass-panel {
     width: 92% !important;
