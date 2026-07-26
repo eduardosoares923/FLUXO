@@ -231,13 +231,13 @@ const Utils = {
             return new Date(y, m, validDay, 0, 0, 0, 0);
         };
 
-        const vencimentoDate = getClampedDate(year, month, dueD);
-        let fechamentoDate;
+        const fechamentoDate = getClampedDate(year, month, closeD);
+        let vencimentoDate;
 
         if (dueD > closeD) {
-            fechamentoDate = getClampedDate(year, month, closeD);
+            vencimentoDate = getClampedDate(year, month, dueD);
         } else {
-            fechamentoDate = getClampedDate(year, month - 1, closeD);
+            vencimentoDate = getClampedDate(year, month + 1, dueD);
         }
 
         const melhorDiaDate = fechamentoDate;
