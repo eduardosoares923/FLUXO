@@ -84,6 +84,16 @@ class TransactionsController {
             txForm.addEventListener('submit', (e) => this.saveTransaction(e));
         }
 
+        const modeSelect = document.getElementById('txPaymentMode');
+        const countSelect = document.getElementById('txInstallmentsCount');
+        const typeSelect = document.getElementById('txInstallmentValueType');
+        const amountInput = document.getElementById('txAmount');
+
+        if (modeSelect) modeSelect.addEventListener('change', () => this.updateInstallmentPreview());
+        if (countSelect) countSelect.addEventListener('change', () => this.updateInstallmentPreview());
+        if (typeSelect) typeSelect.addEventListener('change', () => this.updateInstallmentPreview());
+        if (amountInput) amountInput.addEventListener('input', () => this.updateInstallmentPreview());
+
         // Event Delegation for Table Actions
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
@@ -110,6 +120,34 @@ class TransactionsController {
         }
     }
 
+    updateInstallmentPreview() {
+        const mode = document.getElementById('txPaymentMode')?.value || 'single';
+        const group = document.getElementById('txInstallmentsGroup');
+        const preview = document.getElementById('txInstallmentPreview');
+        const amountVal = parseFloat(document.getElementById('txAmount')?.value) || 0;
+        const count = parseInt(document.getElementById('txInstallmentsCount')?.value) || 2;
+        const valueType = document.getElementById('txInstallmentValueType')?.value || 'total';
+
+        if (!group) return;
+
+        if (mode === 'installments') {
+            group.style.display = 'block';
+            if (amountVal > 0) {
+                if (valueType === 'total') {
+                    const monthly = (amountVal / count).toFixed(2);
+                    preview.textContent = `Resumo: ${count}x de R$ ${monthly} / mês (Total: R$ ${amountVal.toFixed(2)})`;
+                } else {
+                    const total = (amountVal * count).toFixed(2);
+                    preview.textContent = `Resumo: ${count}x de R$ ${amountVal.toFixed(2)} / mês (Total: R$ ${total})`;
+                }
+            } else {
+                preview.textContent = `Escolha a quantidade de parcelas e informe o valor.`;
+            }
+        } else {
+            group.style.display = 'none';
+        }
+    }
+
     populateTxModalOptions() {
         const paymentSelect = document.getElementById('txPaymentMethod');
         const personSelect = document.getElementById('txPerson');
@@ -132,15 +170,15 @@ class TransactionsController {
             paymentSelect.appendChild(groupAcc);
 
             if (cards.length > 0) {
-                const groupCard = document.createElement('optgroup');
-                groupCard.label = "Cartões de Crédito";
-                cards.forEach(card => {
+                const groupCards = document.createElement('optgroup');
+                groupCards.label = "Cartões de Crédito";
+                cards.forEach(c => {
                     const opt = document.createElement('option');
-                    opt.value = `card_${card.id}`;
-                    opt.textContent = `Cartão: ${card.name}`;
-                    groupCard.appendChild(opt);
+                    opt.value = `card_${c.id}`;
+                    opt.textContent = `Cartão: ${c.name}`;
+                    groupCards.appendChild(opt);
                 });
-                paymentSelect.appendChild(groupCard);
+                paymentSelect.appendChild(groupCards);
             }
         }
 
@@ -172,6 +210,7 @@ class TransactionsController {
         const dateInput = document.getElementById('txDate');
         if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
+        this.updateInstallmentPreview();
         window.UI.openModal('txModal');
     }
 
@@ -185,53 +224,122 @@ class TransactionsController {
         const paymentMethod = document.getElementById('txPaymentMethod')?.value || 'account';
         const person = document.getElementById('txPerson')?.value || 'Eduardo';
         const dateStr = document.getElementById('txDate')?.value || new Date().toISOString().split('T')[0];
+        
+        const paymentMode = document.getElementById('txPaymentMode')?.value || 'single';
+        const installmentsCount = parseInt(document.getElementById('txInstallmentsCount')?.value) || 2;
+        const installmentValueType = document.getElementById('txInstallmentValueType')?.value || 'total';
 
         if (!description || !amountStr) {
             window.UI.showToast('Preencha a descrição e o valor.', 'error');
             return;
         }
 
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) {
+        const rawAmount = parseFloat(amountStr);
+        if (isNaN(rawAmount) || rawAmount <= 0) {
             window.UI.showToast('Informe um valor válido maior que zero.', 'error');
             return;
         }
 
         const currentUser = window.currentUser || window.Storage.get('session');
-
-        const newTx = {
-            id: window.Utils.generateId(),
-            type,
-            description,
-            amount,
-            category,
-            paymentMethod,
-            person,
-            date: dateStr,
-            userId: currentUser ? currentUser.id : '1',
-            createdAt: new Date().toISOString()
-        };
+        const userId = currentUser ? currentUser.id : '1';
 
         try {
-            await window.Storage.saveRecord('transactions', newTx);
+            if (paymentMode === 'installments' && installmentsCount >= 2) {
+                let installmentAmount = 0;
+                let totalAmount = 0;
 
-            // If expense on a credit card, update card usedLimit
-            if (paymentMethod.startsWith('card_') && type === 'expense') {
-                const cardId = paymentMethod.replace('card_', '');
-                const cards = window.Storage.get('cards') || [];
-                const card = cards.find(c => c.id === cardId);
-                if (card) {
-                    card.usedLimit = (card.usedLimit || 0) + amount;
-                    await window.Storage.saveRecord('cards', card);
+                if (installmentValueType === 'total') {
+                    totalAmount = rawAmount;
+                    installmentAmount = Math.round((rawAmount / installmentsCount) * 100) / 100;
+                } else {
+                    installmentAmount = rawAmount;
+                    totalAmount = Math.round((rawAmount * installmentsCount) * 100) / 100;
                 }
+
+                const baseDateParts = dateStr.split('-');
+                const baseYear = parseInt(baseDateParts[0]);
+                const baseMonth = parseInt(baseDateParts[1]) - 1;
+                const baseDay = parseInt(baseDateParts[2]);
+
+                const savePromises = [];
+
+                for (let i = 0; i < installmentsCount; i++) {
+                    const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
+                    const validDay = Math.min(baseDay, lastDayOfTargetMonth);
+                    const finalInstDate = new Date(baseYear, baseMonth + i, validDay);
+
+                    const instYear = finalInstDate.getFullYear();
+                    const instMonth = String(finalInstDate.getMonth() + 1).padStart(2, '0');
+                    const instDay = String(finalInstDate.getDate()).padStart(2, '0');
+                    const instDateStr = `${instYear}-${instMonth}-${instDay}`;
+
+                    const instTx = {
+                        id: window.Utils.generateId(),
+                        type,
+                        description: `${description} (${i + 1}/${installmentsCount})`,
+                        amount: installmentAmount,
+                        category,
+                        paymentMethod,
+                        person,
+                        date: instDateStr,
+                        installmentIndex: i + 1,
+                        totalInstallments: installmentsCount,
+                        userId,
+                        createdAt: new Date().toISOString()
+                    };
+
+                    savePromises.push(window.Storage.saveRecord('transactions', instTx));
+                }
+
+                await Promise.all(savePromises);
+
+                if (paymentMethod.startsWith('card_') && type === 'expense') {
+                    const cardId = paymentMethod.replace('card_', '');
+                    const cards = window.Storage.get('cards') || [];
+                    const card = cards.find(c => c.id === cardId);
+                    if (card) {
+                        card.usedLimit = (card.usedLimit || 0) + totalAmount;
+                        await window.Storage.saveRecord('cards', card);
+                    }
+                }
+
+                window.UI.closeModal('txModal');
+                window.UI.showToast(`Lançamento parcelado em ${installmentsCount}x de ${window.Utils.formatCurrency(installmentAmount)} realizado com sucesso! 🎉`, 'success');
+
+            } else {
+                // À Vista (1x)
+                const newTx = {
+                    id: window.Utils.generateId(),
+                    type,
+                    description,
+                    amount: rawAmount,
+                    category,
+                    paymentMethod,
+                    person,
+                    date: dateStr,
+                    userId,
+                    createdAt: new Date().toISOString()
+                };
+
+                await window.Storage.saveRecord('transactions', newTx);
+
+                if (paymentMethod.startsWith('card_') && type === 'expense') {
+                    const cardId = paymentMethod.replace('card_', '');
+                    const cards = window.Storage.get('cards') || [];
+                    const card = cards.find(c => c.id === cardId);
+                    if (card) {
+                        card.usedLimit = (card.usedLimit || 0) + rawAmount;
+                        await window.Storage.saveRecord('cards', card);
+                    }
+                }
+
+                window.UI.closeModal('txModal');
+                window.UI.showToast('Lançamento realizado com sucesso!', 'success');
             }
 
             if (window.Audit) {
-                window.Audit.log('TRANSACTION_CREATE', { description, amount, type });
+                window.Audit.log('TRANSACTION_CREATE', { description, amount: rawAmount, type, paymentMode });
             }
-
-            window.UI.closeModal('txModal');
-            window.UI.showToast('Lançamento realizado com sucesso!', 'success');
 
             let globalTx = window.Storage.get('transactions') || [];
             if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
