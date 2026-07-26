@@ -448,17 +448,19 @@ class TransactionsController {
 }
 
 const initTransactions = () => {
-    if (!window.transactionsController) {
+    if (!window.transactionsController && document.getElementById('transactionsTableBody')) {
         window.transactionsController = new TransactionsController();
-    } else {
-        window.transactionsController.populateTxModalOptions();
-        window.transactionsController.applyFilters();
     }
 };
 
 window.openNovaTransacaoModal = () => {
     if (!window.transactionsController) {
-        window.transactionsController = new TransactionsController();
+        if (document.getElementById('transactionsTableBody')) {
+            window.transactionsController = new TransactionsController();
+        } else {
+            window.location.href = 'transactions.html';
+            return;
+        }
     }
     window.transactionsController.openNovaTransacaoModal();
 };
