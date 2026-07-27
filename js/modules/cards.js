@@ -397,13 +397,35 @@ class CardsController {
             const isPaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === currentMonthStr);
 
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
-            const totalUsed = cardTxs.reduce((sum, tx) => {
+            
+            // Regra do limite do cartão:
+            // 1. totalUsed: Soma de TODOS os lançamentos não pagos deste cartão (atuais e parcelas futuras)
+            // 2. futureCommitted: Soma das parcelas de meses futuros (mês > mês ativo da fatura) que ainda não foram pagas
+            // 3. currentInvoiceTotal: Valor total da fatura do mês selecionado
+            let totalUsed = 0;
+            let futureCommitted = 0;
+            let currentInvoiceTotal = 0;
+
+            cardTxs.forEach(tx => {
                 const invMonth = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD) : '';
-                return invMonth === currentMonthStr ? sum + (parseFloat(tx.amount) || 0) : sum;
-            }, 0);
+                const amount = parseFloat(tx.amount) || 0;
+                
+                const isTxInvoicePaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === invMonth);
+                
+                if (!isTxInvoicePaid) {
+                    totalUsed += amount;
+                    if (invMonth > currentMonthStr) {
+                        futureCommitted += amount;
+                    }
+                }
+                
+                if (invMonth === currentMonthStr) {
+                    currentInvoiceTotal += amount;
+                }
+            });
             
             const cardLimit = parseFloat(card.limit) || 0;
-            const available = cardLimit - totalUsed;
+            const available = Math.max(0, cardLimit - totalUsed);
             const percentage = cardLimit > 0 ? (totalUsed / cardLimit) * 100 : 0;
             
             let barClass = 'safe';
@@ -453,9 +475,9 @@ class CardsController {
                     </div>
                 </div>
 
-                <!-- Clean Invoice & Limit Summary (Nubank Style with Month Nav) -->
-                <div style="display: flex; flex-direction: column; gap: 0.6rem; background: var(--bg-primary); border-radius: 12px; padding: 0.85rem; border: 1px solid var(--glass-border);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <!-- Clean Invoice & Limit Summary (Nubank Style with Month Nav & 5 Card Metrics) -->
+                <div style="display: flex; flex-direction: column; gap: 0.75rem; background: var(--bg-primary); border-radius: 12px; padding: 0.9rem; border: 1px solid var(--glass-border);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding-bottom: 0.65rem; border-bottom: 1px solid var(--glass-border);">
                         <div>
                             <div style="display: flex; align-items: center; gap: 0.35rem;">
                                 <span style="font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.5px;">Fatura (${formattedMonthLabel})</span>
@@ -465,7 +487,7 @@ class CardsController {
                                 </div>
                             </div>
                             <div style="font-size: 1.25rem; font-weight: 800; color: ${isPaid ? 'var(--success)' : 'var(--text-primary)'}; margin-top: 0.1rem; white-space: nowrap;">
-                                ${window.Utils.formatCurrency(totalUsed)}
+                                ${window.Utils.formatCurrency(currentInvoiceTotal)}
                             </div>
                         </div>
                         <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
@@ -478,14 +500,34 @@ class CardsController {
                         </div>
                     </div>
 
-                    <!-- Sleek Limit Progress Bar -->
-                    <div>
-                        <div class="progress-bar-container" style="height: 6px; border-radius: 3px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 0.35rem;">
-                            <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%; height: 100%; border-radius: 3px;"></div>
+                    <!-- Complete Card Limit Metrics (5 Required Metrics) -->
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; flex-wrap: wrap; gap: 0.25rem;">
+                            <span style="color: var(--text-secondary);">Limite Utilizado: <strong style="color: var(--danger); font-weight: 700;">${window.Utils.formatCurrency(totalUsed)}</strong></span>
+                            <span style="font-weight: 700; color: ${percentage > 80 ? 'var(--danger)' : percentage > 50 ? 'var(--warning)' : 'var(--accent-primary)'};">${percentage.toFixed(1)}% utilizado</span>
                         </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
-                            <span style="white-space: nowrap;">Disponível: <strong style="color: var(--success);">${window.Utils.formatCurrency(available)}</strong></span>
-                            <span style="white-space: nowrap;">Limite: ${window.Utils.formatCurrency(cardLimit)}</span>
+
+                        <!-- Sleek Limit Progress Bar -->
+                        <div class="progress-bar-container" style="height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden;">
+                            <div class="progress-bar ${barClass}" style="width: ${Math.min(percentage, 100)}%; height: 100%; border-radius: 4px;"></div>
+                        </div>
+
+                        <!-- Detail Metrics Grid: Total, Disponível & Parcelado Futuro -->
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.4rem; margin-top: 0.25rem;">
+                            <div style="background: rgba(255,255,255,0.02); padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+                                <div style="font-size: 0.65rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Limite Total</div>
+                                <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-primary); margin-top: 0.1rem;">${window.Utils.formatCurrency(cardLimit)}</div>
+                            </div>
+
+                            <div style="background: rgba(16,185,129,0.05); padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid rgba(16,185,129,0.2);">
+                                <div style="font-size: 0.65rem; color: #10b981; font-weight: 600; text-transform: uppercase;">Limite Disponível</div>
+                                <div style="font-size: 0.85rem; font-weight: 700; color: #10b981; margin-top: 0.1rem;">${window.Utils.formatCurrency(available)}</div>
+                            </div>
+
+                            <div style="background: rgba(245,158,11,0.05); padding: 0.4rem 0.6rem; border-radius: 8px; border: 1px solid rgba(245,158,11,0.2); grid-column: 1 / -1;">
+                                <div style="font-size: 0.65rem; color: #f59e0b; font-weight: 600; text-transform: uppercase;"><i class="fa-solid fa-clock-rotate-left"></i> Parcelas Futuras Comprometidas</div>
+                                <div style="font-size: 0.85rem; font-weight: 700; color: #f59e0b; margin-top: 0.1rem;">${window.Utils.formatCurrency(futureCommitted)}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
