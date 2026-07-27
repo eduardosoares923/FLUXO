@@ -415,6 +415,25 @@ class UsersApp {
                 user.status = status;
                 user.permissions = perms;
                 
+                // Synchronize Firebase Auth if editing current logged in user
+                if (typeof firebase !== 'undefined' && firebase.auth().currentUser && firebase.auth().currentUser.uid === user.id) {
+                    const fbUser = firebase.auth().currentUser;
+                    if (fbUser.email && fbUser.email.toLowerCase() !== authEmail.toLowerCase()) {
+                        try {
+                            await fbUser.updateEmail(authEmail);
+                        } catch (emailErr) {
+                            console.warn('Firebase Auth updateEmail warning:', emailErr);
+                        }
+                    }
+                    if (password) {
+                        try {
+                            await fbUser.updatePassword(password);
+                        } catch (pwdErr) {
+                            console.warn('Firebase Auth updatePassword warning:', pwdErr);
+                        }
+                    }
+                }
+
                 await window.Storage.saveRecord('users', user);
                 if (window.Audit) {
                     window.Audit.log('USER_UPDATE', { userId: user.id, username, role, person, status });

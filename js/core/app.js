@@ -178,10 +178,23 @@ class App {
             userObj.email = email;
             userObj.avatar = avatar;
 
-            if (password) {
-                userObj.password = password;
-                if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
-                    await firebase.auth().currentUser.updatePassword(password);
+            const targetAuthEmail = email || `${username}@fluxo.app`;
+            if (typeof firebase !== 'undefined' && firebase.auth().currentUser) {
+                const fbUser = firebase.auth().currentUser;
+                if (fbUser.email && fbUser.email.toLowerCase() !== targetAuthEmail.toLowerCase()) {
+                    try {
+                        await fbUser.updateEmail(targetAuthEmail);
+                    } catch (emailErr) {
+                        console.warn("Firebase Auth updateEmail warning:", emailErr);
+                    }
+                }
+                if (password) {
+                    userObj.password = password;
+                    try {
+                        await fbUser.updatePassword(password);
+                    } catch (pwdErr) {
+                        console.warn("Firebase Auth updatePassword warning:", pwdErr);
+                    }
                 }
             }
 
