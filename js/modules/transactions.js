@@ -375,7 +375,13 @@ class TransactionsController {
 
             if (paymentMode === 'recurring') {
                 // Fixa / Recorrente (Spotify, YouTube Premium, Faculdade, Claro Flex...)
-                const recurringMonths = parseInt(document.getElementById('txRecurringMonths')?.value) || 12;
+                const frequency = document.getElementById('txRecurringFrequency')?.value || 'mensal';
+                const monthsRaw = document.getElementById('txRecurringMonths')?.value || '12';
+                const status = document.getElementById('txRecurringStatus')?.value || 'ativo';
+
+                const isContinuous = monthsRaw === 'continuous';
+                const count = isContinuous ? 12 : (parseInt(monthsRaw) || 12);
+                const isPaused = status === 'pausado';
 
                 const baseDateParts = dateStr.split('-');
                 const baseYear = parseInt(baseDateParts[0]);
@@ -383,13 +389,22 @@ class TransactionsController {
                 const baseDay = parseInt(baseDateParts[2]);
 
                 const savePromises = [];
-                for (let i = 0; i < recurringMonths; i++) {
-                    const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
-                    const validDay = Math.min(baseDay, lastDayOfTargetMonth);
-                    const finalInstDate = new Date(baseYear, baseMonth + i, validDay);
-                    const instYear = finalInstDate.getFullYear();
-                    const instMonth = String(finalInstDate.getMonth() + 1).padStart(2, '0');
-                    const instDay = String(finalInstDate.getDate()).padStart(2, '0');
+                for (let i = 0; i < count; i++) {
+                    let targetDate;
+                    if (frequency === 'semanal') {
+                        targetDate = new Date(baseYear, baseMonth, baseDay + (i * 7));
+                    } else if (frequency === 'anual') {
+                        targetDate = new Date(baseYear + i, baseMonth, baseDay);
+                    } else {
+                        // Mensal (Default)
+                        const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
+                        const validDay = Math.min(baseDay, lastDayOfTargetMonth);
+                        targetDate = new Date(baseYear, baseMonth + i, validDay);
+                    }
+
+                    const instYear = targetDate.getFullYear();
+                    const instMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
+                    const instDay = String(targetDate.getDate()).padStart(2, '0');
                     const instDateStr = `${instYear}-${instMonth}-${instDay}`;
 
                     const recTx = {
@@ -402,6 +417,10 @@ class TransactionsController {
                         person,
                         date: instDateStr,
                         isRecurring: true,
+                        recurringFrequency: frequency,
+                        isContinuous,
+                        recurringStatus: status,
+                        isPaused,
                         userId,
                         createdAt: new Date().toISOString()
                     };
@@ -409,22 +428,23 @@ class TransactionsController {
                 }
                 await Promise.all(savePromises);
 
-                if (paymentMethod.startsWith('card_') && type === 'expense') {
+                if (paymentMethod.startsWith('card_') && type === 'expense' && !isPaused) {
                     const cardId = paymentMethod.replace('card_', '');
                     const cards = window.Storage.get('cards') || [];
                     const card = cards.find(c => c.id === cardId);
                     if (card) {
-                        card.usedLimit = (card.usedLimit || 0) + (rawAmount * recurringMonths);
+                        card.usedLimit = (card.usedLimit || 0) + (rawAmount * count);
                         await window.Storage.saveRecord('cards', card);
                     }
                 }
 
                 if (window.Audit) {
-                    window.Audit.log('TRANSACTION_CREATE_RECURRING', { description, amount: rawAmount, type, months: recurringMonths });
+                    window.Audit.log('TRANSACTION_CREATE_RECURRING', { description, amount: rawAmount, type, frequency, count, status });
                 }
 
                 window.UI.closeModal('txModal');
-                window.UI.showToast(`Lançamento fixo mensal "${description}" (${window.Utils.formatCurrency(rawAmount)}/mês) agendado para os próximos ${recurringMonths} meses! 🔄`, 'success');
+                const statusLabel = isPaused ? ' (Pausado ⏸️)' : ' 🎉';
+                window.UI.showToast(`Lançamento recorrente "${description}" (${frequency}) de ${window.Utils.formatCurrency(rawAmount)} agendado!${statusLabel}`, 'success');
 
             } else if (paymentMode === 'installments' && installmentsCount >= 2) {
                 // Parcelado
