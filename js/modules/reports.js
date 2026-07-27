@@ -11,27 +11,55 @@ class ReportsController {
     }
 
     loadData() {
-        this.transactions = Storage.get('transactions') || [];
-        this.accounts = Storage.get('accounts') || [];
-        this.cards = Storage.get('cards') || [];
+        let txs = Storage.get('transactions') || [];
+        let accs = Storage.get('accounts') || [];
+        let crds = Storage.get('cards') || [];
+        const persons = Storage.get('persons') || [];
+
+        if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+            txs = txs.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
+            accs = accs.filter(a => window.Auth.canAccessPerson(a.owner));
+            crds = crds.filter(c => window.Auth.canAccessPerson(c.holder));
+        }
+
+        this.transactions = txs;
+        this.accounts = accs;
+        this.cards = crds;
         
         this.personMap = new Map();
+
+        // 1. Adicionar da lista oficial de pessoas em Storage
+        persons.forEach(p => {
+            const name = typeof p === 'string' ? p.trim() : (p && p.name ? String(p.name).trim() : '');
+            if (name && !this.personMap.has(name.toLowerCase())) {
+                this.personMap.set(name.toLowerCase(), name);
+            }
+        });
+
+        // 2. Adicionar padrões se ainda estiver vazio
+        if (this.personMap.size === 0) {
+            ['Eduardo', 'Mãe', 'Rodrigo'].forEach(name => {
+                this.personMap.set(name.toLowerCase(), name);
+            });
+        }
+
+        // 3. Adicionar das contas, cartões e transações
         this.accounts.forEach(a => { 
-            if (a.owner) {
-                const name = a.owner.trim();
-                if (!this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
+            if (a && a.owner) {
+                const name = String(a.owner).trim();
+                if (name && !this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
             } 
         });
         this.cards.forEach(c => { 
-            if (c.holder) {
-                const name = c.holder.trim();
-                if (!this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
+            if (c && c.holder) {
+                const name = String(c.holder).trim();
+                if (name && !this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
             } 
         });
         this.transactions.forEach(tx => {
-            if (tx.person) {
-                const name = tx.person.trim();
-                if (!this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
+            if (tx && tx.person) {
+                const name = String(tx.person).trim();
+                if (name && !this.personMap.has(name.toLowerCase())) this.personMap.set(name.toLowerCase(), name);
             }
         });
     }
@@ -82,22 +110,9 @@ class ReportsController {
         select.innerHTML = '<option value="todos">Todos (Consolidado)</option>';
         
         this.personMap.forEach((originalName, lowerName) => {
-            // Verifica se a pessoa tem dados pra não listar fantasmas
-            let hasData = false;
-            let pInc=0, pExp=0, pCard=0, pBal=0;
-            const pAccounts = this.accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === lowerName).map(a => { pBal += parseFloat(a.balance)||0; return a.id === 'default_account' ? 'account' : `acc_${a.id}` });
-            const pCards = this.cards.filter(c => c.holder && c.holder.trim().toLowerCase() === lowerName).map(c => `card_${c.id}`);
-            this.transactions.forEach(tx => {
-                let belongs = false;
-                if (tx.person && tx.person.trim().toLowerCase() === lowerName) belongs = true;
-                else if (!tx.person && (pAccounts.includes(tx.paymentMethod) || pCards.includes(tx.paymentMethod))) belongs = true;
-                if(belongs) {
-                    if(tx.paymentMethod && tx.paymentMethod.startsWith('card_')) pCard += tx.amount;
-                    else if(tx.type === 'income') pInc += tx.amount;
-                    else pExp += tx.amount;
-                }
-            });
-            if(pInc === 0 && pExp === 0 && pCard === 0 && pBal === 0) return; // skip empty
+            if (window.currentUser && window.Auth && !window.Auth.canAccessPerson(originalName)) {
+                return;
+            }
 
             const opt = document.createElement('option');
             opt.value = lowerName;
@@ -115,7 +130,7 @@ class ReportsController {
             this.filteredAccounts = this.accounts;
             this.filteredCards = this.cards;
         } else {
-            const targetLower = this.currentFilter;
+            const targetLower = this.currentFilter.trim().toLowerCase();
             this.filteredAccounts = this.accounts.filter(a => a.owner && a.owner.trim().toLowerCase() === targetLower);
             const pAccountsIds = this.filteredAccounts.map(a => a.id === 'default_account' ? 'account' : `acc_${a.id}`);
             
@@ -124,7 +139,9 @@ class ReportsController {
 
             this.filteredTx = this.transactions.filter(tx => {
                 if (tx.person && tx.person.trim().toLowerCase() === targetLower) return true;
-                if (!tx.person && (pAccountsIds.includes(tx.paymentMethod) || pCardsIds.includes(tx.paymentMethod))) return true;
+                if (pAccountsIds.includes(tx.paymentMethod) || pCardsIds.includes(tx.paymentMethod)) {
+                    if (!tx.person || tx.person.trim().toLowerCase() === targetLower) return true;
+                }
                 return false;
             });
         }
@@ -469,8 +486,23 @@ class ReportsController {
         const personExp = {};
         this.filteredTx.forEach(tx => {
             if (tx.type === 'expense') {
-                let p = tx.person ? tx.person.trim() : 'Outros';
-                personExp[p] = (personExp[p] || 0) + tx.amount;
+                let p = tx.person ? tx.person.trim() : '';
+                if (!p && tx.paymentMethod) {
+                    if (tx.paymentMethod.startsWith('card_')) {
+                        const cardId = tx.paymentMethod.replace('card_', '');
+                        const card = this.cards.find(c => c.id === cardId);
+                        if (card && card.holder) p = card.holder.trim();
+                    } else {
+                        const accId = tx.paymentMethod.replace('acc_', '');
+                        const acc = this.accounts.find(a => a.id === accId || (accId === 'account' && a.id === 'default_account'));
+                        if (acc && acc.owner) p = acc.owner.trim();
+                    }
+                }
+                if (!p) p = 'Outros';
+
+                const lowerP = p.toLowerCase();
+                const displayName = this.personMap.get(lowerP) || p;
+                personExp[displayName] = (personExp[displayName] || 0) + tx.amount;
             }
         });
 
