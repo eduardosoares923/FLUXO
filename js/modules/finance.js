@@ -9,22 +9,8 @@ class FinanceController {
         
         this.transactions = allTransactions;
         
-        let navDate = new Date();
-        if (allTransactions.length > 0) {
-            let latestDate = null;
-            allTransactions.forEach(tx => {
-                const d = window.Utils.parseTxDate ? window.Utils.parseTxDate(tx.date) : new Date(tx.date);
-                if (d && !isNaN(d.getTime())) {
-                    if (!latestDate || d > latestDate) {
-                        latestDate = d;
-                    }
-                }
-            });
-            if (latestDate) {
-                navDate = new Date(latestDate.getFullYear(), latestDate.getMonth(), 1);
-            }
-        }
-        this.currentNavDate = navDate;
+        const now = new Date();
+        this.currentNavDate = new Date(now.getFullYear(), now.getMonth(), 1);
 
         this.init();
         this.bindEvents();
