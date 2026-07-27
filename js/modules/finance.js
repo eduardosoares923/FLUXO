@@ -834,12 +834,12 @@ class FinanceController {
                     
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
-                        <td>${window.Utils.formatDate(tx.date)}</td>
-                        <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}</td>
-                        <td>${window.Utils.escapeHTML(tx.category)}</td>
-                        <td>${window.Utils.escapeHTML(methodName)}</td>
-                        <td>${window.Utils.escapeHTML(tx.person || 'Eu')}</td>
-                        <td style="color: ${amountColor}; font-weight: 600;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
+                        <td style="white-space: nowrap; font-size: 0.85rem; color: var(--text-secondary);">${window.Utils.formatDate(tx.date)}</td>
+                        <td style="font-weight: 600; color: var(--text-primary);">${window.Utils.escapeHTML(tx.description)}</td>
+                        <td><span style="font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 0.2rem 0.6rem; border-radius: 6px; color: var(--text-secondary);">${window.Utils.escapeHTML(tx.category)}</span></td>
+                        <td style="font-size: 0.85rem; color: var(--text-secondary);">${window.Utils.escapeHTML(methodName)}</td>
+                        <td><span style="font-size: 0.8rem; font-weight: 600; color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 0.15rem 0.5rem; border-radius: 4px;">${window.Utils.escapeHTML(tx.person || 'Eu')}</span></td>
+                        <td style="color: ${amountColor}; font-weight: 700; text-align: right; white-space: nowrap;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
                     `;
                     recentTbody.appendChild(tr);
                 });

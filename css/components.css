@@ -246,3 +246,55 @@
   background: var(--glass-border);
   margin: 0.5rem 0;
 }
+
+/* ==========================================================================
+   TABLE STYLING (UNIFIED DESIGN SYSTEM)
+   ========================================================================== */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+table,
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+table th,
+table td,
+.table th,
+.table td {
+  padding: 0.85rem 1.25rem !important;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+table th,
+.table th {
+  background: rgba(0, 0, 0, 0.25);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-secondary);
+  font-weight: 700;
+}
+
+[data-theme="light"] table th,
+[data-theme="light"] .table th {
+  background: #f1f5f9;
+}
+
+table tbody tr:hover,
+.table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+[data-theme="light"] table tbody tr:hover,
+[data-theme="light"] .table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
