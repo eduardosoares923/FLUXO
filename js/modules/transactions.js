@@ -84,14 +84,15 @@ class TransactionsController {
             txForm.addEventListener('submit', (e) => this.saveTransaction(e));
         }
 
-        // Installment mode toggle
+        // Payment mode toggle (Single / Installments / Recurring)
         const paymentModeSelect = document.getElementById('txPaymentMode');
         const installmentsGroup = document.getElementById('txInstallmentsGroup');
+        const recurringGroup = document.getElementById('txRecurringGroup');
         if (paymentModeSelect) {
             paymentModeSelect.addEventListener('change', () => {
-                if (installmentsGroup) {
-                    installmentsGroup.style.display = paymentModeSelect.value === 'installments' ? 'block' : 'none';
-                }
+                const val = paymentModeSelect.value;
+                if (installmentsGroup) installmentsGroup.style.display = val === 'installments' ? 'block' : 'none';
+                if (recurringGroup) recurringGroup.style.display = val === 'recurring' ? 'block' : 'none';
                 this.updateInstallmentPreview();
             });
         }
@@ -224,9 +225,11 @@ class TransactionsController {
         const dateInput = document.getElementById('txDate');
         if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
-        // Reset installment UI
+        // Reset mode groups
         const installmentsGroup = document.getElementById('txInstallmentsGroup');
         if (installmentsGroup) installmentsGroup.style.display = 'none';
+        const recurringGroup = document.getElementById('txRecurringGroup');
+        if (recurringGroup) recurringGroup.style.display = 'none';
         const preview = document.getElementById('txInstallmentPreview');
         if (preview) preview.textContent = '';
 
@@ -274,6 +277,8 @@ class TransactionsController {
 
         const installmentsGroup = document.getElementById('txInstallmentsGroup');
         if (installmentsGroup) installmentsGroup.style.display = 'none';
+        const recurringGroup = document.getElementById('txRecurringGroup');
+        if (recurringGroup) recurringGroup.style.display = 'none';
 
         const preview = document.getElementById('txInstallmentPreview');
         if (preview) preview.textContent = '';
@@ -368,7 +373,60 @@ class TransactionsController {
                 }
             }
 
-            if (paymentMode === 'installments' && installmentsCount >= 2) {
+            if (paymentMode === 'recurring') {
+                // Fixa / Recorrente (Spotify, YouTube Premium, Faculdade, Claro Flex...)
+                const recurringMonths = parseInt(document.getElementById('txRecurringMonths')?.value) || 12;
+
+                const baseDateParts = dateStr.split('-');
+                const baseYear = parseInt(baseDateParts[0]);
+                const baseMonth = parseInt(baseDateParts[1]) - 1;
+                const baseDay = parseInt(baseDateParts[2]);
+
+                const savePromises = [];
+                for (let i = 0; i < recurringMonths; i++) {
+                    const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
+                    const validDay = Math.min(baseDay, lastDayOfTargetMonth);
+                    const finalInstDate = new Date(baseYear, baseMonth + i, validDay);
+                    const instYear = finalInstDate.getFullYear();
+                    const instMonth = String(finalInstDate.getMonth() + 1).padStart(2, '0');
+                    const instDay = String(finalInstDate.getDate()).padStart(2, '0');
+                    const instDateStr = `${instYear}-${instMonth}-${instDay}`;
+
+                    const recTx = {
+                        id: window.Utils.generateId(),
+                        type,
+                        description: description,
+                        amount: rawAmount,
+                        category,
+                        paymentMethod,
+                        person,
+                        date: instDateStr,
+                        isRecurring: true,
+                        userId,
+                        createdAt: new Date().toISOString()
+                    };
+                    savePromises.push(window.Storage.saveRecord('transactions', recTx));
+                }
+                await Promise.all(savePromises);
+
+                if (paymentMethod.startsWith('card_') && type === 'expense') {
+                    const cardId = paymentMethod.replace('card_', '');
+                    const cards = window.Storage.get('cards') || [];
+                    const card = cards.find(c => c.id === cardId);
+                    if (card) {
+                        card.usedLimit = (card.usedLimit || 0) + (rawAmount * recurringMonths);
+                        await window.Storage.saveRecord('cards', card);
+                    }
+                }
+
+                if (window.Audit) {
+                    window.Audit.log('TRANSACTION_CREATE_RECURRING', { description, amount: rawAmount, type, months: recurringMonths });
+                }
+
+                window.UI.closeModal('txModal');
+                window.UI.showToast(`Lançamento fixo mensal "${description}" (${window.Utils.formatCurrency(rawAmount)}/mês) agendado para os próximos ${recurringMonths} meses! 🔄`, 'success');
+
+            } else if (paymentMode === 'installments' && installmentsCount >= 2) {
                 // Parcelado
                 let installmentAmount, totalAmount;
                 if (installmentValueType === 'total') {
@@ -544,11 +602,12 @@ class TransactionsController {
             const badgeText = isIncome ? 'Receita' : 'Despesa';
             const sign = isIncome ? '+' : '-';
             const amountColor = isIncome ? 'var(--success)' : 'var(--text-primary)';
+            const recBadge = tx.isRecurring ? `<span style="font-size: 0.7rem; background: rgba(99,102,241,0.15); color: #818cf8; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="fa-solid fa-rotate"></i> Fixa</span>` : '';
 
             htmlBuffer += `
                 <tr>
                     <td>${window.Utils.formatDate(tx.date)}</td>
-                    <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}</td>
+                    <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}${recBadge}</td>
                     <td>${window.Utils.escapeHTML(tx.category)}</td>
                     <td>${window.Utils.escapeHTML(this.getPaymentMethodName(tx.paymentMethod))}</td>
                     <td><span class="tx-badge ${badgeClass}">${badgeText}</span></td>

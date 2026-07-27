@@ -192,6 +192,7 @@
                     <select class="form-control" id="txPaymentMode">
                         <option value="single">À Vista (1x)</option>
                         <option value="installments">Parcelado</option>
+                        <option value="recurring">Fixa / Recorrente (Spotify, Faculdade, Claro Flex...)</option>
                     </select>
                 </div>
                 <div class="form-group" id="txInstallmentsGroup" style="display: none; background: rgba(255,255,255,0.03); padding: 0.85rem; border-radius: 8px; border: 1px solid var(--glass-border);">
@@ -223,6 +224,24 @@
                         </div>
                     </div>
                     <div id="txInstallmentPreview" style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--accent-primary); font-weight: 700;"></div>
+                </div>
+
+                <div class="form-group" id="txRecurringGroup" style="display: none; background: rgba(99, 102, 241, 0.05); padding: 0.85rem; border-radius: 8px; border: 1px solid rgba(99, 102, 241, 0.25);">
+                    <label class="form-label" style="font-size: 0.8rem; color: var(--accent-primary); font-weight: 700;"><i class="fa-solid fa-rotate"></i> Recorrência Mensal</label>
+                    <div style="display: flex; gap: 0.75rem; align-items: center; margin-top: 0.25rem;">
+                        <div style="flex: 1;">
+                            <label class="form-label" style="font-size: 0.75rem;">Repetir por quantos meses?</label>
+                            <select class="form-control" id="txRecurringMonths">
+                                <option value="12">12 Meses (1 Ano)</option>
+                                <option value="6">6 Meses</option>
+                                <option value="24">24 Meses (2 Anos)</option>
+                                <option value="36">36 Meses (3 Anos)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.4rem; font-style: italic;">
+                        💡 O valor digitado é a mensalidade fixa. Será replicado todo mês na mesma data!
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Pessoa</label>
