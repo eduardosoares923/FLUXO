@@ -1,7 +1,38 @@
 class App {
     constructor() {
         this.checkAuth();
+        this.ensureDefaultPersons();
         this.bindEvents();
+    }
+
+    async ensureDefaultPersons() {
+        try {
+            if (!window.Storage) return;
+            let persons = window.Storage.get('persons') || [];
+            if (!Array.isArray(persons)) persons = [];
+
+            const defaultPersons = [
+                { id: 'person_eduardo', name: 'Eduardo', color: '#6366f1' },
+                { id: 'person_mae', name: 'Mãe', color: '#ec4899' },
+                { id: 'person_rodrigo', name: 'Rodrigo', color: '#10b981' }
+            ];
+
+            for (const defP of defaultPersons) {
+                const exists = persons.some(p => {
+                    const pName = typeof p === 'string' ? p : (p && p.name ? p.name : '');
+                    return pName.trim().toLowerCase() === defP.name.toLowerCase();
+                });
+
+                if (!exists) {
+                    persons.push(defP);
+                    if (window.Storage.saveRecord) {
+                        await window.Storage.saveRecord('persons', defP);
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Erro ao assegurar pessoas padrão:', e);
+        }
     }
 
     checkAuth() {

@@ -29,17 +29,26 @@ class AccountsController {
 
     loadPersons() {
         let stored = window.Storage.get('persons') || [];
-        if (stored.length === 0) {
-            // Seed initial clean persons list
-            const defaultPersons = [
-                { id: 'p_eduardo', name: 'Eduardo', color: '#6366f1' },
-                { id: 'p_mae', name: 'Mãe', color: '#ec4899' },
-                { id: 'p_rodrigo', name: 'Rodrigo', color: '#10b981' }
-            ];
-            defaultPersons.forEach(p => window.Storage.saveRecord('persons', p));
-            stored = defaultPersons;
-        }
-        this.persons = stored;
+        const defaultPersons = [
+            { id: 'person_eduardo', name: 'Eduardo', color: '#6366f1' },
+            { id: 'person_mae', name: 'Mãe', color: '#ec4899' },
+            { id: 'person_rodrigo', name: 'Rodrigo', color: '#10b981' }
+        ];
+
+        const mergedMap = new Map();
+        defaultPersons.forEach(p => mergedMap.set(p.name.toLowerCase(), p));
+
+        stored.forEach(p => {
+            const name = typeof p === 'string' ? p : (p && p.name ? p.name : '');
+            if (name) {
+                const lower = name.trim().toLowerCase();
+                if (!mergedMap.has(lower)) {
+                    mergedMap.set(lower, typeof p === 'object' ? p : { id: `p_${lower}`, name: name.trim(), color: '#3b82f6' });
+                }
+            }
+        });
+
+        this.persons = Array.from(mergedMap.values());
         this.populateOwnerSelects();
     }
 
