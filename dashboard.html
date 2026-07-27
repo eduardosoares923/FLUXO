@@ -151,6 +151,31 @@
                             Próximos 30 dias
                         </div>
                     </div>
+
+                    <div class="summary-card" style="border-left: 4px solid #818cf8;">
+                        <div class="card-title">
+                            Despesas Fixas Mensais <i class="fa-solid fa-rotate" style="color: #818cf8;"></i>
+                        </div>
+                        <div class="card-value" id="monthlyFixedExpenses" style="color: #818cf8;">R$ 0,00</div>
+                        <div class="trend-indicator" id="fixedExpenseTrend" style="font-size: 0.85rem; margin-top: 0.5rem; color: var(--text-secondary);">
+                            <span>0</span> itens fixos ativos
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Painel de Despesas Fixas Mensais (Spotify, Faculdade, Claro Flex...) -->
+                <div class="glass-panel" style="padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h3 style="margin: 0; font-size: 1.1rem;"><i class="fa-solid fa-rotate" style="color: #818cf8;"></i> Despesas Fixas Mensais (Spotify, YouTube Premium, Faculdade, Claro Flex...)</h3>
+                        <a href="transactions.html" class="btn btn-link" style="font-size: 0.85rem; text-decoration: none;">Gerenciar Lançamentos</a>
+                    </div>
+                    <div id="dashboardFixedList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem;">
+                        <!-- Preenchido via JS -->
+                    </div>
+                    <div style="margin-top: 1.25rem; padding-top: 0.85rem; border-top: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 0.95rem; flex-wrap: wrap; gap: 0.75rem;">
+                        <span>Total Fixo Mensal: <span id="dashboardFixedTotal" style="color: #818cf8;">R$ 0,00</span></span>
+                        <span style="font-size: 0.85rem; color: var(--text-secondary);">Comprometimento da Receita: <span id="dashboardFixedRatio" style="color: var(--warning); font-weight: 700;">0%</span></span>
+                    </div>
                 </div>
 
                 <!-- Charts Section -->

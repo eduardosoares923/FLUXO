@@ -927,6 +927,53 @@ class FinanceController {
         const ccTotalEl = document.getElementById('creditCardTotal');
         if (ccTotalEl) ccTotalEl.textContent = window.Utils.formatCurrency(totalCreditCard);
 
+        // --- Calculate & Render Fixed Monthly Expenses ---
+        const fixedTxs = currentPeriodTxs.filter(tx => tx.isRecurring || (tx.description && (tx.description.toLowerCase().includes('(fixa)') || tx.description.toLowerCase().includes('spotify') || tx.description.toLowerCase().includes('faculdade') || tx.description.toLowerCase().includes('claro flex') || tx.description.toLowerCase().includes('youtube premium'))));
+        
+        let totalFixedExpenses = 0;
+        fixedTxs.forEach(tx => {
+            if (tx.type === 'expense') totalFixedExpenses += tx.amount;
+        });
+
+        const fixedValEl = document.getElementById('monthlyFixedExpenses');
+        if (fixedValEl) fixedValEl.textContent = window.Utils.formatCurrency(totalFixedExpenses);
+
+        const fixedTrendEl = document.getElementById('fixedExpenseTrend');
+        if (fixedTrendEl) {
+            fixedTrendEl.innerHTML = `<span>${fixedTxs.length}</span> item(ns) fixo(s) ativo(s)`;
+        }
+
+        const dashboardFixedList = document.getElementById('dashboardFixedList');
+        if (dashboardFixedList) {
+            if (fixedTxs.length === 0) {
+                dashboardFixedList.innerHTML = `<div style="grid-column: 1 / -1; color: var(--text-secondary); font-size: 0.85rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed var(--glass-border);">Nenhuma despesa fixa mensal cadastrada neste período. Use a opção "Fixa / Recorrente" ao criar um novo lançamento.</div>`;
+            } else {
+                let listHtml = '';
+                fixedTxs.forEach(tx => {
+                    const personText = tx.person ? ` &bull; ${window.Utils.escapeHTML(tx.person)}` : '';
+                    listHtml += `
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(tx.description)}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">${window.Utils.escapeHTML(tx.category)}${personText}</div>
+                            </div>
+                            <div style="font-weight: 700; color: #818cf8; font-size: 0.95rem;">${window.Utils.formatCurrency(tx.amount)}</div>
+                        </div>
+                    `;
+                });
+                dashboardFixedList.innerHTML = listHtml;
+            }
+        }
+
+        const fixedTotalEl = document.getElementById('dashboardFixedTotal');
+        if (fixedTotalEl) fixedTotalEl.textContent = window.Utils.formatCurrency(totalFixedExpenses);
+
+        const fixedRatioEl = document.getElementById('dashboardFixedRatio');
+        if (fixedRatioEl) {
+            const ratio = totalIncome > 0 ? Math.round((totalFixedExpenses / totalIncome) * 100) : 0;
+            fixedRatioEl.textContent = `${ratio}%`;
+        }
+
         // --- 4. Update Trends ---
         this.updateTrendIndicator('balanceTrend', currentBalance, prevBalance, true);
         this.updateTrendIndicator('incomeTrend', totalIncome, prevIncome, true);

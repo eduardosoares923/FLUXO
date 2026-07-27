@@ -602,12 +602,19 @@ class TransactionsController {
             const badgeText = isIncome ? 'Receita' : 'Despesa';
             const sign = isIncome ? '+' : '-';
             const amountColor = isIncome ? 'var(--success)' : 'var(--text-primary)';
-            const recBadge = tx.isRecurring ? `<span style="font-size: 0.7rem; background: rgba(99,102,241,0.15); color: #818cf8; padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.2rem;"><i class="fa-solid fa-rotate"></i> Fixa</span>` : '';
+            let modeBadge = '';
+            if (tx.isRecurring || (tx.description && tx.description.toLowerCase().includes('(fixa)'))) {
+                modeBadge = `<span style="font-size: 0.7rem; background: rgba(99,102,241,0.15); color: #818cf8; border: 1px solid rgba(99,102,241,0.3); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.25rem;"><i class="fa-solid fa-rotate"></i> Fixa</span>`;
+            } else if (tx.totalInstallments && tx.totalInstallments > 1) {
+                modeBadge = `<span style="font-size: 0.7rem; background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 700; margin-left: 0.35rem; display: inline-flex; align-items: center; gap: 0.25rem;"><i class="fa-solid fa-layer-group"></i> ${tx.installmentIndex || 1}/${tx.totalInstallments}</span>`;
+            } else {
+                modeBadge = `<span style="font-size: 0.7rem; background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600; margin-left: 0.35rem;">À Vista</span>`;
+            }
 
             htmlBuffer += `
                 <tr>
                     <td>${window.Utils.formatDate(tx.date)}</td>
-                    <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}${recBadge}</td>
+                    <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}${modeBadge}</td>
                     <td>${window.Utils.escapeHTML(tx.category)}</td>
                     <td>${window.Utils.escapeHTML(this.getPaymentMethodName(tx.paymentMethod))}</td>
                     <td><span class="tx-badge ${badgeClass}">${badgeText}</span></td>
