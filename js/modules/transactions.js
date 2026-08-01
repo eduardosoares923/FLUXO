@@ -896,14 +896,14 @@ class TransactionsController {
                     ${personCell}
                     <td><span class="tx-badge ${badgeClass}">${badgeText}</span></td>
                     <td style="color: ${amountColor}; font-weight: 600;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
-                    <td class="tx-actions" style="display: flex; gap: 0.35rem; justify-content: flex-end;" onclick="event.stopPropagation()">
-                        <button class="btn btn-ghost info btn-sm" title="Ver Detalhes" data-action="details" data-id="${tx.id}">
+                    <td class="tx-actions" style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+                        <button type="button" class="btn btn-ghost info btn-sm" title="Ver Detalhes" onclick="event.stopPropagation(); window.transactionsController.openDetailsModal('${tx.id}')">
                             <i class="fa-solid fa-eye"></i>
                         </button>
-                        <button class="btn btn-ghost primary btn-sm" title="Editar" data-action="edit" data-id="${tx.id}">
+                        <button type="button" class="btn btn-ghost primary btn-sm" title="Editar" onclick="event.stopPropagation(); window.transactionsController.editTransaction('${tx.id}')">
                             <i class="fa-solid fa-pen"></i>
                         </button>
-                        <button class="btn btn-ghost danger btn-sm" title="Excluir" data-action="delete" data-id="${tx.id}">
+                        <button type="button" class="btn btn-ghost danger btn-sm" title="Excluir" onclick="event.stopPropagation(); window.transactionsController.deleteTransaction('${tx.id}')">
                             <i class="fa-solid fa-trash"></i>
                         </button>
                     </td>
