@@ -101,7 +101,34 @@ class TransactionsController {
         const txAmountInput = document.getElementById('txAmount');
         if (txInstCount) txInstCount.addEventListener('change', () => this.updateInstallmentPreview());
         if (txInstValType) txInstValType.addEventListener('change', () => this.updateInstallmentPreview());
-        if (txAmountInput) txAmountInput.addEventListener('input', () => this.updateInstallmentPreview());
+        if (txAmountInput) txAmountInput.addEventListener('input', () => {
+            this.updateInstallmentPreview();
+            this.updateSplitSummary();
+        });
+
+        // Split Purchase Toggle & Handlers
+        const txEnableSplit = document.getElementById('txEnableSplit');
+        const txSplitGroup = document.getElementById('txSplitGroup');
+        const txSinglePersonGroup = document.getElementById('txSinglePersonGroup');
+        const txPerson = document.getElementById('txPerson');
+
+        if (txEnableSplit) {
+            txEnableSplit.addEventListener('change', () => {
+                const isSplit = txEnableSplit.checked;
+                if (txSplitGroup) txSplitGroup.style.display = isSplit ? 'block' : 'none';
+                if (txSinglePersonGroup) txSinglePersonGroup.style.display = isSplit ? 'none' : 'block';
+                if (txPerson) {
+                    if (isSplit) txPerson.removeAttribute('required');
+                    else txPerson.setAttribute('required', 'required');
+                }
+                this.updateSplitSummary();
+            });
+        }
+
+        const btnSplitEqual = document.getElementById('btnSplitEqual');
+        if (btnSplitEqual) {
+            btnSplitEqual.addEventListener('click', () => this.splitEqually());
+        }
 
         // Event Delegation for Table Actions
         const tbody = document.getElementById('transactionsTableBody');
@@ -182,6 +209,46 @@ class TransactionsController {
             });
         }
 
+        // Populate Split Persons List with custom amount inputs
+        const txSplitPersonsList = document.getElementById('txSplitPersonsList');
+        if (txSplitPersonsList) {
+            txSplitPersonsList.innerHTML = '';
+            let personNames = persons.map(p => p.name.trim());
+            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+
+            personNames.forEach(pName => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(255,255,255,0.03); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid var(--glass-border);';
+                row.innerHTML = `
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600; margin: 0; flex: 1;">
+                        <input type="checkbox" class="tx-split-cb" data-person="${window.Utils.escapeHTML(pName)}" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+                        <span>${window.Utils.escapeHTML(pName)}</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 0.25rem;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">R$</span>
+                        <input type="number" step="0.01" min="0" class="form-control tx-split-val" data-person="${window.Utils.escapeHTML(pName)}" placeholder="0,00" style="width: 105px; padding: 0.25rem 0.5rem; font-size: 0.85rem;" disabled>
+                    </div>
+                `;
+                txSplitPersonsList.appendChild(row);
+            });
+
+            txSplitPersonsList.querySelectorAll('.tx-split-cb').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const pName = e.target.getAttribute('data-person');
+                    const valInput = txSplitPersonsList.querySelector(`.tx-split-val[data-person="${CSS.escape(pName)}"]`);
+                    if (valInput) {
+                        valInput.disabled = !e.target.checked;
+                        if (!e.target.checked) valInput.value = '';
+                    }
+                    this.updateSplitSummary();
+                });
+            });
+
+            txSplitPersonsList.querySelectorAll('.tx-split-val').forEach(valInput => {
+                valInput.addEventListener('input', () => this.updateSplitSummary());
+            });
+        }
+
         const dateInput = document.getElementById('txDate');
         if (dateInput && !dateInput.value) {
             dateInput.value = new Date().toISOString().split('T')[0];
@@ -210,6 +277,68 @@ class TransactionsController {
         preview.textContent = `Resumo: ${count}x de ${window.Utils.formatCurrency(perMonth)} / mês (Total: ${window.Utils.formatCurrency(total)})`;
     }
 
+    updateSplitSummary() {
+        const isSplit = document.getElementById('txEnableSplit')?.checked;
+        if (!isSplit) return;
+
+        const totalAmount = parseFloat(document.getElementById('txAmount')?.value) || 0;
+        let sum = 0;
+
+        document.querySelectorAll('.tx-split-cb:checked').forEach(cb => {
+            const pName = cb.getAttribute('data-person');
+            const valInput = document.querySelector(`.tx-split-val[data-person="${CSS.escape(pName)}"]`);
+            if (valInput && valInput.value) {
+                const val = parseFloat(valInput.value);
+                if (!isNaN(val) && val > 0) sum += val;
+            }
+        });
+
+        sum = Math.round(sum * 100) / 100;
+        const remaining = Math.max(0, Math.round((totalAmount - sum) * 100) / 100);
+
+        const sumEl = document.getElementById('txSplitSum');
+        const remainingEl = document.getElementById('txSplitRemaining');
+
+        if (sumEl) sumEl.textContent = window.Utils.formatCurrency(sum);
+        if (remainingEl) {
+            remainingEl.textContent = window.Utils.formatCurrency(remaining);
+            remainingEl.style.color = remaining === 0 ? 'var(--success)' : 'var(--warning)';
+        }
+    }
+
+    splitEqually() {
+        const totalAmount = parseFloat(document.getElementById('txAmount')?.value) || 0;
+        const checkedCbs = Array.from(document.querySelectorAll('.tx-split-cb:checked'));
+
+        if (totalAmount <= 0) {
+            window.UI.showToast('Informe o valor total da compra primeiro.', 'error');
+            return;
+        }
+
+        if (checkedCbs.length === 0) {
+            window.UI.showToast('Marque as pessoas que vão dividir a compra.', 'error');
+            return;
+        }
+
+        const equalShare = Math.floor((totalAmount / checkedCbs.length) * 100) / 100;
+        let runningSum = 0;
+
+        checkedCbs.forEach((cb, idx) => {
+            const pName = cb.getAttribute('data-person');
+            const valInput = document.querySelector(`.tx-split-val[data-person="${CSS.escape(pName)}"]`);
+            if (valInput) {
+                let share = equalShare;
+                if (idx === checkedCbs.length - 1) {
+                    share = Math.round((totalAmount - runningSum) * 100) / 100;
+                }
+                valInput.value = share.toFixed(2);
+                runningSum += share;
+            }
+        });
+
+        this.updateSplitSummary();
+    }
+
     openNovaTransacaoModal() {
         const form = document.getElementById('txForm');
         if (form) form.reset();
@@ -225,7 +354,16 @@ class TransactionsController {
         const dateInput = document.getElementById('txDate');
         if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 
-        // Reset mode groups
+        // Reset split & mode groups
+        const txEnableSplit = document.getElementById('txEnableSplit');
+        if (txEnableSplit) txEnableSplit.checked = false;
+        const txSplitGroup = document.getElementById('txSplitGroup');
+        if (txSplitGroup) txSplitGroup.style.display = 'none';
+        const txSinglePersonGroup = document.getElementById('txSinglePersonGroup');
+        if (txSinglePersonGroup) txSinglePersonGroup.style.display = 'block';
+        const txPerson = document.getElementById('txPerson');
+        if (txPerson) txPerson.setAttribute('required', 'required');
+
         const installmentsGroup = document.getElementById('txInstallmentsGroup');
         if (installmentsGroup) installmentsGroup.style.display = 'none';
         const recurringGroup = document.getElementById('txRecurringGroup');
@@ -371,6 +509,80 @@ class TransactionsController {
                     this.applyFilters();
                     return;
                 }
+            }
+
+            // Split Purchase Processing (if txEnableSplit is checked and NOT edit mode)
+            const isSplitEnabled = document.getElementById('txEnableSplit')?.checked;
+            if (isSplitEnabled && !editId) {
+                const checkedCbs = Array.from(document.querySelectorAll('.tx-split-cb:checked'));
+                if (checkedCbs.length === 0) {
+                    window.UI.showToast('Selecione pelo menos uma pessoa para a divisão.', 'error');
+                    return;
+                }
+
+                const splitItems = [];
+                let sum = 0;
+                for (const cb of checkedCbs) {
+                    const personName = cb.getAttribute('data-person');
+                    const valInput = document.querySelector(`.tx-split-val[data-person="${CSS.escape(personName)}"]`);
+                    const val = parseFloat(valInput?.value || 0);
+                    if (isNaN(val) || val <= 0) {
+                        window.UI.showToast(`Informe o valor da parte para ${personName}.`, 'error');
+                        return;
+                    }
+                    splitItems.push({ person: personName, amount: val });
+                    sum += val;
+                }
+
+                sum = Math.round(sum * 100) / 100;
+                const diff = Math.abs(sum - rawAmount);
+                if (diff > 0.05) {
+                    window.UI.showToast(`A soma das partes (${window.Utils.formatCurrency(sum)}) deve ser igual ao valor total da compra (${window.Utils.formatCurrency(rawAmount)}).`, 'error');
+                    return;
+                }
+
+                const savePromises = splitItems.map(item => {
+                    const newTx = {
+                        id: window.Utils.generateId(),
+                        type,
+                        description: `${description} (${item.person})`,
+                        amount: item.amount,
+                        category,
+                        paymentMethod,
+                        person: item.person,
+                        date: dateStr,
+                        userId,
+                        createdAt: new Date().toISOString()
+                    };
+                    return window.Storage.saveRecord('transactions', newTx);
+                });
+
+                await Promise.all(savePromises);
+
+                if (paymentMethod.startsWith('card_') && type === 'expense') {
+                    const cardId = paymentMethod.replace('card_', '');
+                    const cards = window.Storage.get('cards') || [];
+                    const card = cards.find(c => c.id === cardId);
+                    if (card) {
+                        card.usedLimit = (card.usedLimit || 0) + rawAmount;
+                        await window.Storage.saveRecord('cards', card);
+                    }
+                }
+
+                if (window.Audit) {
+                    window.Audit.log('TRANSACTION_CREATE_SPLIT', { description, amount: rawAmount, count: splitItems.length });
+                }
+
+                window.UI.closeModal('txModal');
+                window.UI.showToast(`Compra de ${window.Utils.formatCurrency(rawAmount)} dividida com sucesso entre ${splitItems.length} pessoas! 🤝`, 'success');
+                
+                let globalTx = window.Storage.get('transactions') || [];
+                if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
+                    globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
+                }
+                this.allTransactions = globalTx;
+                this.applyFilters();
+                return;
             }
 
             if (paymentMode === 'recurring') {
