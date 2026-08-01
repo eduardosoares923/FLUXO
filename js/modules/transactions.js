@@ -743,7 +743,10 @@ class TransactionsController {
                         installmentIndex: i + 1,
                         totalInstallments: installmentsCount,
                         isSplit: isSplitEnabled,
-                        splitDetails: isSplitEnabled ? splitItems.map(s => ({ person: s.person, amount: Math.round((s.amount / installmentsCount) * 100) / 100 })) : null,
+                        splitDetails: isSplitEnabled ? splitItems.map(s => {
+                            const perMonth = (installmentValueType === 'total') ? Math.round((s.amount / installmentsCount) * 100) / 100 : s.amount;
+                            return { person: s.person, amount: perMonth };
+                        }) : null,
                         userId,
                         createdAt: new Date().toISOString()
                     };
