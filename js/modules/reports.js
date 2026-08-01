@@ -138,6 +138,9 @@ class ReportsController {
             const pCardsIds = this.filteredCards.map(c => `card_${c.id}`);
 
             this.filteredTx = this.transactions.filter(tx => {
+                if (tx.isSplit && tx.splitDetails && Array.isArray(tx.splitDetails)) {
+                    return tx.splitDetails.some(item => item.person && item.person.trim().toLowerCase() === targetLower);
+                }
                 if (tx.person && tx.person.trim().toLowerCase() === targetLower) return true;
                 if (pAccountsIds.includes(tx.paymentMethod) || pCardsIds.includes(tx.paymentMethod)) {
                     if (!tx.person || tx.person.trim().toLowerCase() === targetLower) return true;
@@ -165,14 +168,21 @@ class ReportsController {
     updateSummary() {
         let income = 0; let expense = 0; let cardsTotal = 0; let equity = 0;
         const todayStr = new Date().toISOString().split('T')[0];
+        const targetLower = this.currentFilter !== 'todos' ? this.currentFilter.trim().toLowerCase() : '';
 
         this.filteredAccounts.forEach(a => { equity += parseFloat(a.balance) || 0; });
         this.filteredTx.forEach(tx => {
+            let txAmt = tx.amount;
+            if (this.currentFilter !== 'todos' && tx.isSplit && tx.splitDetails && Array.isArray(tx.splitDetails)) {
+                const pDetail = tx.splitDetails.find(item => item.person && item.person.trim().toLowerCase() === targetLower);
+                if (pDetail) txAmt = pDetail.amount;
+            }
+
             if (tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
-                if (tx.type === 'expense' && tx.date <= todayStr) cardsTotal += tx.amount;
+                if (tx.type === 'expense' && tx.date <= todayStr) cardsTotal += txAmt;
             } else {
-                if (tx.type === 'income') { income += tx.amount; equity += tx.amount; }
-                else if (tx.type === 'expense') { expense += tx.amount; equity -= tx.amount; }
+                if (tx.type === 'income') { income += txAmt; equity += txAmt; }
+                else if (tx.type === 'expense') { expense += txAmt; equity -= txAmt; }
             }
         });
 

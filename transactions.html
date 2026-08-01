@@ -129,6 +129,7 @@
                                 <th>Descrição</th>
                                 <th>Categoria</th>
                                 <th>Conta/Cartão</th>
+                                <th>Pessoa</th>
                                 <th>Tipo</th>
                                 <th>Valor</th>
                                 <th style="text-align: right;">Ações</th>
@@ -310,6 +311,56 @@
                     <button type="submit" class="btn btn-primary" style="flex: 1;">Salvar</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal de Detalhes da Compra / Divisão entre Pessoas -->
+    <div class="modal-overlay" id="txDetailsModal">
+        <div class="modal-content glass-panel" style="width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 1.75rem; border-radius: var(--radius-lg); position: relative;">
+            <button class="modal-close" onclick="window.UI.closeModal('txDetailsModal')" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            <h2 class="modal-title" style="margin-bottom: 1.25rem; font-size: 1.2rem;">
+                <i class="fa-solid fa-circle-info" style="color: var(--accent-primary); margin-right: 0.4rem;"></i> Detalhes do Lançamento
+            </h2>
+            
+            <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">
+                    <h3 id="dtDescription" style="margin: 0; font-size: 1.1rem; color: var(--text-primary);">Nome da Compra</h3>
+                    <span id="dtBadge" class="tx-badge expense">Despesa</span>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                    <span id="dtCategory">Categoria</span> &bull; <span id="dtDate">00/00/0000</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed var(--glass-border); padding-top: 0.75rem; margin-top: 0.5rem;">
+                    <span style="font-size: 0.85rem; color: var(--text-secondary);">Valor Total da Compra:</span>
+                    <span id="dtTotalAmount" style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary);">R$ 0,00</span>
+                </div>
+            </div>
+
+            <!-- Informações adicionais (Forma de pagamento, parcela) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Forma de Pagamento</div>
+                    <div id="dtPaymentMethod" style="font-weight: 600; font-size: 0.9rem; margin-top: 0.2rem; color: var(--text-primary);">Cartão</div>
+                </div>
+                <div style="background: rgba(255,255,255,0.02); padding: 0.75rem; border-radius: 8px; border: 1px solid var(--glass-border);">
+                    <div style="font-size: 0.75rem; color: var(--text-secondary);">Condição / Parcela</div>
+                    <div id="dtInstallmentInfo" style="font-weight: 600; font-size: 0.9rem; margin-top: 0.2rem; color: var(--accent-primary);">1/1 (À Vista)</div>
+                </div>
+            </div>
+
+            <!-- Detalhamento da Divisão por Pessoa -->
+            <div id="dtSplitSection" style="display: block;">
+                <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--accent-primary);"><i class="fa-solid fa-people-arrows"></i> Detalhamento da Divisão</h4>
+                <div id="dtSplitPersonsList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+
+            <div style="margin-top: 1.5rem; text-align: right;">
+                <button type="button" class="btn btn-secondary" onclick="window.UI.closeModal('txDetailsModal')">Fechar</button>
+            </div>
         </div>
     </div>
 

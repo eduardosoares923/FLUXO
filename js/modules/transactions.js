@@ -134,6 +134,11 @@ class TransactionsController {
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
             tbody.addEventListener('click', (e) => {
+                const btnDetails = e.target.closest('[data-action="details"]');
+                if (btnDetails) {
+                    this.openDetailsModal(btnDetails.dataset.id);
+                    return;
+                }
                 const btnDelete = e.target.closest('[data-action="delete"]');
                 if (btnDelete) {
                     this.deleteTransaction(btnDelete.dataset.id);
@@ -339,6 +344,74 @@ class TransactionsController {
         this.updateSplitSummary();
     }
 
+    openDetailsModal(id) {
+        const tx = this.allTransactions.find(t => t.id === id);
+        if (!tx) return;
+
+        const setTxt = (elId, text) => {
+            const el = document.getElementById(elId);
+            if (el) el.textContent = text;
+        };
+
+        setTxt('dtDescription', tx.description);
+        
+        const dtBadge = document.getElementById('dtBadge');
+        if (dtBadge) {
+            const isIncome = tx.type === 'income';
+            dtBadge.className = isIncome ? 'tx-badge income' : 'tx-badge expense';
+            dtBadge.textContent = isIncome ? 'Receita' : 'Despesa';
+        }
+
+        setTxt('dtCategory', tx.category || 'Outros');
+        setTxt('dtDate', window.Utils.formatDate(tx.date));
+        setTxt('dtTotalAmount', window.Utils.formatCurrency(tx.amount));
+        setTxt('dtPaymentMethod', this.getPaymentMethodName(tx.paymentMethod));
+
+        let instText = 'À Vista (1/1)';
+        if (tx.isRecurring) {
+            instText = `Fixa / Recorrente (${tx.recurringFrequency || 'mensal'})`;
+        } else if (tx.totalInstallments && tx.totalInstallments > 1) {
+            instText = `Parcela ${tx.installmentIndex || 1}/${tx.totalInstallments} de ${window.Utils.formatCurrency(tx.installmentAmount || tx.amount)}`;
+        }
+        setTxt('dtInstallmentInfo', instText);
+
+        const dtSplitSection = document.getElementById('dtSplitSection');
+        const dtSplitPersonsList = document.getElementById('dtSplitPersonsList');
+
+        if (dtSplitPersonsList) {
+            dtSplitPersonsList.innerHTML = '';
+            if (tx.isSplit && tx.splitDetails && Array.isArray(tx.splitDetails) && tx.splitDetails.length > 0) {
+                let listHtml = '';
+                tx.splitDetails.forEach(item => {
+                    listHtml += `
+                        <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <i class="fa-solid fa-user-tag" style="color: var(--accent-primary); font-size: 0.85rem;"></i>
+                                <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(item.person)}</span>
+                            </div>
+                            <div style="font-weight: 700; color: var(--accent-primary); font-size: 0.95rem;">${window.Utils.formatCurrency(item.amount)}</div>
+                        </div>
+                    `;
+                });
+                dtSplitPersonsList.innerHTML = listHtml;
+                if (dtSplitSection) dtSplitSection.style.display = 'block';
+            } else {
+                dtSplitPersonsList.innerHTML = `
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <i class="fa-solid fa-user" style="color: var(--accent-primary); font-size: 0.85rem;"></i>
+                            <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(tx.person || 'Eu')}</span>
+                        </div>
+                        <div style="font-weight: 700; color: var(--accent-primary); font-size: 0.95rem;">${window.Utils.formatCurrency(tx.amount)}</div>
+                    </div>
+                `;
+                if (dtSplitSection) dtSplitSection.style.display = 'block';
+            }
+        }
+
+        window.UI.openModal('txDetailsModal');
+    }
+
     openNovaTransacaoModal() {
         const form = document.getElementById('txForm');
         if (form) form.reset();
@@ -511,8 +584,10 @@ class TransactionsController {
                 }
             }
 
-            // Split Purchase Processing (if txEnableSplit is checked and NOT edit mode)
+            // Split Purchase Processing (Single master transaction)
             const isSplitEnabled = document.getElementById('txEnableSplit')?.checked;
+            let splitItems = [];
+
             if (isSplitEnabled && !editId) {
                 const checkedCbs = Array.from(document.querySelectorAll('.tx-split-cb:checked'));
                 if (checkedCbs.length === 0) {
@@ -520,7 +595,6 @@ class TransactionsController {
                     return;
                 }
 
-                const splitItems = [];
                 let sum = 0;
                 for (const cb of checkedCbs) {
                     const personName = cb.getAttribute('data-person');
@@ -540,49 +614,6 @@ class TransactionsController {
                     window.UI.showToast(`A soma das partes (${window.Utils.formatCurrency(sum)}) deve ser igual ao valor total da compra (${window.Utils.formatCurrency(rawAmount)}).`, 'error');
                     return;
                 }
-
-                const savePromises = splitItems.map(item => {
-                    const newTx = {
-                        id: window.Utils.generateId(),
-                        type,
-                        description: `${description} (${item.person})`,
-                        amount: item.amount,
-                        category,
-                        paymentMethod,
-                        person: item.person,
-                        date: dateStr,
-                        userId,
-                        createdAt: new Date().toISOString()
-                    };
-                    return window.Storage.saveRecord('transactions', newTx);
-                });
-
-                await Promise.all(savePromises);
-
-                if (paymentMethod.startsWith('card_') && type === 'expense') {
-                    const cardId = paymentMethod.replace('card_', '');
-                    const cards = window.Storage.get('cards') || [];
-                    const card = cards.find(c => c.id === cardId);
-                    if (card) {
-                        card.usedLimit = (card.usedLimit || 0) + rawAmount;
-                        await window.Storage.saveRecord('cards', card);
-                    }
-                }
-
-                if (window.Audit) {
-                    window.Audit.log('TRANSACTION_CREATE_SPLIT', { description, amount: rawAmount, count: splitItems.length });
-                }
-
-                window.UI.closeModal('txModal');
-                window.UI.showToast(`Compra de ${window.Utils.formatCurrency(rawAmount)} dividida com sucesso entre ${splitItems.length} pessoas! 🤝`, 'success');
-                
-                let globalTx = window.Storage.get('transactions') || [];
-                if (window.currentUser && window.Auth && window.currentUser.role !== 'admin') {
-                    globalTx = globalTx.filter(tx => window.Auth.canAccessPerson(tx.person, tx));
-                }
-                this.allTransactions = globalTx;
-                this.applyFilters();
-                return;
             }
 
             if (paymentMode === 'recurring') {
@@ -689,12 +720,15 @@ class TransactionsController {
                         type,
                         description: `${description} (${i + 1}/${installmentsCount})`,
                         amount: installmentAmount,
+                        installmentAmount: installmentAmount,
                         category,
                         paymentMethod,
-                        person,
+                        person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
                         date: instDateStr,
                         installmentIndex: i + 1,
                         totalInstallments: installmentsCount,
+                        isSplit: isSplitEnabled,
+                        splitDetails: isSplitEnabled ? splitItems.map(s => ({ person: s.person, amount: Math.round((s.amount / installmentsCount) * 100) / 100 })) : null,
                         userId,
                         createdAt: new Date().toISOString()
                     };
@@ -720,7 +754,7 @@ class TransactionsController {
                 window.UI.showToast(`Lançamento parcelado em ${installmentsCount}x de ${window.Utils.formatCurrency(installmentAmount)} realizado com sucesso! 🎉`, 'success');
 
             } else {
-                // À Vista (1x)
+                // Single Master Transaction (À Vista)
                 const newTx = {
                     id: window.Utils.generateId(),
                     type,
@@ -728,8 +762,10 @@ class TransactionsController {
                     amount: rawAmount,
                     category,
                     paymentMethod,
-                    person,
+                    person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
                     date: dateStr,
+                    isSplit: isSplitEnabled,
+                    splitDetails: isSplitEnabled ? splitItems : null,
                     userId,
                     createdAt: new Date().toISOString()
                 };
@@ -843,15 +879,27 @@ class TransactionsController {
                 modeBadge = `<span style="font-size: 0.7rem; background: rgba(16,185,129,0.1); color: #34d399; border: 1px solid rgba(16,185,129,0.2); padding: 0.15rem 0.45rem; border-radius: 4px; font-weight: 600; margin-left: 0.35rem;">À Vista</span>`;
             }
 
+            let personCell = '';
+            if (tx.isSplit) {
+                const count = (tx.splitDetails && Array.isArray(tx.splitDetails)) ? tx.splitDetails.length : 2;
+                personCell = `<td><span style="font-size: 0.78rem; font-weight: 600; color: #818cf8; background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.25); padding: 0.15rem 0.5rem; border-radius: 4px; cursor: pointer;" onclick="window.transactionsController.openDetailsModal('${tx.id}')" title="Clique para ver detalhes da divisão"><i class="fa-solid fa-people-arrows"></i> Dividido (${count})</span></td>`;
+            } else {
+                personCell = `<td><span style="font-size: 0.78rem; font-weight: 600; color: var(--accent-primary); background: rgba(99,102,241,0.08); padding: 0.15rem 0.5rem; border-radius: 4px;"><i class="fa-solid fa-user-tag" style="font-size: 0.7rem;"></i> ${window.Utils.escapeHTML(tx.person || 'Eu')}</span></td>`;
+            }
+
             htmlBuffer += `
-                <tr>
+                <tr style="cursor: pointer;" onclick="if (!event.target.closest('.btn')) window.transactionsController.openDetailsModal('${tx.id}')">
                     <td>${window.Utils.formatDate(tx.date)}</td>
                     <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}${modeBadge}</td>
                     <td>${window.Utils.escapeHTML(tx.category)}</td>
                     <td>${window.Utils.escapeHTML(this.getPaymentMethodName(tx.paymentMethod))}</td>
+                    ${personCell}
                     <td><span class="tx-badge ${badgeClass}">${badgeText}</span></td>
                     <td style="color: ${amountColor}; font-weight: 600;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
-                    <td class="tx-actions" style="display: flex; gap: 0.35rem; justify-content: flex-end;">
+                    <td class="tx-actions" style="display: flex; gap: 0.35rem; justify-content: flex-end;" onclick="event.stopPropagation()">
+                        <button class="btn btn-ghost info btn-sm" title="Ver Detalhes" data-action="details" data-id="${tx.id}">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
                         <button class="btn btn-ghost primary btn-sm" title="Editar" data-action="edit" data-id="${tx.id}">
                             <i class="fa-solid fa-pen"></i>
                         </button>
