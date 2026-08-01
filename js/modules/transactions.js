@@ -719,6 +719,7 @@ class TransactionsController {
                 const baseMonth = parseInt(baseDateParts[1]) - 1;
                 const baseDay = parseInt(baseDateParts[2]);
 
+                const groupId = 'group_' + window.Utils.generateId();
                 const savePromises = [];
                 for (let i = 0; i < installmentsCount; i++) {
                     const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
@@ -731,6 +732,7 @@ class TransactionsController {
 
                     const instTx = {
                         id: window.Utils.generateId(),
+                        groupId: groupId,
                         type,
                         description: `${description} (${i + 1}/${installmentsCount})`,
                         amount: installmentAmount,
@@ -842,26 +844,63 @@ class TransactionsController {
     }
 
     deleteTransaction(id) {
+        const tx = this.allTransactions.find(t => t.id === id);
+        if (!tx) return;
+
+        if (tx.groupId) {
+            const groupTxs = this.allTransactions.filter(t => t.groupId === tx.groupId);
+            if (groupTxs.length > 1) {
+                window.UI.confirmDialog(
+                    `Este lançamento faz parte de um parcelamento conectado com ${groupTxs.length} parcelas (${tx.description}). Deseja EXCLUIR TODAS as parcelas deste parcelamento? (Se cancelar, apenas esta parcela será excluída)`,
+                    'Excluir Parcelamento Conectado',
+                    async () => {
+                        // Delete all installments in the group
+                        const promises = groupTxs.map(t => {
+                            if (t.paymentMethod && t.paymentMethod.startsWith('card_') && t.type === 'expense') {
+                                const cardId = t.paymentMethod.replace('card_', '');
+                                const cardIndex = this.cards.findIndex(c => c.id === cardId);
+                                if (cardIndex > -1) {
+                                    this.cards[cardIndex].usedLimit = Math.max(0, (this.cards[cardIndex].usedLimit || 0) - t.amount);
+                                    window.Storage.saveRecord('cards', this.cards[cardIndex]);
+                                }
+                            }
+                            return window.Storage.deleteRecord('transactions', t.id);
+                        });
+                        await Promise.all(promises);
+                        this.allTransactions = this.allTransactions.filter(t => t.groupId !== tx.groupId);
+                        window.UI.showToast(`Todas as ${groupTxs.length} parcelas conectadas foram excluídas! 🗑️`, 'success');
+                        this.applyFilters();
+                    }
+                );
+                return;
+            }
+        }
+
         window.UI.confirmDialog('Deseja realmente excluir este lançamento? Esta ação afeta seu saldo e limites de cartão.', 'Confirmação', () => {
             const txIndex = this.allTransactions.findIndex(t => t.id === id);
             if (txIndex > -1) {
-                const tx = this.allTransactions[txIndex];
-                
+                const targetTx = this.allTransactions[txIndex];
                 let promise = Promise.resolve();
 
-                // Refund credit card limits if it was a card expense
-                if (tx.paymentMethod && tx.paymentMethod.startsWith('card_') && tx.type === 'expense') {
-                    const cardId = tx.paymentMethod.replace('card_', '');
+                if (targetTx.paymentMethod && targetTx.paymentMethod.startsWith('card_') && targetTx.type === 'expense') {
+                    const cardId = targetTx.paymentMethod.replace('card_', '');
                     const cardIndex = this.cards.findIndex(c => c.id === cardId);
                     if (cardIndex > -1) {
-                        this.cards[cardIndex].usedLimit -= tx.amount;
+                        this.cards[cardIndex].usedLimit -= targetTx.amount;
                         if (this.cards[cardIndex].usedLimit < 0) this.cards[cardIndex].usedLimit = 0;
                         promise = window.Storage.saveRecord('cards', this.cards[cardIndex]);
                     }
                 }
-                
-                promise.then(() => window.Storage.deleteRecord('transactions', id)).then(() => {
+
+                promise.then(() => {
+                    return window.Storage.deleteRecord('transactions', targetTx.id);
+                }).then(() => {
+                    this.allTransactions.splice(txIndex, 1);
+                    if (window.Audit) {
+                        window.Audit.log('TRANSACTION_DELETE', { id: targetTx.id, description: targetTx.description });
+                    }
                     window.UI.showToast('Lançamento excluído com sucesso!', 'success');
+                    this.applyFilters();
                 });
             }
         });
