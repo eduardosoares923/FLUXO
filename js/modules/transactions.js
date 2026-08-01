@@ -364,14 +364,22 @@ class TransactionsController {
 
         setTxt('dtCategory', tx.category || 'Outros');
         setTxt('dtDate', window.Utils.formatDate(tx.date));
-        setTxt('dtTotalAmount', window.Utils.formatCurrency(tx.amount));
+        
+        let totalPurchase = tx.totalPurchaseAmount || tx.amount;
+        let currentInstVal = tx.installmentAmount || tx.amount;
+        
+        if (tx.totalInstallments && tx.totalInstallments > 1) {
+            totalPurchase = tx.totalPurchaseAmount || (currentInstVal * tx.totalInstallments);
+        }
+
+        setTxt('dtTotalAmount', window.Utils.formatCurrency(totalPurchase));
         setTxt('dtPaymentMethod', this.getPaymentMethodName(tx.paymentMethod));
 
         let instText = 'À Vista (1/1)';
         if (tx.isRecurring) {
             instText = `Fixa / Recorrente (${tx.recurringFrequency || 'mensal'})`;
         } else if (tx.totalInstallments && tx.totalInstallments > 1) {
-            instText = `Parcela ${tx.installmentIndex || 1}/${tx.totalInstallments} de ${window.Utils.formatCurrency(tx.installmentAmount || tx.amount)}`;
+            instText = `Parcela ${tx.installmentIndex || 1}/${tx.totalInstallments} de ${window.Utils.formatCurrency(currentInstVal)}`;
         }
         setTxt('dtInstallmentInfo', instText);
 
@@ -383,13 +391,19 @@ class TransactionsController {
             if (tx.isSplit && tx.splitDetails && Array.isArray(tx.splitDetails) && tx.splitDetails.length > 0) {
                 let listHtml = '';
                 tx.splitDetails.forEach(item => {
+                    const isInst = tx.totalInstallments && tx.totalInstallments > 1;
+                    const itemInstLabel = isInst ? ' / parcela' : '';
+                    const totalPersonVal = isInst ? ` <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: normal;">(Total: ${window.Utils.formatCurrency(item.amount * tx.totalInstallments)})</span>` : '';
+                    
                     listHtml += `
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center;">
                             <div style="display: flex; align-items: center; gap: 0.5rem;">
                                 <i class="fa-solid fa-user-tag" style="color: var(--accent-primary); font-size: 0.85rem;"></i>
                                 <span style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(item.person)}</span>
                             </div>
-                            <div style="font-weight: 700; color: var(--accent-primary); font-size: 0.95rem;">${window.Utils.formatCurrency(item.amount)}</div>
+                            <div style="text-align: right;">
+                                <span style="font-weight: 700; color: var(--accent-primary); font-size: 0.95rem;">${window.Utils.formatCurrency(item.amount)}${itemInstLabel}</span>${totalPersonVal}
+                            </div>
                         </div>
                     `;
                 });
@@ -721,6 +735,7 @@ class TransactionsController {
                         description: `${description} (${i + 1}/${installmentsCount})`,
                         amount: installmentAmount,
                         installmentAmount: installmentAmount,
+                        totalPurchaseAmount: totalAmount,
                         category,
                         paymentMethod,
                         person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
