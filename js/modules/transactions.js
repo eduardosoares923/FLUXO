@@ -365,11 +365,15 @@ class TransactionsController {
         setTxt('dtCategory', tx.category || 'Outros');
         setTxt('dtDate', window.Utils.formatDate(tx.date));
         
-        let totalPurchase = tx.totalPurchaseAmount || tx.amount;
+        let totalPurchase = tx.totalPurchaseAmount;
         let currentInstVal = tx.installmentAmount || tx.amount;
         
-        if (tx.totalInstallments && tx.totalInstallments > 1) {
-            totalPurchase = tx.totalPurchaseAmount || (currentInstVal * tx.totalInstallments);
+        if (!totalPurchase) {
+            if (tx.totalInstallments && tx.totalInstallments > 1) {
+                totalPurchase = currentInstVal * tx.totalInstallments;
+            } else {
+                totalPurchase = tx.amount;
+            }
         }
 
         setTxt('dtTotalAmount', window.Utils.formatCurrency(totalPurchase));
