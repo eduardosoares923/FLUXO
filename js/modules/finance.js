@@ -746,6 +746,7 @@ class FinanceController {
         }
 
         this.transactions = allTx;
+        this.checkSubscriptionAlerts();
 
         // --- 1. Global Date Filter (Month Navigation) ---
         const isDashboard = document.getElementById('currentMonthDisplay') !== null || window.location.pathname.includes('dashboard');
@@ -1111,6 +1112,72 @@ class FinanceController {
                 }
             });
         }
+    }
+    checkSubscriptionAlerts() {
+        const container = document.getElementById('subscriptionAlertBanner');
+        if (!container) return;
+
+        const allTxs = window.Storage.get('transactions') || [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const activeSubTxs = allTxs.filter(t => {
+            const isRec = t.isRecurring || (t.description && t.description.toLowerCase().includes('(fixa)'));
+            const isNotCanceled = t.recurringStatus !== 'cancelado' && !t.isPaused;
+            if (!isRec || !isNotCanceled) return false;
+            
+            const txDate = window.Utils.parseTxDate ? window.Utils.parseTxDate(t.date) : new Date(t.date);
+            if (!txDate) return false;
+            txDate.setHours(0, 0, 0, 0);
+            
+            const diffDays = Math.ceil((txDate - today) / (1000 * 60 * 60 * 24));
+            return diffDays >= 0 && diffDays <= 5;
+        });
+
+        if (activeSubTxs.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        const cards = window.Storage.get('cards') || [];
+        let alertsHtml = '';
+
+        activeSubTxs.forEach(sub => {
+            const txDate = window.Utils.parseTxDate ? window.Utils.parseTxDate(sub.date) : new Date(sub.date);
+            const diffDays = Math.ceil((txDate - today) / (1000 * 60 * 60 * 24));
+            
+            let cardName = 'Conta Corrente';
+            if (sub.paymentMethod && sub.paymentMethod.startsWith('card_')) {
+                const cId = sub.paymentMethod.replace('card_', '');
+                const c = cards.find(item => item.id === cId);
+                if (c) cardName = `Cartão ${c.name}`;
+            }
+
+            const dayText = diffDays === 0 ? 'HOJE' : diffDays === 1 ? 'amanhã (1 dia)' : `em ${diffDays} dias`;
+
+            alertsHtml += `
+                <div style="background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(139,92,246,0.12)); border: 1px solid rgba(99,102,241,0.3); border-radius: 12px; padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                    <div style="display: flex; align-items: center; gap: 0.85rem;">
+                        <div style="width: 38px; height: 38px; border-radius: 50%; background: rgba(99,102,241,0.2); display: flex; align-items: center; justify-content: center; color: #818cf8; font-size: 1.1rem; flex-shrink: 0;">
+                            <i class="fa-solid fa-bell"></i>
+                        </div>
+                        <div>
+                            <strong style="color: var(--text-primary); font-size: 0.95rem;">Lembrete de Cobrança: Assinatura "${window.Utils.escapeHTML(sub.description)}"</strong>
+                            <div style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.15rem;">
+                                Cobrança de <strong>${window.Utils.formatCurrency(sub.amount)}</strong> prevista para <strong>${dayText}</strong> no <strong>${window.Utils.escapeHTML(cardName)}</strong>.
+                            </div>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-outline" onclick="window.location.href='transactions.html'" style="font-weight: 600; font-size: 0.8rem; white-space: nowrap;">
+                        <i class="fa-solid fa-eye"></i> Ver Lançamento
+                    </button>
+                </div>
+            `;
+        });
+
+        container.innerHTML = alertsHtml;
+        container.style.display = 'block';
     }
 }
 

@@ -351,9 +351,45 @@
             </div>
 
             <!-- Detalhamento da Divisão por Pessoa -->
-            <div id="dtSplitSection" style="display: block;">
+            <div id="dtSplitSection" style="display: block; margin-bottom: 1.25rem;">
                 <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--accent-primary);"><i class="fa-solid fa-people-arrows"></i> Detalhamento da Divisão</h4>
                 <div id="dtSplitPersonsList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <!-- Preenchido via JS -->
+                </div>
+            </div>
+
+            <!-- Painel de Gerenciamento da Assinatura Recorrente -->
+            <div id="dtSubscriptionSection" style="display: none; background: rgba(99,102,241,0.06); border: 1px solid rgba(99,102,241,0.25); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                    <h4 style="margin: 0; font-size: 0.95rem; color: #818cf8; display: flex; align-items: center; gap: 0.4rem;">
+                        <i class="fa-solid fa-arrows-rotate"></i> Gerenciar Assinatura Recorrente
+                    </h4>
+                    <span id="dtSubStatusBadge" class="tx-badge income" style="font-weight: 700;">🟢 Ativa</span>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.85rem; margin-bottom: 0.85rem;">
+                    <div><span style="color: var(--text-secondary);">Próxima Cobrança:</span> <strong id="dtSubNextBilling" style="color: var(--text-primary);">10/09/2026</strong></div>
+                    <div><span style="color: var(--text-secondary);">Periodicidade:</span> <strong id="dtSubFrequency" style="color: var(--text-primary);">Mensal</strong></div>
+                </div>
+
+                <!-- Botões de Ação da Assinatura -->
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" id="btnSubReajustar" class="btn btn-secondary btn-sm" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-pen-to-square"></i> Reajustar Valor
+                    </button>
+                    <button type="button" id="btnSubPausar" class="btn btn-secondary btn-sm" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-pause"></i> Pausar / Retomar
+                    </button>
+                    <button type="button" id="btnSubCancelar" class="btn btn-danger btn-sm" style="font-size: 0.75rem;">
+                        <i class="fa-solid fa-ban"></i> Cancelar Assinatura
+                    </button>
+                </div>
+            </div>
+
+            <!-- Histórico de Cobranças Passadas da Assinatura -->
+            <div id="dtSubscriptionHistorySection" style="display: none; margin-bottom: 1rem;">
+                <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--text-secondary);"><i class="fa-solid fa-clock-rotate-left"></i> Histórico de Cobranças da Assinatura</h4>
+                <div id="dtSubHistoryList" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 160px; overflow-y: auto;">
                     <!-- Preenchido via JS -->
                 </div>
             </div>
@@ -361,6 +397,32 @@
             <div style="margin-top: 1.5rem; text-align: right;">
                 <button type="button" class="btn btn-secondary" onclick="window.UI.closeModal('txDetailsModal')">Fechar</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal de Reajuste de Valor da Assinatura -->
+    <div class="modal-overlay" id="subReajusteModal">
+        <div class="modal-content glass-panel" style="width: 100%; max-width: 420px; padding: 1.5rem; border-radius: var(--radius-lg); position: relative;">
+            <button class="modal-close" onclick="window.UI.closeModal('subReajusteModal')" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            <h3 class="modal-title" style="margin-bottom: 1rem; font-size: 1.1rem;">
+                <i class="fa-solid fa-tag" style="color: var(--accent-primary); margin-right: 0.4rem;"></i> Reajustar Valor da Assinatura
+            </h3>
+            <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 1rem;">
+                O novo valor será aplicado <strong>somente às próximas cobranças futuras</strong>. O histórico de faturas passadas não será alterado.
+            </p>
+            <form id="subReajusteForm">
+                <input type="hidden" id="subReajusteTxId" value="">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label class="form-label">Novo Valor Mensal (R$)</label>
+                    <input type="number" step="0.01" min="0.01" class="form-control" id="subReajusteNewValue" placeholder="ex: 44.90" required>
+                </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="window.UI.closeModal('subReajusteModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Aplicar Reajuste</button>
+                </div>
+            </form>
         </div>
     </div>
 

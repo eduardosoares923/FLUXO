@@ -130,6 +130,11 @@ class TransactionsController {
             btnSplitEqual.addEventListener('click', () => this.splitEqually());
         }
 
+        const subReajusteForm = document.getElementById('subReajusteForm');
+        if (subReajusteForm) {
+            subReajusteForm.addEventListener('submit', (e) => this.saveSubReajuste(e));
+        }
+
         // Event Delegation for Table Actions
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
@@ -427,7 +432,176 @@ class TransactionsController {
             }
         }
 
+        // Subscriptions & Recurring Section Handler
+        const dtSubscriptionSection = document.getElementById('dtSubscriptionSection');
+        const dtSubscriptionHistorySection = document.getElementById('dtSubscriptionHistorySection');
+        const isRec = tx.isRecurring || (tx.description && tx.description.toLowerCase().includes('(fixa)'));
+
+        if (isRec) {
+            if (dtSubscriptionSection) dtSubscriptionSection.style.display = 'block';
+            if (dtSubscriptionHistorySection) dtSubscriptionHistorySection.style.display = 'block';
+
+            const statusBadge = document.getElementById('dtSubStatusBadge');
+            const isPaused = tx.isPaused || tx.recurringStatus === 'pausado';
+            const isCanceled = tx.recurringStatus === 'cancelado';
+            
+            if (statusBadge) {
+                if (isCanceled) {
+                    statusBadge.className = 'tx-badge expense';
+                    statusBadge.textContent = '🔴 Cancelada';
+                } else if (isPaused) {
+                    statusBadge.className = 'tx-badge warning';
+                    statusBadge.textContent = '⏸️ Pausada';
+                } else {
+                    statusBadge.className = 'tx-badge income';
+                    statusBadge.textContent = '🟢 Ativa';
+                }
+            }
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const relatedTxs = this.allTransactions.filter(t => t.description && t.description.trim().toLowerCase() === tx.description.trim().toLowerCase());
+            const futureTxs = relatedTxs.filter(t => t.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date));
+            const nextTx = futureTxs[0] || tx;
+            
+            const setSubTxt = (elId, text) => {
+                const el = document.getElementById(elId);
+                if (el) el.textContent = text;
+            };
+            setSubTxt('dtSubNextBilling', window.Utils.formatDate(nextTx.date));
+            setSubTxt('dtSubFrequency', tx.recurringFrequency ? (tx.recurringFrequency.charAt(0).toUpperCase() + tx.recurringFrequency.slice(1)) : 'Mensal');
+
+            const btnReajustar = document.getElementById('btnSubReajustar');
+            if (btnReajustar) {
+                btnReajustar.onclick = () => {
+                    document.getElementById('subReajusteTxId').value = tx.id;
+                    document.getElementById('subReajusteNewValue').value = tx.amount;
+                    window.UI.openModal('subReajusteModal');
+                };
+            }
+
+            const btnPausar = document.getElementById('btnSubPausar');
+            if (btnPausar) {
+                btnPausar.onclick = () => this.toggleSubPause(tx);
+            }
+
+            const btnCancelar = document.getElementById('btnSubCancelar');
+            if (btnCancelar) {
+                btnCancelar.onclick = () => this.cancelSubscription(tx);
+            }
+
+            const historyList = document.getElementById('dtSubHistoryList');
+            if (historyList) {
+                const pastTxs = relatedTxs.filter(t => t.date <= todayStr).sort((a, b) => b.date.localeCompare(a.date));
+                if (pastTxs.length === 0) {
+                    historyList.innerHTML = `<div style="font-size: 0.8rem; color: var(--text-secondary); font-style: italic;">Nenhuma cobrança passada registrada ainda.</div>`;
+                } else {
+                    let histHtml = '';
+                    pastTxs.forEach(ptx => {
+                        histHtml += `
+                            <div style="background: rgba(255,255,255,0.02); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid var(--glass-border); display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem;">
+                                <div>
+                                    <span style="font-weight: 600; color: var(--text-primary);">${window.Utils.formatDate(ptx.date)}</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 0.5rem;">(${this.getPaymentMethodName(ptx.paymentMethod)})</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <strong style="color: var(--text-primary);">${window.Utils.formatCurrency(ptx.amount)}</strong>
+                                    <span style="font-size: 0.7rem; background: rgba(16,185,129,0.15); color: #34d399; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 700;">Pago</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    historyList.innerHTML = histHtml;
+                }
+            }
+        } else {
+            if (dtSubscriptionSection) dtSubscriptionSection.style.display = 'none';
+            if (dtSubscriptionHistorySection) dtSubscriptionHistorySection.style.display = 'none';
+        }
+
         window.UI.openModal('txDetailsModal');
+    }
+
+    async saveSubReajuste(e) {
+        e.preventDefault();
+        const txId = document.getElementById('subReajusteTxId')?.value;
+        const newVal = parseFloat(document.getElementById('subReajusteNewValue')?.value);
+
+        if (isNaN(newVal) || newVal <= 0) {
+            window.UI.showToast('Informe um valor válido maior que zero.', 'error');
+            return;
+        }
+
+        const tx = this.allTransactions.find(t => t.id === txId);
+        if (!tx) return;
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const relatedTxs = this.allTransactions.filter(t => t.description && t.description.trim().toLowerCase() === tx.description.trim().toLowerCase());
+        const futureTxs = relatedTxs.filter(t => t.date >= todayStr);
+
+        const updatePromises = futureTxs.map(fTx => {
+            fTx.amount = newVal;
+            fTx.installmentAmount = newVal;
+            if (fTx.isSplit && fTx.splitDetails && fTx.splitDetails.length > 0) {
+                const oldTotal = tx.amount || 1;
+                const ratio = newVal / oldTotal;
+                fTx.splitDetails = fTx.splitDetails.map(d => ({ person: d.person, amount: Math.round(d.amount * ratio * 100) / 100 }));
+            }
+            return window.Storage.saveRecord('transactions', fTx);
+        });
+
+        await Promise.all(updatePromises);
+        window.UI.closeModal('subReajusteModal');
+        window.UI.closeModal('txDetailsModal');
+        window.UI.showToast(`Valor da assinatura "${tx.description}" reajustado para ${window.Utils.formatCurrency(newVal)} nas cobranças futuras! 🏷️`, 'success');
+        
+        this.allTransactions = window.Storage.get('transactions') || [];
+        this.applyFilters();
+    }
+
+    async toggleSubPause(tx) {
+        const isPaused = tx.isPaused || tx.recurringStatus === 'pausado';
+        const newStatus = isPaused ? 'ativo' : 'pausado';
+        
+        const relatedTxs = this.allTransactions.filter(t => t.description && t.description.trim().toLowerCase() === tx.description.trim().toLowerCase());
+        const todayStr = new Date().toISOString().split('T')[0];
+        const futureTxs = relatedTxs.filter(t => t.date >= todayStr);
+
+        const updatePromises = futureTxs.map(fTx => {
+            fTx.recurringStatus = newStatus;
+            fTx.isPaused = (newStatus === 'pausado');
+            return window.Storage.saveRecord('transactions', fTx);
+        });
+
+        await Promise.all(updatePromises);
+        window.UI.closeModal('txDetailsModal');
+        window.UI.showToast(`Assinatura "${tx.description}" marcada como ${newStatus === 'pausado' ? 'Pausada ⏸️' : 'Ativa 🟢'}!`, 'success');
+        
+        this.allTransactions = window.Storage.get('transactions') || [];
+        this.applyFilters();
+    }
+
+    async cancelSubscription(tx) {
+        window.UI.confirmDialog(`Deseja realmente CANCELAR a assinatura "${tx.description}"? Novas cobranças futuras serão interrompidas e o histórico passado será preservado.`, 'Cancelar Assinatura', async () => {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const relatedTxs = this.allTransactions.filter(t => t.description && t.description.trim().toLowerCase() === tx.description.trim().toLowerCase());
+            
+            const futureTxs = relatedTxs.filter(t => t.date > todayStr);
+            const deletePromises = futureTxs.map(fTx => window.Storage.deleteRecord('transactions', fTx.id));
+            await Promise.all(deletePromises);
+
+            const pastAndTodayTxs = relatedTxs.filter(t => t.date <= todayStr);
+            const updatePromises = pastAndTodayTxs.map(pTx => {
+                pTx.recurringStatus = 'cancelado';
+                return window.Storage.saveRecord('transactions', pTx);
+            });
+            await Promise.all(updatePromises);
+
+            window.UI.closeModal('txDetailsModal');
+            window.UI.showToast(`Assinatura "${tx.description}" CANCELADA com sucesso! Cobranças futuras foram removidas e o histórico antigo foi preservado. 🔴`, 'success');
+
+            this.allTransactions = window.Storage.get('transactions') || [];
+            this.applyFilters();
+        });
     }
 
     openNovaTransacaoModal() {
