@@ -162,22 +162,27 @@ class AuthManager {
 
         if (!target) return true;
 
-        // Direct linked person, user name, username, or email prefix match
-        if (this.session.person && norm(this.session.person) === target) return true;
-        if (this.session.name && norm(this.session.name) === target) return true;
-        if (this.session.username && norm(this.session.username) === target) return true;
-        if (this.session.email && norm(this.session.email.split('@')[0]) === target) return true;
-
-        // Gerente (Manager): check allowedPersons list if specified
-        if (this.session.role === 'gerente') {
-            if (this.session.allowedPersons && Array.isArray(this.session.allowedPersons)) {
-                return this.session.allowedPersons.some(p => norm(p) === target);
+        // Handle multiple persons in split transactions (e.g. "Eduardo, Rodrigo")
+        const targetPersons = target.split(',').map(p => p.trim());
+        
+        for (const t of targetPersons) {
+            // Direct linked person, user name, username, or email prefix match
+            if (this.session.person && norm(this.session.person) === t) return true;
+            if (this.session.name && norm(this.session.name) === t) return true;
+            if (this.session.username && norm(this.session.username) === t) return true;
+            if (this.session.email && norm(this.session.email.split('@')[0]) === t) return true;
+            
+            // Gerente (Manager): check allowedPersons list if specified
+            if (this.session.role === 'gerente') {
+                if (this.session.allowedPersons && Array.isArray(this.session.allowedPersons)) {
+                    if (this.session.allowedPersons.some(p => norm(p) === t)) return true;
+                } else if (typeof this.session.allowedPersons === 'string' && this.session.allowedPersons.trim()) {
+                    const list = this.session.allowedPersons.split(',').map(norm);
+                    if (list.includes(t)) return true;
+                } else {
+                    return true; // Default manager access
+                }
             }
-            if (typeof this.session.allowedPersons === 'string' && this.session.allowedPersons.trim()) {
-                const list = this.session.allowedPersons.split(',').map(norm);
-                return list.includes(target);
-            }
-            return true; // Default manager access
         }
 
         return false;

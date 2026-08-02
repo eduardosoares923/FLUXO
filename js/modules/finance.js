@@ -742,7 +742,14 @@ class FinanceController {
         const personFilterVal = document.getElementById('globalPersonFilter')?.value || 'all';
         if (personFilterVal !== 'all') {
             const filterLower = personFilterVal.trim().toLowerCase();
-            allTx = allTx.filter(tx => tx.person && tx.person.trim().toLowerCase() === filterLower);
+            const norm = str => String(str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const filterTarget = norm(filterLower);
+            
+            allTx = allTx.filter(tx => {
+                if (!tx.person) return false;
+                const persons = tx.person.split(',').map(p => norm(p));
+                return persons.includes(filterTarget);
+            });
         }
 
         this.transactions = allTx;
@@ -807,6 +814,27 @@ class FinanceController {
         const recentTbody = document.getElementById('recentTransactionsTableBody');
         const legacyListEl = document.getElementById('transactionList');
 
+        const getEffectiveAmount = (tx) => {
+            let target = 'all';
+            const personFilterVal = document.getElementById('globalPersonFilter')?.value || 'all';
+            
+            if (personFilterVal !== 'all') {
+                target = personFilterVal;
+            } else if (window.currentUser && window.Auth && window.currentUser.role !== 'admin' && window.currentUser.role !== 'gerente') {
+                target = window.currentUser.person || window.currentUser.name;
+            }
+
+            if (target === 'all') return tx.amount;
+
+            if (tx.isSplit && tx.splitDetails && Array.isArray(tx.splitDetails)) {
+                const norm = str => String(str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                const targetNorm = norm(target);
+                const detail = tx.splitDetails.find(d => norm(d.person) === targetNorm);
+                if (detail) return detail.amount;
+            }
+            return tx.amount;
+        };
+
         if (recentTbody) {
             recentTbody.innerHTML = '';
             const recentTx = currentPeriodTxs.slice(0, 10);
@@ -818,6 +846,7 @@ class FinanceController {
                     const sign = isIncome ? '+' : '-';
                     const amountColor = isIncome ? 'var(--success)' : 'var(--danger)';
                     const methodName = window.Utils.getPaymentMethodName ? window.Utils.getPaymentMethodName(tx.paymentMethod) : (tx.paymentMethod || 'Conta');
+                    const effAmount = getEffectiveAmount(tx);
                     
                     const tr = document.createElement('tr');
                     tr.innerHTML = `
@@ -826,7 +855,7 @@ class FinanceController {
                         <td><span style="font-size: 0.75rem; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); padding: 0.2rem 0.6rem; border-radius: 6px; color: var(--text-secondary);">${window.Utils.escapeHTML(tx.category)}</span></td>
                         <td style="font-size: 0.85rem; color: var(--text-secondary);">${window.Utils.escapeHTML(methodName)}</td>
                         <td><span style="font-size: 0.8rem; font-weight: 600; color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 0.15rem 0.5rem; border-radius: 4px;">${window.Utils.escapeHTML(tx.person || 'Eu')}</span></td>
-                        <td style="color: ${amountColor}; font-weight: 700; text-align: right; white-space: nowrap;">${sign} ${window.Utils.formatCurrency(tx.amount)}</td>
+                        <td style="color: ${amountColor}; font-weight: 700; text-align: right; white-space: nowrap;">${sign} ${window.Utils.formatCurrency(effAmount)}</td>
                     `;
                     recentTbody.appendChild(tr);
                 });
@@ -841,6 +870,7 @@ class FinanceController {
                     const iconClass = tx.type === 'income' ? 'fa-arrow-up' : 'fa-arrow-down';
                     const iconBg = tx.type === 'income' ? 'income' : 'expense';
                     const sign = tx.type === 'income' ? '+' : '-';
+                    const effAmount = getEffectiveAmount(tx);
 
                     const item = document.createElement('div');
                     item.className = 'transaction-item';
@@ -855,7 +885,7 @@ class FinanceController {
                             </div>
                         </div>
                         <div style="display: flex; align-items: center; gap: 1rem;">
-                            <div class="tx-amount ${iconBg}">${sign} ${window.Utils.formatCurrency(tx.amount)}</div>
+                            <div class="tx-amount ${iconBg}">${sign} ${window.Utils.formatCurrency(effAmount)}</div>
                             <button class="btn btn-ghost primary btn-sm" onclick="window.financeController.openEditModal('${window.Utils.escapeHTML(tx.id)}')" title="Editar">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
@@ -872,12 +902,13 @@ class FinanceController {
         let totalCreditCard = 0;
 
         currentPeriodTxs.forEach(tx => {
+            const effAmount = getEffectiveAmount(tx);
             if (tx.type === 'income') {
-                totalIncome += tx.amount;
+                totalIncome += effAmount;
             } else if (tx.paymentMethod && tx.paymentMethod.startsWith('card_')) {
-                totalCreditCard += tx.amount;
+                totalCreditCard += effAmount;
             } else {
-                totalAccountExpense += tx.amount;
+                totalAccountExpense += effAmount;
             }
         });
 
@@ -896,9 +927,10 @@ class FinanceController {
                 let accIncome = 0;
                 let accExpense = 0;
                 this.transactions.forEach(tx => {
+                    const effAmount = getEffectiveAmount(tx);
                     if (tx.paymentMethod === accIdStr) {
-                        if (tx.type === 'income') accIncome += tx.amount;
-                        else if (tx.type === 'expense') accExpense += tx.amount;
+                        if (tx.type === 'income') accIncome += effAmount;
+                        else if (tx.type === 'expense') accExpense += effAmount;
                     }
                 });
                 const initial = parseFloat(acc.balance) || 0;
@@ -911,8 +943,9 @@ class FinanceController {
         let prevIncome = 0;
         let prevExpense = 0;
         prevPeriodTxs.forEach(tx => {
-            if (tx.type === 'income') prevIncome += tx.amount;
-            else if (tx.type === 'expense') prevExpense += tx.amount;
+            const effAmount = getEffectiveAmount(tx);
+            if (tx.type === 'income') prevIncome += effAmount;
+            else if (tx.type === 'expense') prevExpense += effAmount;
         });
         const prevBalance = prevIncome - prevExpense;
 
