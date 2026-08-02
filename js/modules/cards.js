@@ -430,15 +430,17 @@ class CardsController {
 
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
             
-            // Inject active subscriptions linked to this card that are missing from transactions
+            // Inject active subscriptions linked to this card for CURRENT invoice month only
             const allSubs = window.Storage.get('subscriptions') || [];
             const cardSubs = allSubs.filter(s => s.status === 'ativa' && s.paymentMethod === `card_${card.id}`);
             cardSubs.forEach(sub => {
-                // Generate virtual transactions for months not already in cardTxs
+                // Only inject for the current invoice month being displayed
                 const today = new Date();
-                for (let offset = -2; offset <= 12; offset++) {
+                for (let offset = -2; offset <= 2; offset++) {
                     const d = new Date(today.getFullYear(), today.getMonth() + offset, sub.billingDay || 10);
                     const dateStr = d.toISOString().split('T')[0];
+                    const invMonth = window.Utils.getCardInvoiceMonth(dateStr, closeD, dueD);
+                    if (invMonth !== currentMonthStr) continue;
                     const alreadyExists = cardTxs.some(tx => tx.subscriptionId === sub.id && tx.date === dateStr);
                     if (!alreadyExists) {
                         cardTxs.push({
