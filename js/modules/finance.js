@@ -481,27 +481,7 @@ class FinanceController {
             return acc;
         }, {});
 
-        // Inject active subscription amounts for cards that are missing from transactions
-        const allSubs = window.Storage.get('subscriptions') || [];
-        cards.forEach(card => {
-            const closeD = card.closeDay || 28;
-            const dueD = card.dueDay || 10;
-            const cardSubs = allSubs.filter(s => s.status === 'ativa' && s.paymentMethod === `card_${card.id}`);
-            cardSubs.forEach(sub => {
-                const today = new Date();
-                for (let offset = -2; offset <= 12; offset++) {
-                    const d = new Date(today.getFullYear(), today.getMonth() + offset, sub.billingDay || 10);
-                    const dateStr = d.toISOString().split('T')[0];
-                    const invMonth = window.Utils.getCardInvoiceMonth(dateStr, closeD, dueD);
-                    if (invMonth !== currentMonthPrefix) continue;
-                    // Check if this subscription tx already exists in the real transactions
-                    const alreadyCounted = this.transactions.some(tx => tx.subscriptionId === sub.id && tx.date === dateStr);
-                    if (!alreadyCounted) {
-                        cardTotals[card.id] = (cardTotals[card.id] || 0) + (parseFloat(sub.amount) || 0);
-                    }
-                }
-            });
-        });
+
 
         const paidInvoices = window.Storage.get('paidInvoices') || [];
 
@@ -1056,32 +1036,6 @@ class FinanceController {
             }
         });
 
-        // Ensure subscription expenses are counted in the KPI totals
-        // Check which subscription amounts are MISSING from currentPeriodTxs
-        activeSubs.forEach(sub => {
-            const alreadyCounted = currentPeriodTxs.some(tx => tx.subscriptionId === sub.id);
-            if (!alreadyCounted) {
-                // Check person filter involvement
-                if (subTarget !== 'all') {
-                    const targetNorm = norm(subTarget);
-                    if (sub.isSplit && sub.splitDetails && Array.isArray(sub.splitDetails)) {
-                        const isInvolved = sub.splitDetails.some(d => norm(d.person) === targetNorm);
-                        if (!isInvolved) return;
-                    } else {
-                        const subPersons = (sub.person || 'Eu').split(',').map(p => norm(p));
-                        if (!subPersons.includes(targetNorm)) return;
-                    }
-                }
-                const subAmt = getEffectiveSubAmount(sub);
-                if (sub.paymentMethod && sub.paymentMethod.startsWith('card_')) {
-                    totalCreditCard += subAmt;
-                } else {
-                    totalAccountExpense += subAmt;
-                }
-            }
-        });
-
-        // Recalculate total expense with subscription corrections
         const correctedTotalExpense = totalAccountExpense + totalCreditCard;
         if (mExpEl) mExpEl.textContent = window.Utils.formatCurrency(correctedTotalExpense);
         if (ccTotalEl) ccTotalEl.textContent = window.Utils.formatCurrency(totalCreditCard);

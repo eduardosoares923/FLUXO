@@ -21,8 +21,9 @@ class SubscriptionsController {
         
         const subTxsToDelete = allTxs.filter(tx => {
             if (!tx.isSubscription && !tx.subscriptionId) return false;
-            // Deletar se a data NÃO está no mês atual
-            return tx.date < currentMonthStart || tx.date >= currentMonthEnd;
+            // Deletar APENAS se a data for de um mês FUTURO (para limpar o lixo gerado pelo bug antigo)
+            // IMPORTANTE: NUNCA deletar lançamentos de meses passados, senão estraga o histórico do usuário!
+            return tx.date >= currentMonthEnd;
         });
         
         for (const tx of subTxsToDelete) {
@@ -374,6 +375,7 @@ class SubscriptionsController {
         const promises = [];
 
         // Gera apenas 1 lançamento para o mês ATUAL (não gera 15 meses futuros)
+        // Isso impede que assinaturas comam limites futuros dos cartões.
         for (let offset = 0; offset <= 0; offset++) {
             const d = new Date(currentYear, currentMonth + offset, sub.billingDay || 10);
             const dateStr = d.toISOString().split('T')[0];
@@ -421,12 +423,6 @@ class SubscriptionsController {
                 promises.push(window.Storage.saveRecord('transactions', newTx));
             }
         }
-
-        // Limpar lançamentos de meses futuros que foram gerados anteriormente
-        const futureTxs = allTxs.filter(t => t.subscriptionId === sub.id && t.date > new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0]);
-        futureTxs.forEach(ft => {
-            promises.push(window.Storage.deleteRecord('transactions', ft.id));
-        });
         
         await Promise.all(promises);
     }

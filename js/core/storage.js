@@ -30,7 +30,7 @@ window.Storage = {
                 
                 const localData = this.get(collection) || [];
                 
-                // 1. Initial Migration: Se o Firestore estiver vazio mas houver dados locais (ex: o usuário já usava o app antes da nuvem), faz o upload
+                // 1. Initial Migration: Se o Firestore estiver vazio mas houver dados locais, faz o upload inicial
                 if (snapshot.empty && localData.length > 0) {
                     localData.forEach(item => {
                         if (item && item.id) {
@@ -38,7 +38,7 @@ window.Storage = {
                             db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
                         }
                     });
-                    return; // Retorna para não apagar os dados locais enquanto o upload acontece
+                    return; // Retorna para não apagar os dados locais enquanto o upload inicial acontece
                 }
 
                 // 2. Sincronização Normal: Firestore é a fonte da verdade.

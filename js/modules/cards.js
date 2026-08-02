@@ -118,13 +118,15 @@ class CardsController {
 
         const paidRecordId = `inv_${id}_${currentMonthStr}`;
         const paidInvoices = window.Storage.get('paidInvoices') || [];
-        const existing = paidInvoices.find(p => p.id === paidRecordId || (p.cardId === id && p.monthStr === currentMonthStr));
+        const existingRecords = paidInvoices.filter(p => p.id === paidRecordId || (p.cardId === id && p.monthStr === currentMonthStr));
 
         const formattedLabel = this.formatMonthLabel(currentMonthStr);
 
-        if (existing) {
+        if (existingRecords.length > 0) {
             try {
-                await window.Storage.deleteRecord('paidInvoices', existing.id);
+                for (const existing of existingRecords) {
+                    await window.Storage.deleteRecord('paidInvoices', existing.id);
+                }
                 window.UI.showToast(`Fatura de ${formattedLabel} do cartão ${card.name} reaberta!`, 'info');
             } catch (err) {
                 console.error(err);
