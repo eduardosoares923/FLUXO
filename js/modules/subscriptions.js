@@ -337,8 +337,8 @@ class SubscriptionsController {
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth();
 
-        // Ensure monthly transaction exists for current & next month
-        for (let offset = 0; offset <= 2; offset++) {
+        // Ensure monthly transaction exists for past 2 months & next 12 months
+        for (let offset = -2; offset <= 12; offset++) {
             const d = new Date(currentYear, currentMonth + offset, sub.billingDay || 10);
             const dateStr = d.toISOString().split('T')[0];
 
