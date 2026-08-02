@@ -247,10 +247,19 @@ class SubscriptionsController {
         const sub = this.subscriptions.find(s => s.id === id);
         if (!sub) return;
 
-        window.UI.confirmDialog(`Deseja realmente excluir a assinatura "${sub.name}"? As cobranças futuras serão removidas, mas os lançamentos antigos do extrato serão mantidos.`, 'Excluir Assinatura', async () => {
+        window.UI.confirmDialog(`Deseja realmente excluir a assinatura "${sub.name}"? As cobranças futuras não pagas serão removidas, mas as já pagas serão mantidas.`, 'Excluir Assinatura', async () => {
             try {
                 await window.Storage.deleteRecord('subscriptions', id);
                 this.subscriptions = this.subscriptions.filter(s => s.id !== id);
+                
+                // Remove future/unpaid transactions associated with this subscription
+                let allTxs = window.Storage.get('transactions') || [];
+                const toDelete = allTxs.filter(t => t.subscriptionId === id && t.isRecurring && !t.isPaid);
+                
+                for (const t of toDelete) {
+                    await window.Storage.deleteRecord('transactions', t.id);
+                }
+
                 this.renderSubscriptions();
                 window.UI.showToast('Assinatura excluída com sucesso!', 'success');
             } catch (e) {
@@ -294,18 +303,6 @@ class SubscriptionsController {
 
         this.subscriptions = window.Storage.get('subscriptions') || [];
         let subsToRender = [...this.subscriptions];
-
-        // Seed initial default subscriptions if empty
-        if (subsToRender.length === 0) {
-            const defaultSubs = [
-                { id: 'sub_1', name: 'Netflix', category: 'Entretenimento', amount: 39.90, paymentMethod: 'account', person: 'Eduardo', billingDay: 10, periodicity: 'mensal', status: 'ativa' },
-                { id: 'sub_2', name: 'Spotify', category: 'Entretenimento', amount: 21.90, paymentMethod: 'account', person: 'Eduardo', billingDay: 15, periodicity: 'mensal', status: 'ativa' },
-                { id: 'sub_3', name: 'Internet Banda Larga', category: 'Contas e serviços', amount: 100.00, paymentMethod: 'account', person: 'Eduardo', billingDay: 5, periodicity: 'mensal', status: 'ativa' }
-            ];
-            defaultSubs.forEach(s => window.Storage.saveRecord('subscriptions', s));
-            this.subscriptions = defaultSubs;
-            subsToRender = defaultSubs;
-        }
 
         const searchVal = (document.getElementById('subSearchInput')?.value || '').toLowerCase();
         const statusVal = document.getElementById('subStatusFilter')?.value || 'all';
