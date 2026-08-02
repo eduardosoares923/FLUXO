@@ -71,9 +71,19 @@ const Utils = {
 
         const closeD = parseInt(closeDay) || 28;
 
-        // A partir do próprio dia de fechamento (day >= closeD), a compra vai para a fatura do mês seguinte!
-        if (day >= closeD) {
-            month += 1;
+        if (closeD < 15) {
+            // Fechamento no início do mês (ex: dia 5):
+            // Compras antes do dia 5 (ex: 03/08) pertencem ao ciclo do mês anterior (Julho).
+            // Compras a partir do dia 5 (ex: 17/07) pertencem ao mês da compra (Julho).
+            if (day < closeD) {
+                month -= 1;
+            }
+        } else {
+            // Fechamento no final do mês (ex: dia 28/31):
+            // Compras a partir do fechamento entram no mês seguinte.
+            if (day >= closeD) {
+                month += 1;
+            }
         }
 
         const invoiceDate = new Date(year, month, 1);
