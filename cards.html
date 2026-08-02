@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fluxo de Caixa | Meus Cartões</title>
+    <title>Fluxo de Caixa | Meus Cart�es</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/components.css">
     <link rel="stylesheet" href="css/dashboard.css">
@@ -31,22 +31,22 @@
                     <i class="fa-solid fa-chart-pie"></i> Dashboard
                 </a>
                 <a href="transactions.html" class="nav-item ">
-                    <i class="fa-solid fa-money-bill-transfer"></i> Lançamentos
+                    <i class="fa-solid fa-money-bill-transfer"></i> Lan�amentos
                 </a>
                 <a href="cards.html" class="nav-item active">
-                    <i class="fa-solid fa-credit-card"></i> Cartões
+                    <i class="fa-solid fa-credit-card"></i> Cart�es
                 </a>
                 <a href="accounts.html" class="nav-item ">
                     <i class="fa-solid fa-users"></i> Contas & Perfis
                 </a>
                 <a href="reports.html" class="nav-item ">
-                    <i class="fa-solid fa-chart-line"></i> Relatórios
+                    <i class="fa-solid fa-chart-line"></i> Relat�rios
                 </a>
                 <a href="users.html" class="nav-item " id="navUsers" data-requires-role="admin">
-                    <i class="fa-solid fa-user-shield"></i> Usuários
+                    <i class="fa-solid fa-user-shield"></i> Usu�rios
                 </a>
                 <a href="settings.html" class="nav-item ">
-                    <i class="fa-solid fa-gear"></i> Configurações
+                    <i class="fa-solid fa-gear"></i> Configura��es
                 </a>
             </nav>
         </aside>
@@ -55,7 +55,7 @@
         <main class="main-content">
                                     <!-- Header -->
             <header class="top-header">
-                <div class="header-title">Gestão de Cartões</div>
+                <div class="header-title">Gest�o de Cart�es</div>
                 <div class="header-actions">
                     
                     <button id="themeToggle" class="btn-icon">
@@ -65,7 +65,7 @@
                     <div class="user-profile-dropdown" style="position: relative;">
                         <div class="user-profile" id="userProfileBtn">
                             <div class="user-info">
-                                <div class="user-name" id="userName">Usuário</div>
+                                <div class="user-name" id="userName">Usu�rio</div>
                                 <div class="user-role" id="userRoleTitle">Administrador</div>
                             </div>
                             <img src="" alt="Avatar" class="user-avatar" id="userAvatar">
@@ -81,34 +81,34 @@
 
             <div class="dashboard-container">
                 <div class="section-header">
-                    <h2 class="section-title">Gerenciar Cartões de Crédito</h2>
+                    <h2 class="section-title">Gerenciar Cart�es de Cr�dito</h2>
                 </div>
 
                 <div class="cards-grid" id="cardsContainer">
                     <!-- Cards inseridos via JS -->
                     
-                    <!-- Botão de Adicionar sempre no final -->
+                    <!-- Bot�o de Adicionar sempre no final -->
                     <div class="add-card-wrapper" id="btnNovoCartao">
                         <i class="fa-solid fa-circle-plus"></i>
-                        <span>Adicionar Novo Cartão</span>
+                        <span>Adicionar Novo Cart�o</span>
                     </div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- Modal Novo Cartão -->
+    <!-- Modal Novo Cart�o -->
     <div class="modal-overlay" id="cardModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3 class="modal-title">Novo Cartão de Crédito</h3>
+                <h3 class="modal-title">Novo Cart�o de Cr�dito</h3>
                 <button class="modal-close" id="closeCardModalBtn"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <form id="cardForm">
                 <input type="hidden" id="editCardId" value="">
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Nome/Apelido do Cartão</label>
+                        <label class="form-label">Nome/Apelido do Cart�o</label>
                         <input type="text" class="form-control" id="cardName" placeholder="Ex: Nubank, Black" required>
                     </div>
                     <div class="form-group">
@@ -123,7 +123,7 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Nome Impresso no Cartão</label>
+                    <label class="form-label">Nome Impresso no Cart�o</label>
                     <input type="text" class="form-control" id="cardHolder" placeholder="Ex: JOAO S SILVA" required>
                 </div>
                 
@@ -149,16 +149,16 @@
                     </div>
                 </div>
                 
-                <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 1rem;">Salvar Cartão</button>
+                <button type="submit" class="btn btn-success" style="width: 100%; margin-top: 1rem;">Salvar Cart�o</button>
             </form>
         </div>
     </div>
 
-    <!-- Modal Fatura do Cartão -->
+    <!-- Modal Fatura do Cart�o -->
     <div class="modal-overlay" id="invoiceModal">
         <div class="modal-content" style="max-width: 600px;">
             <div class="modal-header">
-                <h3 class="modal-title" id="invoiceModalTitle">Fatura do Cartão</h3>
+                <h3 class="modal-title" id="invoiceModalTitle">Fatura do Cart�o</h3>
                 <button class="modal-close" id="closeInvoiceModalBtn"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="invoice-list-container" style="margin-top: 1rem;">
@@ -171,19 +171,19 @@
     </div>
 
     <!-- Toast Notifications Container -->
-        <!-- Modal de ConfiguraÃ§Ãµes / EdiÃ§Ã£o de Perfil do UsuÃ¡rio Logado -->
+        <!-- Modal de Configurações / Edição de Perfil do Usuário Logado -->
     <div class="modal-overlay" id="myProfileModal">
         <div class="modal-content glass-panel" style="width: 100%; max-width: 550px; max-height: 90vh; overflow-y: auto; padding: 2rem; border-radius: var(--radius-lg); position: relative;">
             <button class="modal-close" onclick="window.UI.closeModal('myProfileModal')" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
                 <i class="fa-solid fa-times"></i>
             </button>
-            <h2 class="modal-title" style="margin-bottom: 1.5rem;"><i class="fa-solid fa-user-gear" style="color: var(--accent-primary); margin-right: 0.5rem;"></i> Meu Perfil & ConfiguraÃ§Ãµes</h2>
+            <h2 class="modal-title" style="margin-bottom: 1.5rem;"><i class="fa-solid fa-user-gear" style="color: var(--accent-primary); margin-right: 0.5rem;"></i> Meu Perfil & Configurações</h2>
             
             <form id="myProfileForm">
                 <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid var(--glass-border);">
                     <img src="" id="myProfileAvatarPreview" alt="Avatar" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-primary);">
                     <div>
-                        <h3 id="myProfileNameHeader" style="margin: 0; font-size: 1.1rem;">UsuÃ¡rio</h3>
+                        <h3 id="myProfileNameHeader" style="margin: 0; font-size: 1.1rem;">Usuário</h3>
                         <span id="myProfileRoleBadge" style="font-size: 0.75rem; color: var(--accent-primary); background: rgba(99,102,241,0.1); padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 600;">Administrador</span>
                     </div>
                 </div>
@@ -194,7 +194,7 @@
                         <input type="text" class="form-control" id="myProfileNameInput" required>
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 200px;">
-                        <label class="form-label">Nome de UsuÃ¡rio (Login)</label>
+                        <label class="form-label">Nome de Usuário (Login)</label>
                         <input type="text" class="form-control" id="myProfileUsernameInput" required>
                     </div>
                 </div>
@@ -202,7 +202,7 @@
                 <div style="display: flex; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap;">
                     <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label class="form-label">CPF</label>
-                        <input type="text" class="form-control" id="myProfileCpfInput" placeholder="Apenas nÃºmeros">
+                        <input type="text" class="form-control" id="myProfileCpfInput" placeholder="Apenas números">
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label class="form-label">E-mail</label>
@@ -224,7 +224,7 @@
                 <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
                     <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label class="form-label">Nova Senha (opcional)</label>
-                        <input type="password" class="form-control" id="myProfilePasswordInput" minlength="6" placeholder="MÃ­nimo 6 caracteres">
+                        <input type="password" class="form-control" id="myProfilePasswordInput" minlength="6" placeholder="Mínimo 6 caracteres">
                     </div>
                     <div class="form-group" style="flex: 1; min-width: 200px;">
                         <label class="form-label">Confirmar Senha</label>
@@ -234,7 +234,7 @@
 
                 <div style="display: flex; justify-content: flex-end; gap: 1rem;">
                     <button type="button" class="btn btn-secondary" onclick="window.UI.closeModal('myProfileModal')" style="background: var(--bg-secondary);">Cancelar</button>
-                    <button type="submit" class="btn btn-success">Salvar AlteraÃ§Ãµes</button>
+                    <button type="submit" class="btn btn-success">Salvar Alterações</button>
                 </div>
             </form>
         </div>
@@ -247,7 +247,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
     <script src="js/core/firebase-init.js"></script>
-    <script src="js/core/storage.js"></script>
+    <script src="js/core/storage.js?v=2"></script>
     <script src="js/core/utils.js"></script>
     <script src="js/core/ui.js"></script>
     <script src="js/core/audit.js"></script>
