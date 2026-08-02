@@ -5,6 +5,8 @@ window.Storage = {
     syncCollections: ['users', 'accounts', 'transactions', 'cards', 'settings', 'persons', 'paidInvoices', 'subscriptions'],
     isFirebaseReady: false,
     unsubscribes: {},
+    // Rastreia IDs pendentes de exclusão para evitar que onSnapshot os ressuscite
+    _pendingDeletes: {},
 
     init() {
         if (typeof firebase !== 'undefined' && firebase.apps.length > 0) {
@@ -38,12 +40,19 @@ window.Storage = {
                             db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
                         }
                     });
-                    return; // Retorna para não apagar os dados locais enquanto o upload inicial acontece
+                    return;
                 }
 
-                // 2. Sincronização Normal: Firestore é a fonte da verdade.
-                // Isso garante que itens deletados sumam de verdade e não voltem como zumbis
-                localStorage.setItem(APP_PREFIX + collection, JSON.stringify(firestoreData));
+                // 2. Filtrar itens que estão pendentes de exclusão local
+                // Isso impede que o onSnapshot "ressuscite" um item que o usuário acabou de deletar
+                const pendingSet = this._pendingDeletes[collection];
+                let finalData = firestoreData;
+                if (pendingSet && pendingSet.size > 0) {
+                    finalData = firestoreData.filter(item => !pendingSet.has(String(item.id)));
+                }
+
+                // 3. Sincronização Normal: Firestore é a fonte da verdade (exceto itens pendentes)
+                localStorage.setItem(APP_PREFIX + collection, JSON.stringify(finalData));
                 
                 // Trigger events to update UI
                 this.notifyDataChanged(collection);
@@ -116,7 +125,7 @@ window.Storage = {
 
             // Otimista local save to array to prevent ui lag
             const localData = this.get(collection) || [];
-            const idx = localData.findIndex(item => item.id === record.id);
+            const idx = localData.findIndex(item => String(item.id) === String(record.id));
             if (idx >= 0) {
                 localData[idx] = record;
             } else {
@@ -138,7 +147,7 @@ window.Storage = {
                     }
                 }, 5000);
 
-                firebase.firestore().collection(collection).doc(record.id).set(cleanRecord, { merge: true })
+                firebase.firestore().collection(collection).doc(String(record.id)).set(cleanRecord, { merge: true })
                     .then(() => {
                         if (!isResolved) {
                             isResolved = true;
@@ -163,29 +172,52 @@ window.Storage = {
 
     deleteRecord(collection, id) {
         return new Promise((resolve, reject) => {
-            // Otimista local remove
+            const strId = String(id);
+
+            // 1. Registrar como exclusão pendente ANTES de tudo
+            // Isso garante que o onSnapshot não vai ressuscitar este item
+            if (!this._pendingDeletes[collection]) {
+                this._pendingDeletes[collection] = new Set();
+            }
+            this._pendingDeletes[collection].add(strId);
+
+            // 2. Otimista local remove
             const localData = this.get(collection) || [];
-            const filtered = localData.filter(item => String(item.id) !== String(id));
+            const filtered = localData.filter(item => String(item.id) !== strId);
             this.set(collection, filtered);
             this.notifyDataChanged(collection);
 
+            // 3. Deletar no Firestore
             if (this.isFirebaseReady && typeof firebase !== 'undefined') {
                 let isResolved = false;
                 const timeoutId = setTimeout(() => {
                     if (!isResolved) {
                         isResolved = true;
                         console.warn('Firestore delete query timed out. Resolving locally.');
+                        // Manter na pendingDeletes por mais 10s para segurança
+                        setTimeout(() => {
+                            if (this._pendingDeletes[collection]) {
+                                this._pendingDeletes[collection].delete(strId);
+                            }
+                        }, 10000);
                         resolve();
                     }
                 }, 5000);
 
-                firebase.firestore().collection(collection).doc(id).delete()
+                firebase.firestore().collection(collection).doc(strId).delete()
                     .then(() => {
                         if (!isResolved) {
                             isResolved = true;
                             clearTimeout(timeoutId);
-                            resolve();
                         }
+                        // Remover da lista de pendentes após confirmação do Firestore
+                        // Aguardar um pouco para o onSnapshot processar
+                        setTimeout(() => {
+                            if (this._pendingDeletes[collection]) {
+                                this._pendingDeletes[collection].delete(strId);
+                            }
+                        }, 3000);
+                        resolve();
                     })
                     .catch(e => {
                         if (!isResolved) {
@@ -193,10 +225,18 @@ window.Storage = {
                             clearTimeout(timeoutId);
                             console.error('Erro ao deletar no Firestore:', e);
                             this.notifyError(e, 'Erro ao excluir documento no banco de dados');
-                            resolve(); // Fallback to local deletion
                         }
+                        // Em caso de erro, remover da pendingDeletes eventualmente
+                        setTimeout(() => {
+                            if (this._pendingDeletes[collection]) {
+                                this._pendingDeletes[collection].delete(strId);
+                            }
+                        }, 5000);
+                        resolve(); // Fallback to local deletion
                     });
             } else {
+                // Sem Firebase, remover imediatamente da pendingDeletes
+                this._pendingDeletes[collection].delete(strId);
                 resolve();
             }
         });
