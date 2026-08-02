@@ -8,6 +8,16 @@ class SubscriptionsController {
     init() {
         this.populateDropdowns();
         this.renderSubscriptions();
+        
+        // Sync local subscriptions to Firestore if needed
+        if (window.Storage && window.Storage.isFirebaseReady) {
+            const localSubs = window.Storage.get('subscriptions') || [];
+            localSubs.forEach(sub => {
+                if (sub && sub.id) {
+                    window.Storage.saveRecord('subscriptions', sub);
+                }
+            });
+        }
     }
 
     populateDropdowns() {
@@ -245,6 +255,13 @@ class SubscriptionsController {
                 if (action === 'delete') this.deleteSubscription(id);
             });
         }
+
+        const refreshSubsHandler = () => {
+            this.subscriptions = window.Storage.get('subscriptions') || [];
+            this.renderSubscriptions();
+        };
+        window.addEventListener('dataUpdated', refreshSubsHandler);
+        window.addEventListener('fluxo:dataChanged', refreshSubsHandler);
     }
 
     async saveSubscription() {
