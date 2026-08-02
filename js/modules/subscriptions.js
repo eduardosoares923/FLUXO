@@ -82,16 +82,133 @@ class SubscriptionsController {
                 personFilter.appendChild(opt);
             });
         }
+
+        const subSplitPersonsList = document.getElementById('subSplitPersonsList');
+        if (subSplitPersonsList) {
+            subSplitPersonsList.innerHTML = '';
+            personNames.forEach(pName => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(255,255,255,0.03); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid var(--glass-border);';
+                row.innerHTML = `
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600; margin: 0; flex: 1;">
+                        <input type="checkbox" class="sub-split-cb" data-person="${window.Utils.escapeHTML(pName)}" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+                        <span>${window.Utils.escapeHTML(pName)}</span>
+                    </label>
+                    <div style="display: flex; align-items: center; gap: 0.25rem;">
+                        <span style="font-size: 0.8rem; color: var(--text-secondary);">R$</span>
+                        <input type="number" step="0.01" min="0" class="form-control sub-split-val" data-person="${window.Utils.escapeHTML(pName)}" placeholder="0,00" style="width: 105px; padding: 0.25rem 0.5rem; font-size: 0.85rem;" disabled>
+                    </div>
+                `;
+                subSplitPersonsList.appendChild(row);
+            });
+
+            subSplitPersonsList.querySelectorAll('.sub-split-cb').forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    const pName = e.target.getAttribute('data-person');
+                    const valInput = subSplitPersonsList.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+                    if (valInput) {
+                        valInput.disabled = !e.target.checked;
+                        if (!e.target.checked) valInput.value = '';
+                    }
+                    this.updateSubSplitSummary();
+                });
+            });
+
+            subSplitPersonsList.querySelectorAll('.sub-split-val').forEach(input => {
+                input.addEventListener('input', () => this.updateSubSplitSummary());
+            });
+        }
+    }
+
+    updateSubSplitSummary() {
+        const amountStr = document.getElementById('subAmount').value;
+        const totalRaw = parseFloat(amountStr) || 0;
+        let sum = 0;
+        document.querySelectorAll('.sub-split-val:not(:disabled)').forEach(i => {
+            sum += (parseFloat(i.value) || 0);
+        });
+        
+        const sumEl = document.getElementById('subSplitSum');
+        const remEl = document.getElementById('subSplitRemaining');
+        
+        if (sumEl) sumEl.textContent = window.Utils.formatCurrency(sum);
+        
+        if (remEl) {
+            const diff = Math.round((totalRaw - sum) * 100) / 100;
+            remEl.textContent = window.Utils.formatCurrency(diff);
+            if (diff !== 0 && totalRaw > 0) {
+                remEl.style.color = 'var(--danger)';
+            } else {
+                remEl.style.color = 'var(--success)';
+            }
+        }
     }
 
     bindEvents() {
         const btnNovo = document.getElementById('btnNovaAssinatura');
         const form = document.getElementById('subscriptionForm');
+        const cbEnableSplit = document.getElementById('subEnableSplit');
+        const btnSplitEqual = document.getElementById('btnSubSplitEqual');
+
+        if (cbEnableSplit) {
+            cbEnableSplit.addEventListener('change', (e) => {
+                const grp = document.getElementById('subSplitGroup');
+                const pGrp = document.getElementById('subSinglePersonGroup');
+                if (grp) grp.style.display = e.target.checked ? 'block' : 'none';
+                if (pGrp) pGrp.style.display = e.target.checked ? 'none' : 'block';
+                if (!e.target.checked) {
+                    document.querySelectorAll('.sub-split-cb').forEach(cb => cb.checked = false);
+                    document.querySelectorAll('.sub-split-val').forEach(input => {
+                        input.value = '';
+                        input.disabled = true;
+                    });
+                    this.updateSubSplitSummary();
+                }
+            });
+        }
+
+        if (btnSplitEqual) {
+            btnSplitEqual.addEventListener('click', () => {
+                const totalRaw = parseFloat(document.getElementById('subAmount').value) || 0;
+                if (totalRaw <= 0) return;
+                
+                const checkedCbs = Array.from(document.querySelectorAll('.sub-split-cb:checked'));
+                if (checkedCbs.length === 0) return;
+                
+                const baseVal = Math.floor((totalRaw / checkedCbs.length) * 100) / 100;
+                let sum = 0;
+                
+                checkedCbs.forEach((cb, index) => {
+                    const pName = cb.getAttribute('data-person');
+                    const input = document.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+                    if (input) {
+                        let val = baseVal;
+                        if (index === checkedCbs.length - 1) {
+                            val = Math.round((totalRaw - sum) * 100) / 100;
+                        }
+                        input.value = val.toFixed(2);
+                        sum += baseVal;
+                    }
+                });
+                this.updateSubSplitSummary();
+            });
+        }
+
+        const subAmountInput = document.getElementById('subAmount');
+        if (subAmountInput) {
+            subAmountInput.addEventListener('input', () => this.updateSubSplitSummary());
+        }
 
         if (btnNovo) {
             btnNovo.addEventListener('click', () => {
                 if (form) form.reset();
                 document.getElementById('subEditId').value = '';
+                
+                if (cbEnableSplit) {
+                    cbEnableSplit.checked = false;
+                    cbEnableSplit.dispatchEvent(new Event('change'));
+                }
+                
                 document.querySelector('#subscriptionModal .modal-title').innerHTML = `<i class="fa-solid fa-arrows-rotate" style="color: var(--accent-primary); margin-right: 0.4rem;"></i> Cadastrar Nova Assinatura`;
                 window.UI.openModal('subscriptionModal');
             });
@@ -136,7 +253,7 @@ class SubscriptionsController {
         const category = document.getElementById('subCategory').value;
         const amount = parseFloat(document.getElementById('subAmount').value);
         const paymentMethod = document.getElementById('subPaymentMethod').value;
-        const person = document.getElementById('subPerson').value;
+        let person = document.getElementById('subPerson').value;
         const billingDay = parseInt(document.getElementById('subBillingDay').value);
         const periodicity = document.getElementById('subPeriodicity').value;
         const status = document.getElementById('subStatus').value;
@@ -146,6 +263,35 @@ class SubscriptionsController {
             return;
         }
 
+        const isSplitEnabled = document.getElementById('subEnableSplit')?.checked || false;
+        let splitItems = [];
+        
+        if (isSplitEnabled) {
+            let sum = 0;
+            const checkedBoxes = document.querySelectorAll('.sub-split-cb:checked');
+            if (checkedBoxes.length === 0) {
+                window.UI.showToast('Selecione pelo menos uma pessoa para a divisão.', 'error');
+                return;
+            }
+            
+            checkedBoxes.forEach(cb => {
+                const pName = cb.getAttribute('data-person');
+                const input = document.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+                const val = parseFloat(input?.value) || 0;
+                splitItems.push({ person: pName, amount: val });
+                sum += val;
+            });
+            
+            sum = Math.round(sum * 100) / 100;
+            const diff = Math.abs(sum - amount);
+            if (diff > 0.05) {
+                window.UI.showToast(`A soma da divisão (${window.Utils.formatCurrency(sum)}) deve ser igual ao valor total (${window.Utils.formatCurrency(amount)}).`, 'error');
+                return;
+            }
+            
+            person = splitItems.map(s => s.person).join(', ');
+        }
+
         let subToSave;
         if (editId) {
             const index = this.subscriptions.findIndex(s => s.id === editId);
@@ -153,6 +299,8 @@ class SubscriptionsController {
                 this.subscriptions[index] = {
                     ...this.subscriptions[index],
                     name, category, amount, paymentMethod, person, billingDay, periodicity, status,
+                    isSplit: isSplitEnabled,
+                    splitDetails: isSplitEnabled ? splitItems : null,
                     updatedAt: new Date().toISOString()
                 };
                 subToSave = this.subscriptions[index];
@@ -161,6 +309,8 @@ class SubscriptionsController {
             subToSave = {
                 id: window.Utils.generateId(),
                 name, category, amount, paymentMethod, person, billingDay, periodicity, status,
+                isSplit: isSplitEnabled,
+                splitDetails: isSplitEnabled ? splitItems : null,
                 createdAt: new Date().toISOString()
             };
             this.subscriptions.push(subToSave);
@@ -207,6 +357,8 @@ class SubscriptionsController {
                     isSubscription: true,
                     subscriptionId: sub.id,
                     recurringStatus: sub.status,
+                    isSplit: sub.isSplit || false,
+                    splitDetails: sub.splitDetails || null,
                     createdAt: new Date().toISOString()
                 };
                 allTxs.push(newTx);
@@ -224,10 +376,30 @@ class SubscriptionsController {
         document.getElementById('subCategory').value = sub.category || 'Assinaturas';
         document.getElementById('subAmount').value = sub.amount;
         document.getElementById('subPaymentMethod').value = sub.paymentMethod;
-        document.getElementById('subPerson').value = sub.person || 'Eu';
         document.getElementById('subBillingDay').value = sub.billingDay || 10;
         document.getElementById('subPeriodicity').value = sub.periodicity || 'mensal';
         document.getElementById('subStatus').value = sub.status || 'ativa';
+
+        const cbEnableSplit = document.getElementById('subEnableSplit');
+        if (cbEnableSplit) {
+            cbEnableSplit.checked = sub.isSplit || false;
+            cbEnableSplit.dispatchEvent(new Event('change'));
+            
+            if (sub.isSplit && sub.splitDetails) {
+                sub.splitDetails.forEach(s => {
+                    const cb = document.querySelector(`.sub-split-cb[data-person="${CSS.escape(s.person)}"]`);
+                    const input = document.querySelector(`.sub-split-val[data-person="${CSS.escape(s.person)}"]`);
+                    if (cb && input) {
+                        cb.checked = true;
+                        input.disabled = false;
+                        input.value = s.amount;
+                    }
+                });
+                this.updateSubSplitSummary();
+            } else {
+                document.getElementById('subPerson').value = sub.person || 'Eu';
+            }
+        }
 
         document.querySelector('#subscriptionModal .modal-title').innerHTML = `<i class="fa-solid fa-pen-to-square" style="color: var(--accent-primary); margin-right: 0.4rem;"></i> Editar Assinatura`;
         window.UI.openModal('subscriptionModal');
