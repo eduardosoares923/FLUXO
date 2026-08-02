@@ -8,15 +8,14 @@ class SubscriptionsController {
     init() {
         this.populateDropdowns();
         this.renderSubscriptions();
-        
-        // Sync local subscriptions to Firestore if needed
-        if (window.Storage && window.Storage.isFirebaseReady) {
-            const localSubs = window.Storage.get('subscriptions') || [];
-            localSubs.forEach(sub => {
-                if (sub && sub.id) {
-                    window.Storage.saveRecord('subscriptions', sub);
-                }
-            });
+        this.syncAllActiveSubscriptions();
+    }
+
+    async syncAllActiveSubscriptions() {
+        const subs = window.Storage.get('subscriptions') || [];
+        const activeSubs = subs.filter(s => s.status === 'ativa');
+        for (const sub of activeSubs) {
+            await this.syncSubscriptionTransactions(sub);
         }
     }
 
