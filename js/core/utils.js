@@ -248,7 +248,7 @@ const Utils = {
             // A Fatura de Agosto (2026-08) fecha em 05/09/2026 e vence em 10/09/2026.
             fechamentoDate = getClampedDate(year, month + 1, closeD);
             vencimentoDate = getClampedDate(year, month + 1, dueD);
-            melhorDiaDate = getClampedDate(year, month, closeD);
+            melhorDiaDate = fechamentoDate;
         } else {
             // Cartões com fechamento no final do mês (ex: dia 28/31):
             // A Fatura de Agosto (2026-08) fecha em 31/08/2026 e vence em 05/09/2026.
