@@ -3,64 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assinaturas & Recorrências - FLUXO</title>
-    <link rel="stylesheet" href="css/main.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>Assinaturas & Recorrências — FLUXO</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/mobile.css">
+    <script>try { const theme = JSON.parse(localStorage.getItem('fluxoPro_theme')); if (theme) document.documentElement.setAttribute('data-theme', theme); } catch(e){}</script>
 </head>
 <body>
-    <div class="app-layout">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar glass-panel">
-            <div class="brand">
-                <i class="fa-solid fa-chart-line brand-icon"></i>
-                <span class="brand-name">FLUXO</span>
+    <div class="dashboard-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fa-solid fa-chart-line"></i>
+                    <span>FLUXO</span>
+                </div>
             </div>
             
-            <nav class="nav-menu">
+            <nav class="sidebar-nav">
                 <a href="dashboard.html" class="nav-item">
-                    <i class="fa-solid fa-house"></i> Dashboard
+                    <i class="fa-solid fa-chart-pie"></i> Dashboard
                 </a>
                 <a href="transactions.html" class="nav-item">
-                    <i class="fa-solid fa-receipt"></i> Lançamentos
+                    <i class="fa-solid fa-money-bill-transfer"></i> Lançamentos
                 </a>
                 <a href="subscriptions.html" class="nav-item active">
                     <i class="fa-solid fa-arrows-rotate"></i> Assinaturas
                 </a>
-                <a href="accounts.html" class="nav-item">
-                    <i class="fa-solid fa-wallet"></i> Contas
-                </a>
                 <a href="cards.html" class="nav-item">
                     <i class="fa-solid fa-credit-card"></i> Cartões
                 </a>
-                <a href="reports.html" class="nav-item">
-                    <i class="fa-solid fa-chart-pie"></i> Relatórios
+                <a href="accounts.html" class="nav-item">
+                    <i class="fa-solid fa-users"></i> Contas &amp; Perfis
                 </a>
-                <a href="users.html" class="nav-item admin-only" style="display: none;">
-                    <i class="fa-solid fa-users"></i> Usuários
+                <a href="reports.html" class="nav-item">
+                    <i class="fa-solid fa-chart-line"></i> Relatórios
+                </a>
+                <a href="users.html" class="nav-item" id="navUsers" data-requires-role="admin">
+                    <i class="fa-solid fa-user-shield"></i> Usuários
                 </a>
             </nav>
-
-            <div class="sidebar-footer">
-                <button id="themeToggleBtn" class="btn btn-ghost btn-sm" title="Alternar Tema" style="width: 100%; justify-content: flex-start; gap: 0.5rem; color: var(--text-secondary);">
-                    <i class="fa-solid fa-moon"></i> <span>Modo Escuro</span>
-                </button>
-            </div>
         </aside>
 
-        <!-- Main Content Area -->
+        <!-- Main Content -->
         <main class="main-content">
+            <!-- Topbar -->
             <header class="topbar">
-                <div class="page-title">
-                    <h1>Assinaturas & Recorrências</h1>
-                    <p class="text-secondary">Gerencie suas assinaturas (Netflix, Spotify, Faculdade, Internet) e cobranças automáticas no cartão</p>
+                <div class="welcome-message">
+                    <h1>Assinaturas &amp; Recorrências</h1>
+                    <p class="subtitle">Gerencie suas assinaturas (Netflix, Spotify, Faculdade, Internet) e cobranças automáticas no cartão</p>
                 </div>
-
+                
                 <div class="topbar-actions">
+                    <button class="theme-toggle" id="themeToggleBtn" title="Alternar Tema">
+                        <i class="fa-solid fa-moon"></i>
+                    </button>
+                    
                     <button class="btn btn-primary" id="btnNovaAssinatura">
                         <i class="fa-solid fa-plus"></i> Nova Assinatura
                     </button>
-
+                    
                     <div class="user-profile-dropdown" style="position: relative;">
                         <div class="user-profile" id="userProfileBtn">
                             <div class="user-info">
