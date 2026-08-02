@@ -356,8 +356,8 @@ class SubscriptionsController {
         
         const promises = [];
 
-        // Ensure monthly transaction exists for past 2 months & next 12 months
-        for (let offset = -2; offset <= 12; offset++) {
+        // Gera apenas 1 lançamento para o mês ATUAL (não gera 15 meses futuros)
+        for (let offset = 0; offset <= 0; offset++) {
             const d = new Date(currentYear, currentMonth + offset, sub.billingDay || 10);
             const dateStr = d.toISOString().split('T')[0];
 
@@ -404,6 +404,12 @@ class SubscriptionsController {
                 promises.push(window.Storage.saveRecord('transactions', newTx));
             }
         }
+
+        // Limpar lançamentos de meses futuros que foram gerados anteriormente
+        const futureTxs = allTxs.filter(t => t.subscriptionId === sub.id && t.date > new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0]);
+        futureTxs.forEach(ft => {
+            promises.push(window.Storage.deleteRecord('transactions', ft.id));
+        });
         
         await Promise.all(promises);
     }
