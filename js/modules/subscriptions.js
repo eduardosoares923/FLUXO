@@ -229,6 +229,21 @@ class SubscriptionsController {
         const cardFilter = document.getElementById('subCardFilter');
         const personFilter = document.getElementById('subPersonFilter');
         const amountInput = document.getElementById('subAmount');
+        const grid = document.getElementById('subscriptionsGrid');
+
+        if (grid) {
+            grid.addEventListener('click', (e) => {
+                const btn = e.target.closest('button[data-action]');
+                if (!btn) return;
+                const action = btn.dataset.action;
+                const id = btn.dataset.id;
+                if (!id) return;
+
+                if (action === 'edit') this.editSubscription(id);
+                if (action === 'togglePause') this.togglePause(id);
+                if (action === 'delete') this.deleteSubscription(id);
+            });
+        }
 
         if (amountInput) {
             amountInput.addEventListener('input', () => this.updateSplitSummary());
