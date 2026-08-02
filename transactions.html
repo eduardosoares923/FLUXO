@@ -83,8 +83,9 @@
                 
                 <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
                     <h2 class="section-title">Gerenciar Lançamentos</h2>
-                    <div style="display: flex; gap: 0.75rem;">
-                        <button class="btn btn-danger" id="btnDeleteAllTransactions" style="background: var(--danger); color: white;"><i class="fa-solid fa-trash"></i> Excluir Tudo</button>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                        <button class="btn btn-danger" id="btnDeleteSelectedTransactions" style="display: none; background: #dc2626; color: white;"><i class="fa-solid fa-trash-can"></i> Excluir Selecionados (<span id="selectedTxCount">0</span>)</button>
+                        <button class="btn btn-secondary" id="btnDeleteAllTransactions" style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3);"><i class="fa-solid fa-trash-can"></i> Excluir Tudo</button>
                         <button class="btn btn-primary" id="btnNovaTransacao"><i class="fa-solid fa-plus"></i> Nova Transação</button>
                     </div>
                 </div>
@@ -128,6 +129,7 @@
                     <table class="transactions-table">
                         <thead>
                             <tr>
+                                <th style="width: 40px; text-align: center;"><input type="checkbox" id="selectAllTxs" style="width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: pointer;" title="Selecionar Todos"></th>
                                 <th>Data</th>
                                 <th>Descrição</th>
                                 <th>Categoria</th>

@@ -8,6 +8,7 @@ class TransactionsController {
         
         this.allTransactions = globalTx;
         this.filteredTransactions = [...this.allTransactions];
+        this.selectedTxIds = new Set();
         this.accounts = window.Storage.get('accounts') || [];
         this.cards = window.Storage.get('cards') || [];
         
@@ -133,7 +134,7 @@ class TransactionsController {
             subReajusteForm.addEventListener('submit', (e) => this.saveSubReajuste(e));
         }
 
-        // Event Delegation for Table Actions
+        // Event Delegation for Table Actions & Checkbox Change
         const tbody = document.getElementById('transactionsTableBody');
         if (tbody) {
             tbody.addEventListener('click', (e) => {
@@ -153,6 +154,39 @@ class TransactionsController {
                     return;
                 }
             });
+
+            tbody.addEventListener('change', (e) => {
+                if (e.target && e.target.classList.contains('tx-select-cb')) {
+                    const id = e.target.dataset.id;
+                    if (e.target.checked) {
+                        this.selectedTxIds.add(id);
+                    } else {
+                        this.selectedTxIds.delete(id);
+                    }
+                    this.updateBulkDeleteUI();
+                }
+            });
+        }
+
+        // Header Checkbox "Selecionar Todos"
+        const selectAllCb = document.getElementById('selectAllTxs');
+        if (selectAllCb) {
+            selectAllCb.addEventListener('change', () => {
+                const limit = 100;
+                const visibleTxs = this.filteredTransactions.slice(0, limit);
+                if (selectAllCb.checked) {
+                    visibleTxs.forEach(tx => this.selectedTxIds.add(tx.id));
+                } else {
+                    visibleTxs.forEach(tx => this.selectedTxIds.delete(tx.id));
+                }
+                this.renderTable();
+            });
+        }
+
+        // Botão Excluir Selecionados
+        const btnDeleteSelected = document.getElementById('btnDeleteSelectedTransactions');
+        if (btnDeleteSelected) {
+            btnDeleteSelected.addEventListener('click', () => this.deleteSelectedTransactions());
         }
         
         const btnDeleteAll = document.getElementById('btnDeleteAllTransactions');
@@ -162,12 +196,82 @@ class TransactionsController {
                     const promises = this.allTransactions.map(tx => window.Storage.deleteRecord('transactions', tx.id));
                     Promise.all(promises).then(() => {
                         this.allTransactions = [];
+                        this.selectedTxIds.clear();
                         window.UI.showToast('Todos os lançamentos foram excluídos!', 'success');
                         this.renderTable();
                     });
                 });
             });
         }
+    }
+
+    updateBulkDeleteUI() {
+        const btnDeleteSelected = document.getElementById('btnDeleteSelectedTransactions');
+        const countSpan = document.getElementById('selectedTxCount');
+        const selectAllCb = document.getElementById('selectAllTxs');
+
+        const selectedCount = this.selectedTxIds ? this.selectedTxIds.size : 0;
+        if (btnDeleteSelected) {
+            btnDeleteSelected.style.display = selectedCount > 0 ? 'inline-flex' : 'none';
+        }
+        if (countSpan) {
+            countSpan.textContent = selectedCount;
+        }
+
+        if (selectAllCb) {
+            const limit = 100;
+            const visibleTxs = this.filteredTransactions.slice(0, limit);
+            if (visibleTxs.length > 0 && visibleTxs.every(tx => this.selectedTxIds.has(tx.id))) {
+                selectAllCb.checked = true;
+                selectAllCb.indeterminate = false;
+            } else if (visibleTxs.some(tx => this.selectedTxIds.has(tx.id))) {
+                selectAllCb.checked = false;
+                selectAllCb.indeterminate = true;
+            } else {
+                selectAllCb.checked = false;
+                selectAllCb.indeterminate = false;
+            }
+        }
+    }
+
+    async deleteSelectedTransactions() {
+        if (!this.selectedTxIds || this.selectedTxIds.size === 0) {
+            window.UI.showToast('Nenhum lançamento selecionado.', 'warning');
+            return;
+        }
+
+        const count = this.selectedTxIds.size;
+        window.UI.confirmDialog(
+            `Tem certeza que deseja EXCLUIR os ${count} lançamento(s) selecionado(s)? Esta ação atualizará os saldos e limites de cartão correspondentes.`,
+            'Excluir Selecionados',
+            async () => {
+                const idsToDelete = Array.from(this.selectedTxIds);
+                const promises = [];
+
+                idsToDelete.forEach(id => {
+                    const targetTx = this.allTransactions.find(t => t.id === id);
+                    if (targetTx) {
+                        if (targetTx.paymentMethod && targetTx.paymentMethod.startsWith('card_') && targetTx.type === 'expense') {
+                            const cardId = targetTx.paymentMethod.replace('card_', '');
+                            const cardIndex = this.cards.findIndex(c => c.id === cardId);
+                            if (cardIndex > -1) {
+                                this.cards[cardIndex].usedLimit = Math.max(0, (this.cards[cardIndex].usedLimit || 0) - targetTx.amount);
+                                promises.push(window.Storage.saveRecord('cards', this.cards[cardIndex]));
+                            }
+                        }
+                        promises.push(window.Storage.deleteRecord('transactions', id));
+                    }
+                });
+
+                await Promise.all(promises);
+
+                this.allTransactions = this.allTransactions.filter(t => !this.selectedTxIds.has(t.id));
+                this.selectedTxIds.clear();
+
+                window.UI.showToast(`${count} lançamento(s) excluído(s) com sucesso! 🗑️`, 'success');
+                this.applyFilters();
+            }
+        );
     }
 
     populateTxModalOptions() {
@@ -1089,7 +1193,8 @@ class TransactionsController {
         tbody.innerHTML = '';
 
         if (this.filteredTransactions.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhum lançamento encontrado.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align: center; padding: 2rem; color: var(--text-secondary);">Nenhum lançamento encontrado.</td></tr>`;
+            this.updateBulkDeleteUI();
             return;
         }
 
@@ -1120,8 +1225,13 @@ class TransactionsController {
                 personCell = `<td><span style="font-size: 0.78rem; font-weight: 600; color: var(--accent-primary); background: rgba(99,102,241,0.08); padding: 0.15rem 0.5rem; border-radius: 4px;"><i class="fa-solid fa-user-tag" style="font-size: 0.7rem;"></i> ${window.Utils.escapeHTML(tx.person || 'Eu')}</span></td>`;
             }
 
+            const isChecked = this.selectedTxIds ? this.selectedTxIds.has(tx.id) : false;
+
             htmlBuffer += `
-                <tr style="cursor: pointer;" onclick="if (!event.target.closest('.btn')) window.transactionsController.openDetailsModal('${tx.id}')">
+                <tr style="cursor: pointer;" onclick="if (!event.target.closest('.btn') && !event.target.closest('input')) window.transactionsController.openDetailsModal('${tx.id}')">
+                    <td style="text-align: center;" onclick="event.stopPropagation();">
+                        <input type="checkbox" class="tx-select-cb" data-id="${tx.id}" ${isChecked ? 'checked' : ''} style="width: 16px; height: 16px; accent-color: var(--accent-primary); cursor: pointer;">
+                    </td>
                     <td>${window.Utils.formatDate(tx.date)}</td>
                     <td style="font-weight: 500;">${window.Utils.escapeHTML(tx.description)}${modeBadge}</td>
                     <td>${window.Utils.escapeHTML(tx.category)}</td>
@@ -1145,10 +1255,11 @@ class TransactionsController {
         });
         
         if (this.filteredTransactions.length > limit) {
-            htmlBuffer += `<tr><td colspan="7" style="text-align: center; padding: 1rem; color: var(--text-secondary); font-size: 0.85rem; font-style: italic;">Mostrando os 100 lançamentos mais recentes. Use os filtros acima para buscar lançamentos mais antigos.</td></tr>`;
+            htmlBuffer += `<tr><td colspan="9" style="text-align: center; padding: 1rem; color: var(--text-secondary); font-size: 0.85rem; font-style: italic;">Mostrando os 100 lançamentos mais recentes. Use os filtros acima para buscar lançamentos mais antigos.</td></tr>`;
         }
         
         tbody.innerHTML = htmlBuffer;
+        this.updateBulkDeleteUI();
     }
 }
 
