@@ -1160,12 +1160,15 @@ class TransactionsController {
                 promise.then(() => {
                     return window.Storage.deleteRecord('transactions', targetTx.id);
                 }).then(() => {
-                    this.allTransactions.splice(txIndex, 1);
+                    // No need to splice this.allTransactions here, because deleteRecord already fires fluxo:dataChanged
+                    // which completely refreshes this.allTransactions and calls applyFilters().
                     if (window.Audit) {
                         window.Audit.log('TRANSACTION_DELETE', { id: targetTx.id, description: targetTx.description });
                     }
                     window.UI.showToast('Lançamento excluído com sucesso!', 'success');
-                    this.applyFilters();
+                }).catch(err => {
+                    console.error("Erro ao excluir transação:", err);
+                    window.UI.showToast('Erro ao excluir lançamento.', 'error');
                 });
             }
         });
