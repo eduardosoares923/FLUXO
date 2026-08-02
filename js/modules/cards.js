@@ -202,6 +202,38 @@ class CardsController {
             return invMonth === currentMonthStr;
         });
 
+        // Inject active subscriptions linked to this card that are missing from transactions
+        const allSubs = window.Storage.get('subscriptions') || [];
+        const cardSubs = allSubs.filter(s => s.status === 'ativa' && s.paymentMethod === `card_${id}`);
+        cardSubs.forEach(sub => {
+            const today = new Date();
+            for (let offset = -2; offset <= 12; offset++) {
+                const d = new Date(today.getFullYear(), today.getMonth() + offset, sub.billingDay || 10);
+                const dateStr = d.toISOString().split('T')[0];
+                const invMonth = window.Utils.getCardInvoiceMonth(dateStr, closeD, dueD);
+                if (invMonth !== currentMonthStr) continue;
+                const alreadyExists = cardTransactions.some(tx => tx.subscriptionId === sub.id && tx.date === dateStr);
+                if (!alreadyExists) {
+                    cardTransactions.push({
+                        id: `virtual_sub_${sub.id}_${dateStr}`,
+                        type: 'expense',
+                        description: sub.name,
+                        amount: parseFloat(sub.amount) || 0,
+                        date: dateStr,
+                        category: sub.category || 'Assinaturas',
+                        paymentMethod: `card_${id}`,
+                        person: sub.person || 'Eu',
+                        isRecurring: true,
+                        isSubscription: true,
+                        subscriptionId: sub.id,
+                        isSplit: sub.isSplit || false,
+                        splitDetails: sub.splitDetails || null,
+                        _isVirtual: true
+                    });
+                }
+            }
+        });
+
         const totalInvoice = cardTransactions.reduce((sum, tx) => sum + (tx.type === 'expense' ? parseFloat(tx.amount) : -parseFloat(tx.amount)), 0);
 
         const paidInvoices = window.Storage.get('paidInvoices') || [];
@@ -398,6 +430,37 @@ class CardsController {
 
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
             
+            // Inject active subscriptions linked to this card that are missing from transactions
+            const allSubs = window.Storage.get('subscriptions') || [];
+            const cardSubs = allSubs.filter(s => s.status === 'ativa' && s.paymentMethod === `card_${card.id}`);
+            cardSubs.forEach(sub => {
+                // Generate virtual transactions for months not already in cardTxs
+                const today = new Date();
+                for (let offset = -2; offset <= 12; offset++) {
+                    const d = new Date(today.getFullYear(), today.getMonth() + offset, sub.billingDay || 10);
+                    const dateStr = d.toISOString().split('T')[0];
+                    const alreadyExists = cardTxs.some(tx => tx.subscriptionId === sub.id && tx.date === dateStr);
+                    if (!alreadyExists) {
+                        cardTxs.push({
+                            id: `virtual_sub_${sub.id}_${dateStr}`,
+                            type: 'expense',
+                            description: sub.name,
+                            amount: parseFloat(sub.amount) || 0,
+                            date: dateStr,
+                            category: sub.category || 'Assinaturas',
+                            paymentMethod: `card_${card.id}`,
+                            person: sub.person || 'Eu',
+                            isRecurring: true,
+                            isSubscription: true,
+                            subscriptionId: sub.id,
+                            isSplit: sub.isSplit || false,
+                            splitDetails: sub.splitDetails || null,
+                            _isVirtual: true
+                        });
+                    }
+                }
+            });
+
             // Regra do limite do cartão:
             // 1. totalUsed: Soma de TODOS os lançamentos não pagos deste cartão (atuais e parcelas futuras)
             // 2. futureCommitted: Soma das parcelas de meses futuros (mês > mês ativo da fatura) que ainda não foram pagas

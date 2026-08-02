@@ -481,6 +481,28 @@ class FinanceController {
             return acc;
         }, {});
 
+        // Inject active subscription amounts for cards that are missing from transactions
+        const allSubs = window.Storage.get('subscriptions') || [];
+        cards.forEach(card => {
+            const closeD = card.closeDay || 28;
+            const dueD = card.dueDay || 10;
+            const cardSubs = allSubs.filter(s => s.status === 'ativa' && s.paymentMethod === `card_${card.id}`);
+            cardSubs.forEach(sub => {
+                const today = new Date();
+                for (let offset = -2; offset <= 12; offset++) {
+                    const d = new Date(today.getFullYear(), today.getMonth() + offset, sub.billingDay || 10);
+                    const dateStr = d.toISOString().split('T')[0];
+                    const invMonth = window.Utils.getCardInvoiceMonth(dateStr, closeD, dueD);
+                    if (invMonth !== currentMonthPrefix) continue;
+                    // Check if this subscription tx already exists in the real transactions
+                    const alreadyCounted = this.transactions.some(tx => tx.subscriptionId === sub.id && tx.date === dateStr);
+                    if (!alreadyCounted) {
+                        cardTotals[card.id] = (cardTotals[card.id] || 0) + (parseFloat(sub.amount) || 0);
+                    }
+                }
+            });
+        });
+
         const paidInvoices = window.Storage.get('paidInvoices') || [];
 
         cards.forEach(card => {
