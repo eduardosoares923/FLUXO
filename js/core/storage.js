@@ -240,6 +240,71 @@ window.Storage = {
                 resolve();
             }
         });
+    },
+
+    deleteRecords(collection, ids) {
+        return new Promise((resolve) => {
+            if (!ids || ids.length === 0) {
+                resolve();
+                return;
+            }
+
+            const strIds = ids.map(id => String(id));
+            const idSet = new Set(strIds);
+
+            // 1. Registrar todos os IDs em _pendingDeletes
+            if (!this._pendingDeletes[collection]) {
+                this._pendingDeletes[collection] = new Set();
+            }
+            strIds.forEach(id => this._pendingDeletes[collection].add(id));
+
+            // 2. Otimista local remove - UMA ÚNICA VEZ em memória
+            const localData = this.get(collection) || [];
+            const filtered = localData.filter(item => !idSet.has(String(item.id)));
+            this.set(collection, filtered);
+            this.notifyDataChanged(collection);
+
+            // 3. Deletar no Firestore em lote (Batches de até 400 comandos para alta performance)
+            if (this.isFirebaseReady && typeof firebase !== 'undefined') {
+                const db = firebase.firestore();
+                const chunkSize = 400;
+                const chunks = [];
+                for (let i = 0; i < strIds.length; i += chunkSize) {
+                    chunks.push(strIds.slice(i, i + chunkSize));
+                }
+
+                const batchPromises = chunks.map(chunk => {
+                    const batch = db.batch();
+                    chunk.forEach(id => {
+                        const ref = db.collection(collection).doc(id);
+                        batch.delete(ref);
+                    });
+                    return batch.commit();
+                });
+
+                Promise.all(batchPromises).then(() => {
+                    setTimeout(() => {
+                        if (this._pendingDeletes[collection]) {
+                            strIds.forEach(id => this._pendingDeletes[collection].delete(id));
+                        }
+                    }, 3000);
+                    resolve();
+                }).catch(e => {
+                    console.error('Erro ao deletar lote no Firestore:', e);
+                    setTimeout(() => {
+                        if (this._pendingDeletes[collection]) {
+                            strIds.forEach(id => this._pendingDeletes[collection].delete(id));
+                        }
+                    }, 5000);
+                    resolve();
+                });
+            } else {
+                if (this._pendingDeletes[collection]) {
+                    strIds.forEach(id => this._pendingDeletes[collection].delete(id));
+                }
+                resolve();
+            }
+        });
     }
 };
 

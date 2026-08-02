@@ -192,14 +192,13 @@ class TransactionsController {
         const btnDeleteAll = document.getElementById('btnDeleteAllTransactions');
         if (btnDeleteAll) {
             btnDeleteAll.addEventListener('click', () => {
-                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lançamentos na visão atual?', 'Atenção Crítica', () => {
-                    const promises = this.allTransactions.map(tx => window.Storage.deleteRecord('transactions', tx.id));
-                    Promise.all(promises).then(() => {
-                        this.allTransactions = [];
-                        this.selectedTxIds.clear();
-                        window.UI.showToast('Todos os lançamentos foram excluídos!', 'success');
-                        this.renderTable();
-                    });
+                window.UI.confirmDialog('Tem certeza que deseja EXCLUIR TODOS os lançamentos na visão atual?', 'Atenção Crítica', async () => {
+                    const allIds = this.allTransactions.map(tx => tx.id);
+                    await window.Storage.deleteRecords('transactions', allIds);
+                    this.allTransactions = [];
+                    this.selectedTxIds.clear();
+                    window.UI.showToast('Todos os lançamentos foram excluídos!', 'success');
+                    this.renderTable();
                 });
             });
         }
@@ -246,24 +245,37 @@ class TransactionsController {
             'Excluir Selecionados',
             async () => {
                 const idsToDelete = Array.from(this.selectedTxIds);
-                const promises = [];
 
+                // Agregar deduções de limite por cartão para fazer update único por cartão
+                const cardDeductions = {};
                 idsToDelete.forEach(id => {
                     const targetTx = this.allTransactions.find(t => t.id === id);
-                    if (targetTx) {
-                        if (targetTx.paymentMethod && targetTx.paymentMethod.startsWith('card_') && targetTx.type === 'expense') {
-                            const cardId = targetTx.paymentMethod.replace('card_', '');
-                            const cardIndex = this.cards.findIndex(c => c.id === cardId);
-                            if (cardIndex > -1) {
-                                this.cards[cardIndex].usedLimit = Math.max(0, (this.cards[cardIndex].usedLimit || 0) - targetTx.amount);
-                                promises.push(window.Storage.saveRecord('cards', this.cards[cardIndex]));
-                            }
-                        }
-                        promises.push(window.Storage.deleteRecord('transactions', id));
+                    if (targetTx && targetTx.paymentMethod && targetTx.paymentMethod.startsWith('card_') && targetTx.type === 'expense') {
+                        const cardId = targetTx.paymentMethod.replace('card_', '');
+                        cardDeductions[cardId] = (cardDeductions[cardId] || 0) + (parseFloat(targetTx.amount) || 0);
                     }
                 });
 
-                await Promise.all(promises);
+                // Atualizar limites dos cartões afetados
+                const cardPromises = [];
+                const cards = window.Storage.get('cards') || [];
+                let cardsChanged = false;
+
+                Object.keys(cardDeductions).forEach(cardId => {
+                    const cardIndex = cards.findIndex(c => String(c.id) === String(cardId));
+                    if (cardIndex > -1) {
+                        cards[cardIndex].usedLimit = Math.max(0, (cards[cardIndex].usedLimit || 0) - cardDeductions[cardId]);
+                        cardPromises.push(window.Storage.saveRecord('cards', cards[cardIndex]));
+                        cardsChanged = true;
+                    }
+                });
+
+                if (cardsChanged) {
+                    await Promise.all(cardPromises);
+                }
+
+                // Deletar lançamentos em lote ultra-rápido no storage & cloud
+                await window.Storage.deleteRecords('transactions', idsToDelete);
 
                 this.allTransactions = this.allTransactions.filter(t => !this.selectedTxIds.has(t.id));
                 this.selectedTxIds.clear();
