@@ -437,8 +437,9 @@ class SubscriptionsController {
         const currentMonthPrefix = forceMonthPrefix || `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
         
         const promises = [];
-        const d = new Date(currentYear, currentMonth, sub.billingDay || 10);
-        const dateStr = d.toISOString().split('T')[0];
+        const monthStr = String(currentMonth + 1).padStart(2, '0');
+        const dayStr = String(sub.billingDay || 10).padStart(2, '0');
+        const dateStr = `${currentYear}-${monthStr}-${dayStr}`;
 
         const existingIndex = allTxs.findIndex(t => t.subscriptionId === sub.id && t.date === dateStr);
         if (existingIndex > -1) {
@@ -462,25 +463,28 @@ class SubscriptionsController {
                 promises.push(window.Storage.saveRecord('transactions', allTxs[existingIndex]));
             }
         } else if (sub.status !== 'cancelada') {
-            const newTx = {
-                id: window.Utils.generateId(),
-                type: 'expense',
-                description: sub.name,
-                amount: sub.amount,
-                date: dateStr,
-                category: sub.category || 'Assinaturas',
-                paymentMethod: sub.paymentMethod,
-                person: sub.person || 'Eu',
-                isRecurring: true,
-                isSubscription: true,
-                subscriptionId: sub.id,
-                recurringStatus: sub.status,
-                isSplit: sub.isSplit || false,
-                splitDetails: sub.splitDetails || null,
-                createdAt: new Date().toISOString()
-            };
-            allTxs.push(newTx);
-            promises.push(window.Storage.saveRecord('transactions', newTx));
+            // Se já sincronizou neste mês, mas não achou, significa que o usuário EXCLUIU de propósito. Não recriar.
+            if (sub.lastSyncedMonth !== currentMonthPrefix) {
+                const newTx = {
+                    id: window.Utils.generateId(),
+                    type: 'expense',
+                    description: sub.name,
+                    amount: sub.amount,
+                    date: dateStr,
+                    category: sub.category || 'Assinaturas',
+                    paymentMethod: sub.paymentMethod,
+                    person: sub.person || 'Eu',
+                    isRecurring: true,
+                    isSubscription: true,
+                    subscriptionId: sub.id,
+                    recurringStatus: sub.status,
+                    isSplit: sub.isSplit || false,
+                    splitDetails: sub.splitDetails || null,
+                    createdAt: new Date().toISOString()
+                };
+                allTxs.push(newTx);
+                promises.push(window.Storage.saveRecord('transactions', newTx));
+            }
         }
         
         sub.lastSyncedMonth = currentMonthPrefix;
