@@ -226,6 +226,8 @@ window.Storage = {
                                 clearTimeout(timeoutId);
                                 console.error('Erro ao deletar no Firestore:', e);
                                 this.notifyError(e, 'Erro ao excluir documento no banco de dados');
+                                if (window.UI) window.UI.showToast(`ERRO FIREBASE: ${e.message}`, 'error');
+                                alert(`ERRO FIREBASE AO DELETAR:\n${e.message}\n\nPor favor, tire um print ou copie este erro para o desenvolvedor.`);
                             }
                             // Em caso de erro, remover da pendingDeletes eventualmente
                             setTimeout(() => {
@@ -240,6 +242,8 @@ window.Storage = {
                         isResolved = true;
                         clearTimeout(timeoutId);
                         console.error('Erro síncrono ao deletar no Firestore:', syncError);
+                        if (window.UI) window.UI.showToast(`ERRO SÍNCRONO: ${syncError.message}`, 'error');
+                        alert(`ERRO SÍNCRONO AO DELETAR:\n${syncError.message}\n\nPor favor, tire um print ou copie este erro para o desenvolvedor.`);
                     }
                     setTimeout(() => {
                         if (this._pendingDeletes[collection]) {
