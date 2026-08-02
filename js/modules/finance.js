@@ -961,37 +961,85 @@ class FinanceController {
         const ccTotalEl = document.getElementById('creditCardTotal');
         if (ccTotalEl) ccTotalEl.textContent = window.Utils.formatCurrency(totalCreditCard);
 
-        // --- Calculate & Render Fixed Monthly Expenses ---
-        const fixedTxs = currentPeriodTxs.filter(tx => tx.isRecurring || (tx.description && (tx.description.toLowerCase().includes('(fixa)') || tx.description.toLowerCase().includes('spotify') || tx.description.toLowerCase().includes('faculdade') || tx.description.toLowerCase().includes('claro flex') || tx.description.toLowerCase().includes('youtube premium'))));
-        
+        // --- Calculate & Render Fixed Monthly Expenses (from Subscriptions source of truth) ---
+        const allSubscriptions = window.Storage.get('subscriptions') || [];
+        const activeSubs = allSubscriptions.filter(s => s.status === 'ativa');
+
+        // Also include any non-subscription fixed transactions (manual recurring)
+        const manualFixedTxs = currentPeriodTxs.filter(tx => tx.isRecurring && !tx.isSubscription);
+
         let totalFixedExpenses = 0;
-        fixedTxs.forEach(tx => {
-            if (tx.type === 'expense') totalFixedExpenses += tx.amount;
+        const fixedItems = [];
+
+        // Add active subscriptions
+        activeSubs.forEach(sub => {
+            const effAmount = parseFloat(sub.amount) || 0;
+            totalFixedExpenses += effAmount;
+            fixedItems.push({
+                description: sub.name,
+                category: sub.category || 'Assinaturas',
+                person: sub.person || 'Eu',
+                amount: effAmount,
+                paymentMethod: sub.paymentMethod
+            });
         });
+
+        // Add manual recurring transactions
+        manualFixedTxs.forEach(tx => {
+            if (tx.type === 'expense') {
+                totalFixedExpenses += tx.amount;
+                fixedItems.push({
+                    description: tx.description,
+                    category: tx.category,
+                    person: tx.person || 'Eu',
+                    amount: tx.amount,
+                    paymentMethod: tx.paymentMethod
+                });
+            }
+        });
+
+        // Ensure subscription expenses are counted in the KPI totals
+        // Check which subscription amounts are MISSING from currentPeriodTxs
+        activeSubs.forEach(sub => {
+            const alreadyCounted = currentPeriodTxs.some(tx => tx.subscriptionId === sub.id);
+            if (!alreadyCounted) {
+                const subAmt = parseFloat(sub.amount) || 0;
+                if (sub.paymentMethod && sub.paymentMethod.startsWith('card_')) {
+                    totalCreditCard += subAmt;
+                } else {
+                    totalAccountExpense += subAmt;
+                }
+            }
+        });
+
+        // Recalculate total expense with subscription corrections
+        const correctedTotalExpense = totalAccountExpense + totalCreditCard;
+        if (mExpEl) mExpEl.textContent = window.Utils.formatCurrency(correctedTotalExpense);
+        if (ccTotalEl) ccTotalEl.textContent = window.Utils.formatCurrency(totalCreditCard);
 
         const fixedValEl = document.getElementById('monthlyFixedExpenses');
         if (fixedValEl) fixedValEl.textContent = window.Utils.formatCurrency(totalFixedExpenses);
 
         const fixedTrendEl = document.getElementById('fixedExpenseTrend');
         if (fixedTrendEl) {
-            fixedTrendEl.innerHTML = `<span>${fixedTxs.length}</span> item(ns) fixo(s) ativo(s)`;
+            fixedTrendEl.innerHTML = `<span>${fixedItems.length}</span> item(ns) fixo(s) ativo(s)`;
         }
 
         const dashboardFixedList = document.getElementById('dashboardFixedList');
         if (dashboardFixedList) {
-            if (fixedTxs.length === 0) {
+            if (fixedItems.length === 0) {
                 dashboardFixedList.innerHTML = `<div style="grid-column: 1 / -1; color: var(--text-secondary); font-size: 0.85rem; padding: 0.75rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed var(--glass-border);">Nenhuma despesa fixa mensal cadastrada neste período. Use a opção "Fixa / Recorrente" ao criar um novo lançamento.</div>`;
             } else {
                 let listHtml = '';
-                fixedTxs.forEach(tx => {
-                    const personText = tx.person ? ` &bull; ${window.Utils.escapeHTML(tx.person)}` : '';
+                fixedItems.forEach(item => {
+                    const personText = item.person ? ` &bull; ${window.Utils.escapeHTML(item.person)}` : '';
                     listHtml += `
                         <div style="background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <div style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(tx.description)}</div>
-                                <div style="font-size: 0.75rem; color: var(--text-secondary);">${window.Utils.escapeHTML(tx.category)}${personText}</div>
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 0.9rem;">${window.Utils.escapeHTML(item.description)}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">${window.Utils.escapeHTML(item.category)}${personText}</div>
                             </div>
-                            <div style="font-weight: 700; color: #818cf8; font-size: 0.95rem;">${window.Utils.formatCurrency(tx.amount)}</div>
+                            <div style="font-weight: 700; color: #818cf8; font-size: 0.95rem;">${window.Utils.formatCurrency(item.amount)}</div>
                         </div>
                     `;
                 });
