@@ -342,8 +342,28 @@ class SubscriptionsController {
             const d = new Date(currentYear, currentMonth + offset, sub.billingDay || 10);
             const dateStr = d.toISOString().split('T')[0];
 
-            const exists = allTxs.some(t => t.subscriptionId === sub.id && t.date === dateStr);
-            if (!exists && sub.status !== 'cancelada') {
+            const existingIndex = allTxs.findIndex(t => t.subscriptionId === sub.id && t.date === dateStr);
+            if (existingIndex > -1) {
+                if (sub.status === 'cancelada') {
+                    const txIdToDelete = allTxs[existingIndex].id;
+                    allTxs.splice(existingIndex, 1);
+                    window.Storage.deleteRecord('transactions', txIdToDelete);
+                } else {
+                    allTxs[existingIndex] = {
+                        ...allTxs[existingIndex],
+                        description: sub.name,
+                        amount: sub.amount,
+                        category: sub.category || 'Assinaturas',
+                        paymentMethod: sub.paymentMethod,
+                        person: sub.person || 'Eu',
+                        recurringStatus: sub.status,
+                        isSplit: sub.isSplit || false,
+                        splitDetails: sub.splitDetails || null,
+                        updatedAt: new Date().toISOString()
+                    };
+                    window.Storage.saveRecord('transactions', allTxs[existingIndex]);
+                }
+            } else if (sub.status !== 'cancelada') {
                 const newTx = {
                     id: window.Utils.generateId(),
                     type: 'expense',
