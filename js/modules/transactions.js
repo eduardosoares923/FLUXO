@@ -1135,6 +1135,31 @@ class TransactionsController {
                         this.allTransactions = this.allTransactions.filter(t => t.groupId !== tx.groupId);
                         window.UI.showToast(`Todas as ${groupTxs.length} parcelas conectadas foram excluídas! 🗑️`, 'success');
                         this.applyFilters();
+                    },
+                    async () => {
+                        // Delete ONLY this single installment
+                        let promise = Promise.resolve();
+                        if (tx.paymentMethod && tx.paymentMethod.startsWith('card_') && tx.type === 'expense') {
+                            const cardId = tx.paymentMethod.replace('card_', '');
+                            const cardIndex = this.cards.findIndex(c => c.id === cardId);
+                            if (cardIndex > -1) {
+                                this.cards[cardIndex].usedLimit = Math.max(0, (this.cards[cardIndex].usedLimit || 0) - tx.amount);
+                                promise = window.Storage.saveRecord('cards', this.cards[cardIndex]);
+                            }
+                        }
+
+                        promise.then(() => {
+                            return window.Storage.deleteRecord('transactions', tx.id);
+                        }).then(() => {
+                            if (window.Audit) {
+                                window.Audit.log('TRANSACTION_DELETE', { id: tx.id, description: tx.description, amount: tx.amount });
+                            }
+                            window.UI.showToast('Lançamento excluído com sucesso!', 'success');
+                            // The refreshTxHandler will naturally update the view
+                        }).catch(err => {
+                            console.error("Erro ao excluir transação individual:", err);
+                            window.UI.showToast('Erro ao excluir lançamento.', 'error');
+                        });
                     }
                 );
                 return;
