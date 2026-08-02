@@ -990,31 +990,67 @@ class FinanceController {
         // Also include any non-subscription fixed transactions (manual recurring)
         const manualFixedTxs = currentPeriodTxs.filter(tx => tx.isRecurring && !tx.isSubscription);
 
+        // Determine the target person for split calculations
+        let subTarget = 'all';
+        const subPersonFilterVal = document.getElementById('globalPersonFilter')?.value || 'all';
+        if (subPersonFilterVal !== 'all') {
+            subTarget = subPersonFilterVal;
+        } else if (window.currentUser && window.Auth && window.currentUser.role !== 'admin' && window.currentUser.role !== 'gerente') {
+            subTarget = window.currentUser.person || window.currentUser.name;
+        }
+        const norm = str => String(str || '').trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+        const getEffectiveSubAmount = (sub) => {
+            const fullAmount = parseFloat(sub.amount) || 0;
+            if (subTarget === 'all') return fullAmount;
+            if (sub.isSplit && sub.splitDetails && Array.isArray(sub.splitDetails)) {
+                const targetNorm = norm(subTarget);
+                const detail = sub.splitDetails.find(d => norm(d.person) === targetNorm);
+                if (detail) return parseFloat(detail.amount) || 0;
+            }
+            return fullAmount;
+        };
+
         let totalFixedExpenses = 0;
         const fixedItems = [];
 
-        // Add active subscriptions
+        // Add active subscriptions (filtering by person if needed)
         activeSubs.forEach(sub => {
-            const effAmount = parseFloat(sub.amount) || 0;
+            // If filtering by person, check if person is involved
+            if (subTarget !== 'all') {
+                const targetNorm = norm(subTarget);
+                if (sub.isSplit && sub.splitDetails && Array.isArray(sub.splitDetails)) {
+                    const isInvolved = sub.splitDetails.some(d => norm(d.person) === targetNorm);
+                    if (!isInvolved) return;
+                } else {
+                    const subPersons = (sub.person || 'Eu').split(',').map(p => norm(p));
+                    if (!subPersons.includes(targetNorm)) return;
+                }
+            }
+
+            const effAmount = getEffectiveSubAmount(sub);
             totalFixedExpenses += effAmount;
             fixedItems.push({
                 description: sub.name,
                 category: sub.category || 'Assinaturas',
                 person: sub.person || 'Eu',
                 amount: effAmount,
-                paymentMethod: sub.paymentMethod
+                paymentMethod: sub.paymentMethod,
+                isSplit: sub.isSplit,
+                splitDetails: sub.splitDetails
             });
         });
 
         // Add manual recurring transactions
         manualFixedTxs.forEach(tx => {
             if (tx.type === 'expense') {
-                totalFixedExpenses += tx.amount;
+                const effAmount = getEffectiveAmount(tx);
+                totalFixedExpenses += effAmount;
                 fixedItems.push({
                     description: tx.description,
                     category: tx.category,
                     person: tx.person || 'Eu',
-                    amount: tx.amount,
+                    amount: effAmount,
                     paymentMethod: tx.paymentMethod
                 });
             }
@@ -1025,7 +1061,18 @@ class FinanceController {
         activeSubs.forEach(sub => {
             const alreadyCounted = currentPeriodTxs.some(tx => tx.subscriptionId === sub.id);
             if (!alreadyCounted) {
-                const subAmt = parseFloat(sub.amount) || 0;
+                // Check person filter involvement
+                if (subTarget !== 'all') {
+                    const targetNorm = norm(subTarget);
+                    if (sub.isSplit && sub.splitDetails && Array.isArray(sub.splitDetails)) {
+                        const isInvolved = sub.splitDetails.some(d => norm(d.person) === targetNorm);
+                        if (!isInvolved) return;
+                    } else {
+                        const subPersons = (sub.person || 'Eu').split(',').map(p => norm(p));
+                        if (!subPersons.includes(targetNorm)) return;
+                    }
+                }
+                const subAmt = getEffectiveSubAmount(sub);
                 if (sub.paymentMethod && sub.paymentMethod.startsWith('card_')) {
                     totalCreditCard += subAmt;
                 } else {
