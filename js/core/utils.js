@@ -70,26 +70,27 @@ const Utils = {
         const day = d.getDate();
 
         const closeD = parseInt(closeDay) || 28;
-        const dueD = parseInt(dueDay) || 10;
 
-        let dueYear = year;
-        let dueMonth = month;
-
-        if (day >= closeD) {
-            // Se comprou a partir do fechamento, a fatura vence no próximo mês
-            dueMonth += 1;
+        if (closeD < 15) {
+            // Fechamento no início do mês (ex: dia 5):
+            // Compras antes do dia 5 (ex: 03/08) pertencem ao ciclo do mês anterior (Julho).
+            // Compras a partir do dia 5 (ex: 17/07) pertencem ao mês da compra (Julho).
+            if (day < closeD) {
+                month -= 1;
+            }
+        } else {
+            // Fechamento no final do mês (ex: dia 28/31):
+            // Compras a partir do fechamento entram no mês seguinte.
+            if (day >= closeD) {
+                month += 1;
+            }
         }
 
-        if (dueD <= closeD) {
-            // Se o dia do vencimento é menor/igual ao fechamento (ex: fecha 28 vence 10, ou fecha 5 vence 10), o vencimento cai no mês seguinte
-            dueMonth += 1;
-        }
-
-        const dueDate = new Date(dueYear, dueMonth, 1);
-        const finalYear = dueDate.getFullYear();
-        const finalMonth = String(dueDate.getMonth() + 1).padStart(2, '0');
+        const invoiceDate = new Date(year, month, 1);
+        const invYear = invoiceDate.getFullYear();
+        const invMonth = String(invoiceDate.getMonth() + 1).padStart(2, '0');
         
-        return `${finalYear}-${finalMonth}`;
+        return `${invYear}-${invMonth}`;
     },
 
     getCardMetrics(closeDay = 28, dueDay = 10, refDate = new Date()) {
@@ -240,16 +241,25 @@ const Utils = {
             return new Date(y, m, validDay, 0, 0, 0, 0);
         };
 
-        const vencimentoDate = getClampedDate(year, month, dueD);
-        let fechamentoDate;
+        let fechamentoDate, vencimentoDate, melhorDiaDate;
 
-        if (dueD <= closeD) {
-            fechamentoDate = getClampedDate(year, month - 1, closeD);
+        if (closeD < 15) {
+            // Cartões com fechamento no início do mês (ex: dia 5):
+            // A Fatura de Agosto (2026-08) fecha em 05/09/2026 e vence em 10/09/2026.
+            fechamentoDate = getClampedDate(year, month + 1, closeD);
+            vencimentoDate = getClampedDate(year, month + 1, dueD);
+            melhorDiaDate = fechamentoDate;
         } else {
+            // Cartões com fechamento no final do mês (ex: dia 28/31):
+            // A Fatura de Agosto (2026-08) fecha em 31/08/2026 e vence em 05/09/2026.
             fechamentoDate = getClampedDate(year, month, closeD);
+            if (dueD > closeD) {
+                vencimentoDate = getClampedDate(year, month, dueD);
+            } else {
+                vencimentoDate = getClampedDate(year, month + 1, dueD);
+            }
+            melhorDiaDate = fechamentoDate;
         }
-
-        const melhorDiaDate = fechamentoDate;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
