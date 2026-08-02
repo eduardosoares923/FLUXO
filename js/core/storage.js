@@ -23,15 +23,14 @@ window.Storage = {
             }
 
             this.unsubscribes[collection] = db.collection(collection).onSnapshot((snapshot) => {
-                const dataArray = [];
+                const firestoreData = [];
                 snapshot.forEach(doc => {
-                    dataArray.push({ id: doc.id, ...doc.data() });
+                    firestoreData.push({ id: doc.id, ...doc.data() });
                 });
                 
                 const localData = this.get(collection) || [];
-
-                // If Firestore is empty for this collection, but localStorage has items:
-                // Auto-upload local items to Firestore so they are not wiped out
+                
+                // 1. Initial Migration: Se o Firestore estiver vazio mas houver dados locais (ex: o usuário já usava o app antes da nuvem), faz o upload
                 if (snapshot.empty && localData.length > 0) {
                     localData.forEach(item => {
                         if (item && item.id) {
@@ -39,22 +38,12 @@ window.Storage = {
                             db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
                         }
                     });
-                    return; // Wait for the next snapshot with uploaded items
+                    return; // Retorna para não apagar os dados locais enquanto o upload acontece
                 }
 
-                // If Firestore has items, preserve any local items not yet in Firestore by uploading them
-                if (!snapshot.empty && localData.length > 0) {
-                    localData.forEach(item => {
-                        if (item && item.id && !dataArray.some(d => String(d.id) === String(item.id))) {
-                            const cleanRecord = JSON.parse(JSON.stringify(item));
-                            db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
-                            dataArray.push(item);
-                        }
-                    });
-                }
-                
-                // Store in local cache
-                localStorage.setItem(APP_PREFIX + collection, JSON.stringify(dataArray));
+                // 2. Sincronização Normal: Firestore é a fonte da verdade.
+                // Isso garante que itens deletados sumam de verdade e não voltem como zumbis
+                localStorage.setItem(APP_PREFIX + collection, JSON.stringify(firestoreData));
                 
                 // Trigger events to update UI
                 this.notifyDataChanged(collection);
