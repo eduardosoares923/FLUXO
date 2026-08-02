@@ -204,36 +204,50 @@ window.Storage = {
                     }
                 }, 5000);
 
-                firebase.firestore().collection(collection).doc(strId).delete()
-                    .then(() => {
-                        if (!isResolved) {
-                            isResolved = true;
-                            clearTimeout(timeoutId);
-                        }
-                        // Remover da lista de pendentes após confirmação do Firestore
-                        // Aguardar um pouco para o onSnapshot processar
-                        setTimeout(() => {
-                            if (this._pendingDeletes[collection]) {
-                                this._pendingDeletes[collection].delete(strId);
+                try {
+                    firebase.firestore().collection(collection).doc(strId).delete()
+                        .then(() => {
+                            if (!isResolved) {
+                                isResolved = true;
+                                clearTimeout(timeoutId);
                             }
-                        }, 3000);
-                        resolve();
-                    })
-                    .catch(e => {
-                        if (!isResolved) {
-                            isResolved = true;
-                            clearTimeout(timeoutId);
-                            console.error('Erro ao deletar no Firestore:', e);
-                            this.notifyError(e, 'Erro ao excluir documento no banco de dados');
-                        }
-                        // Em caso de erro, remover da pendingDeletes eventualmente
-                        setTimeout(() => {
-                            if (this._pendingDeletes[collection]) {
-                                this._pendingDeletes[collection].delete(strId);
+                            // Remover da lista de pendentes após confirmação do Firestore
+                            // Aguardar um pouco para o onSnapshot processar
+                            setTimeout(() => {
+                                if (this._pendingDeletes[collection]) {
+                                    this._pendingDeletes[collection].delete(strId);
+                                }
+                            }, 3000);
+                            resolve();
+                        })
+                        .catch(e => {
+                            if (!isResolved) {
+                                isResolved = true;
+                                clearTimeout(timeoutId);
+                                console.error('Erro ao deletar no Firestore:', e);
+                                this.notifyError(e, 'Erro ao excluir documento no banco de dados');
                             }
-                        }, 5000);
-                        resolve(); // Fallback to local deletion
-                    });
+                            // Em caso de erro, remover da pendingDeletes eventualmente
+                            setTimeout(() => {
+                                if (this._pendingDeletes[collection]) {
+                                    this._pendingDeletes[collection].delete(strId);
+                                }
+                            }, 5000);
+                            resolve(); // Fallback to local deletion
+                        });
+                } catch (syncError) {
+                    if (!isResolved) {
+                        isResolved = true;
+                        clearTimeout(timeoutId);
+                        console.error('Erro síncrono ao deletar no Firestore:', syncError);
+                    }
+                    setTimeout(() => {
+                        if (this._pendingDeletes[collection]) {
+                            this._pendingDeletes[collection].delete(strId);
+                        }
+                    }, 5000);
+                    resolve();
+                }
             } else {
                 // Sem Firebase, remover imediatamente da pendingDeletes
                 this._pendingDeletes[collection].delete(strId);
@@ -273,31 +287,41 @@ window.Storage = {
                     chunks.push(strIds.slice(i, i + chunkSize));
                 }
 
-                const batchPromises = chunks.map(chunk => {
-                    const batch = db.batch();
-                    chunk.forEach(id => {
-                        const ref = db.collection(collection).doc(id);
-                        batch.delete(ref);
+                try {
+                    const batchPromises = chunks.map(chunk => {
+                        const batch = db.batch();
+                        chunk.forEach(id => {
+                            const ref = db.collection(collection).doc(id);
+                            batch.delete(ref);
+                        });
+                        return batch.commit();
                     });
-                    return batch.commit();
-                });
 
-                Promise.all(batchPromises).then(() => {
-                    setTimeout(() => {
-                        if (this._pendingDeletes[collection]) {
-                            strIds.forEach(id => this._pendingDeletes[collection].delete(id));
-                        }
-                    }, 3000);
-                    resolve();
-                }).catch(e => {
-                    console.error('Erro ao deletar lote no Firestore:', e);
+                    Promise.all(batchPromises).then(() => {
+                        setTimeout(() => {
+                            if (this._pendingDeletes[collection]) {
+                                strIds.forEach(id => this._pendingDeletes[collection].delete(id));
+                            }
+                        }, 3000);
+                        resolve();
+                    }).catch(e => {
+                        console.error('Erro ao deletar lote no Firestore:', e);
+                        setTimeout(() => {
+                            if (this._pendingDeletes[collection]) {
+                                strIds.forEach(id => this._pendingDeletes[collection].delete(id));
+                            }
+                        }, 5000);
+                        resolve();
+                    });
+                } catch (syncError) {
+                    console.error('Erro síncrono ao deletar lote no Firestore:', syncError);
                     setTimeout(() => {
                         if (this._pendingDeletes[collection]) {
                             strIds.forEach(id => this._pendingDeletes[collection].delete(id));
                         }
                     }, 5000);
                     resolve();
-                });
+                }
             } else {
                 if (this._pendingDeletes[collection]) {
                     strIds.forEach(id => this._pendingDeletes[collection].delete(id));
