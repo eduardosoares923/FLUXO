@@ -241,16 +241,25 @@ const Utils = {
             return new Date(y, m, validDay, 0, 0, 0, 0);
         };
 
-        const fechamentoDate = getClampedDate(year, month, closeD);
-        let vencimentoDate;
+        let fechamentoDate, vencimentoDate, melhorDiaDate;
 
-        if (dueD > closeD) {
-            vencimentoDate = getClampedDate(year, month, dueD);
-        } else {
+        if (closeD < 15) {
+            // Cartões com fechamento no início do mês (ex: dia 5):
+            // A Fatura de Agosto (2026-08) fecha em 05/09/2026 e vence em 10/09/2026.
+            fechamentoDate = getClampedDate(year, month + 1, closeD);
             vencimentoDate = getClampedDate(year, month + 1, dueD);
+            melhorDiaDate = getClampedDate(year, month, closeD);
+        } else {
+            // Cartões com fechamento no final do mês (ex: dia 28/31):
+            // A Fatura de Agosto (2026-08) fecha em 31/08/2026 e vence em 05/09/2026.
+            fechamentoDate = getClampedDate(year, month, closeD);
+            if (dueD > closeD) {
+                vencimentoDate = getClampedDate(year, month, dueD);
+            } else {
+                vencimentoDate = getClampedDate(year, month + 1, dueD);
+            }
+            melhorDiaDate = fechamentoDate;
         }
-
-        const melhorDiaDate = fechamentoDate;
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
