@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assinaturas & Recorrências - FLUXO</title>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar glass-panel">
+            <div class="brand">
+                <i class="fa-solid fa-chart-line brand-icon"></i>
+                <span class="brand-name">FLUXO</span>
+            </div>
+            
+            <nav class="nav-menu">
+                <a href="dashboard.html" class="nav-item">
+                    <i class="fa-solid fa-house"></i> Dashboard
+                </a>
+                <a href="transactions.html" class="nav-item">
+                    <i class="fa-solid fa-receipt"></i> Lançamentos
+                </a>
+                <a href="subscriptions.html" class="nav-item active">
+                    <i class="fa-solid fa-arrows-rotate"></i> Assinaturas
+                </a>
+                <a href="accounts.html" class="nav-item">
+                    <i class="fa-solid fa-wallet"></i> Contas
+                </a>
+                <a href="cards.html" class="nav-item">
+                    <i class="fa-solid fa-credit-card"></i> Cartões
+                </a>
+                <a href="reports.html" class="nav-item">
+                    <i class="fa-solid fa-chart-pie"></i> Relatórios
+                </a>
+                <a href="users.html" class="nav-item admin-only" style="display: none;">
+                    <i class="fa-solid fa-users"></i> Usuários
+                </a>
+            </nav>
+
+            <div class="sidebar-footer">
+                <button id="themeToggleBtn" class="btn btn-ghost btn-sm" title="Alternar Tema" style="width: 100%; justify-content: flex-start; gap: 0.5rem; color: var(--text-secondary);">
+                    <i class="fa-solid fa-moon"></i> <span>Modo Escuro</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="topbar">
+                <div class="page-title">
+                    <h1>Assinaturas & Recorrências</h1>
+                    <p class="text-secondary">Gerencie suas assinaturas (Netflix, Spotify, Faculdade, Internet) e cobranças automáticas no cartão</p>
+                </div>
+
+                <div class="topbar-actions">
+                    <button class="btn btn-primary" id="btnNovaAssinatura">
+                        <i class="fa-solid fa-plus"></i> Nova Assinatura
+                    </button>
+
+                    <div class="user-profile-dropdown" style="position: relative;">
+                        <div class="user-profile" id="userProfileBtn">
+                            <div class="user-info">
+                                <div class="user-name" id="userName">Usuário</div>
+                                <div class="user-role" id="userRoleTitle">Administrador</div>
+                            </div>
+                            <img src="" alt="Avatar" class="user-avatar" id="userAvatar">
+                        </div>
+                        <div class="dropdown-menu glass-panel" id="userDropdown">
+                            <a href="#profile" class="dropdown-item"><i class="fa-solid fa-user"></i> Meu Perfil</a>
+                            <a href="#password" class="dropdown-item"><i class="fa-solid fa-key"></i> Alterar Senha</a>
+                            <a href="#" id="logoutBtn" class="dropdown-item"><i class="fa-solid fa-right-from-bracket"></i> Sair</a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="dashboard-container">
+                <!-- Summary KPI Cards -->
+                <div class="summary-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="summary-card glass-panel" style="padding: 1.25rem; border-radius: 14px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Assinaturas Ativas</div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: var(--accent-primary); margin-top: 0.35rem;" id="kpiActiveSubsCount">0</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Serviços em cobrança ativa</div>
+                    </div>
+
+                    <div class="summary-card glass-panel" style="padding: 1.25rem; border-radius: 14px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Total Mensal Empregado</div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: var(--text-primary); margin-top: 0.35rem;" id="kpiTotalMonthlyAmount">R$ 0,00</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Comprometido todos os meses</div>
+                    </div>
+
+                    <div class="summary-card glass-panel" style="padding: 1.25rem; border-radius: 14px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Próxima Cobrança</div>
+                        <div style="font-size: 1.3rem; font-weight: 800; color: #818cf8; margin-top: 0.35rem;" id="kpiNextBillingInfo">-</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;" id="kpiNextBillingDate">Nenhuma pendente</div>
+                    </div>
+
+                    <div class="summary-card glass-panel" style="padding: 1.25rem; border-radius: 14px;">
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Cartões Vinculados</div>
+                        <div style="font-size: 1.8rem; font-weight: 800; color: var(--warning); margin-top: 0.35rem;" id="kpiCardsCount">0</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">Cartões recebendo cobranças</div>
+                    </div>
+                </div>
+
+                <!-- Filters & Control Bar -->
+                <div class="glass-panel" style="padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; flex: 1;">
+                        <div style="position: relative; min-width: 220px;">
+                            <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); color: var(--text-secondary); font-size: 0.85rem;"></i>
+                            <input type="text" id="subSearchInput" class="form-control" placeholder="Buscar assinatura..." style="padding-left: 2.3rem; height: 38px; font-size: 0.85rem;">
+                        </div>
+
+                        <select id="subStatusFilter" class="form-control" style="width: auto; height: 38px; font-size: 0.85rem;">
+                            <option value="all">Todos os Status</option>
+                            <option value="ativa" selected>🟢 Ativas</option>
+                            <option value="pausada">⏸️ Pausadas</option>
+                            <option value="cancelada">🔴 Canceladas</option>
+                        </select>
+
+                        <select id="subCardFilter" class="form-control" style="width: auto; height: 38px; font-size: 0.85rem;">
+                            <option value="all">Todos os Cartões / Contas</option>
+                        </select>
+
+                        <select id="subPersonFilter" class="form-control" style="width: auto; height: 38px; font-size: 0.85rem;">
+                            <option value="all">Todas as Pessoas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Subscriptions Cards Grid -->
+                <div id="subscriptionsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.25rem;">
+                    <!-- Preenchido dinamicamente pelo JS -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal Novo / Editar Assinatura -->
+    <div class="modal-overlay" id="subscriptionModal">
+        <div class="modal-content glass-panel" style="width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; padding: 1.75rem; border-radius: var(--radius-lg); position: relative;">
+            <button class="modal-close" onclick="window.UI.closeModal('subscriptionModal')" style="position: absolute; top: 1rem; right: 1rem; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">
+                <i class="fa-solid fa-times"></i>
+            </button>
+            <h2 class="modal-title" style="margin-bottom: 1.25rem; font-size: 1.2rem;">
+                <i class="fa-solid fa-arrows-rotate" style="color: var(--accent-primary); margin-right: 0.4rem;"></i> Cadastrar Nova Assinatura
+            </h2>
+            <form id="subscriptionForm">
+                <input type="hidden" id="subEditId" value="">
+                
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label class="form-label">Nome da Assinatura / Serviço *</label>
+                    <input type="text" id="subName" class="form-control" placeholder="ex: Netflix, Spotify, Faculdade, Internet" required>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Categoria *</label>
+                        <select id="subCategory" class="form-control" required>
+                            <option value="Entretenimento">🍿 Entretenimento</option>
+                            <option value="Contas e serviços">⚡ Contas e serviços</option>
+                            <option value="Educação">🎓 Educação</option>
+                            <option value="Assinaturas" selected>🔄 Assinaturas</option>
+                            <option value="Tecnologia">💻 Tecnologia</option>
+                            <option value="Saúde">🏥 Saúde</option>
+                            <option value="Outros">📦 Outros</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Valor da Cobrança (R$) *</label>
+                        <input type="number" step="0.01" min="0.01" id="subAmount" class="form-control" placeholder="ex: 39.90" required>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Forma de Pagamento / Cartão *</label>
+                        <select id="subPaymentMethod" class="form-control" required>
+                            <!-- Preenchido via JS -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Pessoa Responsável *</label>
+                        <select id="subPerson" class="form-control" required>
+                            <!-- Preenchido via JS -->
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <div class="form-group">
+                        <label class="form-label">Dia da Cobrança *</label>
+                        <input type="number" min="1" max="31" id="subBillingDay" class="form-control" value="10" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Periodicidade *</label>
+                        <select id="subPeriodicity" class="form-control" required>
+                            <option value="mensal" selected>Mensal</option>
+                            <option value="anual">Anual</option>
+                            <option value="semanal">Semanal</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Status Inicial *</label>
+                        <select id="subStatus" class="form-control" required>
+                            <option value="ativa" selected>🟢 Ativa</option>
+                            <option value="pausada">⏸️ Pausada</option>
+                            <option value="cancelada">🔴 Cancelada</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem;">
+                    <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="window.UI.closeModal('subscriptionModal')">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" style="flex: 1;">Salvar Assinatura</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts Core -->
+    <script src="js/core/storage.js"></script>
+    <script src="js/core/auth.js"></script>
+    <script src="js/core/utils.js"></script>
+    <script src="js/core/ui.js"></script>
+
+    <!-- Subscriptions Module -->
+    <script src="js/modules/subscriptions.js"></script>
+</body>
+</html>
