@@ -12,6 +12,24 @@ class SubscriptionsController {
     }
 
     async syncAllActiveSubscriptions() {
+        // PRIMEIRO: Limpar TODOS os lançamentos de assinatura que NÃO são do mês atual
+        const allTxs = window.Storage.get('transactions') || [];
+        const now = new Date();
+        const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+        const currentMonthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
+        
+        const subTxsToDelete = allTxs.filter(tx => {
+            if (!tx.isSubscription && !tx.subscriptionId) return false;
+            // Deletar se a data NÃO está no mês atual
+            return tx.date < currentMonthStart || tx.date >= currentMonthEnd;
+        });
+        
+        for (const tx of subTxsToDelete) {
+            await window.Storage.deleteRecord('transactions', tx.id);
+        }
+
+        // DEPOIS: Gerar lançamento do mês atual para cada assinatura ativa
         const subs = window.Storage.get('subscriptions') || [];
         const activeSubs = subs.filter(s => s.status === 'ativa');
         for (const sub of activeSubs) {
