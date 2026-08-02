@@ -12,30 +12,481 @@ class SubscriptionsController {
     }
 
     async syncAllActiveSubscriptions() {
-        // PRIMEIRO: Limpar TODOS os lançamentos de assinatura que NÃO são do mês atual
         const allTxs = window.Storage.get('transactions') || [];
         const now = new Date();
-        const currentMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+        const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
         const currentMonthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, '0')}-01`;
         
-        const subTxsToDelete = allTxs.filter(tx => {
-            if (!tx.isSubscription && !tx.subscriptionId) return false;
-            // Deletar APENAS se a data for de um mês FUTURO (para limpar o lixo gerado pelo bug antigo)
-            // IMPORTANTE: NUNCA deletar lançamentos de meses passados, senão estraga o histórico do usuário!
-            return tx.date >= currentMonthEnd;
-        });
-        
-        for (const tx of subTxsToDelete) {
-            await window.Storage.deleteRecord('transactions', tx.id);
+        // 1. Limpar em lote qualquer transação de assinatura do FUTURO (> mês atual) gerada anteriormente pelo bug antigo
+        const futureSubTxs = allTxs.filter(tx => (tx.isSubscription || tx.subscriptionId) && tx.date >= currentMonthEnd);
+        if (futureSubTxs.length > 0) {
+            await window.Storage.deleteRecords('transactions', futureSubTxs.map(tx => tx.id));
         }
 
-        // DEPOIS: Gerar lançamento do mês atual para cada assinatura ativa
+        // 2. Gerar lançamento do mês atual APENAS se ainda não foi sincronizado para este mês
         const subs = window.Storage.get('subscriptions') || [];
         const activeSubs = subs.filter(s => s.status === 'ativa');
         for (const sub of activeSubs) {
-            await this.syncSubscriptionTransactions(sub);
+            if (sub.lastSyncedMonth === currentMonthPrefix) continue;
+            await this.syncSubscriptionTransactions(sub, currentMonthPrefix);
         }
+    }
+
+    populateDropdowns() {
+        const paymentSelect = document.getElementById('subPaymentMethod');
+        const cardFilter = document.getElementById('subCardFilter');
+        const personSelect = document.getElementById('subPerson');
+        const personFilter = document.getElementById('subPersonFilter');
+
+        const accounts = window.Storage.get('accounts') || [];
+        const cards = window.Storage.get('cards') || [];
+        const persons = window.Storage.get('persons') || [];
+
+        if (paymentSelect) {
+            paymentSelect.innerHTML = '';
+            
+            const groupAcc = document.createElement('optgroup');
+            groupAcc.label = "Contas";
+            accounts.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                opt.textContent = `Conta: ${acc.name}`;
+                groupAcc.appendChild(opt);
+            });
+            paymentSelect.appendChild(groupAcc);
+
+            if (cards.length > 0) {
+                const groupCard = document.createElement('optgroup');
+                groupCard.label = "Cartões de Crédito";
+                cards.forEach(card => {
+                    const opt = document.createElement('option');
+                    opt.value = `card_${card.id}`;
+                    opt.textContent = `Cartão: ${card.name}`;
+                    groupCard.appendChild(opt);
+                });
+                paymentSelect.appendChild(groupCard);
+            }
+        }
+
+        if (cardFilter) {
+            cardFilter.innerHTML = '<option value="all">Todos os Métodos</option>';
+            
+            const groupAcc = document.createElement('optgroup');
+            groupAcc.label = "Contas";
+            accounts.forEach(acc => {
+                const opt = document.createElement('option');
+                opt.value = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+                opt.textContent = `Conta: ${acc.name}`;
+                groupAcc.appendChild(opt);
+            });
+            cardFilter.appendChild(groupAcc);
+
+            if (cards.length > 0) {
+                const groupCard = document.createElement('optgroup');
+                groupCard.label = "Cartões de Crédito";
+                cards.forEach(card => {
+                    const opt = document.createElement('option');
+                    opt.value = `card_${card.id}`;
+                    opt.textContent = `Cartão: ${card.name}`;
+                    groupCard.appendChild(opt);
+                });
+                cardFilter.appendChild(groupCard);
+            }
+        }
+
+        if (personSelect) {
+            personSelect.innerHTML = '';
+            let personNames = persons.map(p => p.name.trim());
+            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+            
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                personSelect.appendChild(opt);
+            });
+        }
+
+        if (personFilter) {
+            personFilter.innerHTML = '<option value="all">Todas as Pessoas</option>';
+            let personNames = persons.map(p => p.name.trim());
+            if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+
+            personNames.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                personFilter.appendChild(opt);
+            });
+        }
+
+        this.populateSplitPersonsList();
+    }
+
+    populateSplitPersonsList() {
+        const list = document.getElementById('subSplitPersonsList');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const persons = window.Storage.get('persons') || [];
+        let personNames = persons.map(p => p.name.trim());
+        if (personNames.length === 0) personNames = ['Eduardo', 'Mãe', 'Rodrigo'];
+
+        personNames.forEach(pName => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; background: rgba(255,255,255,0.03); padding: 0.4rem 0.75rem; border-radius: 6px; border: 1px solid var(--glass-border);';
+            row.innerHTML = `
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem; font-weight: 600; margin: 0; flex: 1;">
+                    <input type="checkbox" class="sub-split-cb" data-person="${window.Utils.escapeHTML(pName)}" style="width: 16px; height: 16px; accent-color: var(--accent-primary);">
+                    <span>${window.Utils.escapeHTML(pName)}</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 0.25rem;">
+                    <span style="font-size: 0.8rem; color: var(--text-secondary);">R$</span>
+                    <input type="number" step="0.01" min="0" class="form-control sub-split-val" data-person="${window.Utils.escapeHTML(pName)}" placeholder="0,00" style="width: 105px; padding: 0.25rem 0.5rem; font-size: 0.85rem;" disabled>
+                </div>
+            `;
+            list.appendChild(row);
+        });
+
+        list.querySelectorAll('.sub-split-cb').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                const pName = e.target.getAttribute('data-person');
+                const valInput = list.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+                if (valInput) {
+                    valInput.disabled = !e.target.checked;
+                    if (!e.target.checked) valInput.value = '';
+                }
+                this.updateSplitSummary();
+            });
+        });
+
+        list.querySelectorAll('.sub-split-val').forEach(input => {
+            input.addEventListener('input', () => this.updateSplitSummary());
+        });
+    }
+
+    updateSplitSummary() {
+        const amountInput = document.getElementById('subAmount');
+        const list = document.getElementById('subSplitPersonsList');
+        const sumEl = document.getElementById('subSplitSum');
+        const remEl = document.getElementById('subSplitRemaining');
+
+        if (!amountInput || !list || !sumEl || !remEl) return;
+
+        const totalAmount = parseFloat(amountInput.value) || 0;
+        const checkedInputs = Array.from(list.querySelectorAll('.sub-split-cb:checked'));
+
+        let sum = 0;
+        checkedInputs.forEach(cb => {
+            const pName = cb.getAttribute('data-person');
+            const valInput = list.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+            sum += parseFloat(valInput?.value || 0);
+        });
+
+        sum = Math.round(sum * 100) / 100;
+        const remaining = Math.round((totalAmount - sum) * 100) / 100;
+
+        sumEl.textContent = window.Utils.formatCurrency(sum);
+        remEl.textContent = window.Utils.formatCurrency(remaining);
+        remEl.style.color = Math.abs(remaining) < 0.01 ? 'var(--success)' : 'var(--warning)';
+    }
+
+    splitEqually() {
+        const amountInput = document.getElementById('subAmount');
+        const list = document.getElementById('subSplitPersonsList');
+        if (!amountInput || !list) return;
+
+        const totalAmount = parseFloat(amountInput.value) || 0;
+        const checkedCbs = Array.from(list.querySelectorAll('.sub-split-cb:checked'));
+
+        if (checkedCbs.length === 0) {
+            window.UI.showToast('Selecione pelo menos uma pessoa para dividir igualmente.', 'warning');
+            return;
+        }
+
+        const perPerson = Math.floor((totalAmount / checkedCbs.length) * 100) / 100;
+        let remainder = Math.round((totalAmount - (perPerson * checkedCbs.length)) * 100) / 100;
+
+        checkedCbs.forEach((cb, index) => {
+            const pName = cb.getAttribute('data-person');
+            const valInput = list.querySelector(`.sub-split-val[data-person="${CSS.escape(pName)}"]`);
+            if (valInput) {
+                const val = (index === 0) ? perPerson + remainder : perPerson;
+                valInput.value = val.toFixed(2);
+            }
+        });
+
+        this.updateSplitSummary();
+    }
+
+    bindEvents() {
+        const btnNova = document.getElementById('btnNovaAssinatura');
+        const btnCloseModal = document.getElementById('closeSubModalBtn');
+        const btnCancelModal = document.getElementById('cancelSubBtn');
+        const subForm = document.getElementById('subForm');
+        const searchInput = document.getElementById('subSearchFilter');
+        const cardFilter = document.getElementById('subCardFilter');
+        const personFilter = document.getElementById('subPersonFilter');
+        const amountInput = document.getElementById('subAmount');
+
+        if (amountInput) {
+            amountInput.addEventListener('input', () => this.updateSplitSummary());
+        }
+
+        const subEnableSplit = document.getElementById('subEnableSplit');
+        const subSplitGroup = document.getElementById('subSplitGroup');
+        const subSinglePersonGroup = document.getElementById('subSinglePersonGroup');
+        const subPerson = document.getElementById('subPerson');
+
+        if (subEnableSplit) {
+            subEnableSplit.addEventListener('change', () => {
+                const isSplit = subEnableSplit.checked;
+                if (subSplitGroup) subSplitGroup.style.display = isSplit ? 'block' : 'none';
+                if (subSinglePersonGroup) subSinglePersonGroup.style.display = isSplit ? 'none' : 'block';
+                if (subPerson) {
+                    if (isSplit) subPerson.removeAttribute('required');
+                    else subPerson.setAttribute('required', 'required');
+                }
+                this.updateSplitSummary();
+            });
+        }
+
+        const btnSplitEqual = document.getElementById('btnSplitEqualSub');
+        if (btnSplitEqual) {
+            btnSplitEqual.addEventListener('click', () => this.splitEqually());
+        }
+
+        if (btnNova) {
+            btnNova.addEventListener('click', () => {
+                subForm.reset();
+                document.getElementById('subEditId').value = '';
+                document.querySelector('#subscriptionModal .modal-title').textContent = 'Nova Assinatura';
+                this.populateDropdowns();
+                if (subEnableSplit) subEnableSplit.checked = false;
+                if (subSplitGroup) subSplitGroup.style.display = 'none';
+                if (subSinglePersonGroup) subSinglePersonGroup.style.display = 'block';
+                if (subPerson) subPerson.setAttribute('required', 'required');
+                window.UI.openModal('subscriptionModal');
+            });
+        }
+
+        if (btnCloseModal) btnCloseModal.addEventListener('click', () => window.UI.closeModal('subscriptionModal'));
+        if (btnCancelModal) btnCancelModal.addEventListener('click', () => window.UI.closeModal('subscriptionModal'));
+
+        if (subForm) {
+            subForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.saveSubscription();
+            });
+        }
+
+        const applyFilters = () => {
+            const search = searchInput ? searchInput.value.toLowerCase() : '';
+            const cardVal = cardFilter ? cardFilter.value : 'all';
+            const personVal = personFilter ? personFilter.value : 'all';
+
+            const norm = (s) => (s || '').trim().toLowerCase();
+
+            const filtered = this.subscriptions.filter(sub => {
+                const matchSearch = !search || sub.name.toLowerCase().includes(search) || (sub.category && sub.category.toLowerCase().includes(search));
+                const matchCard = cardVal === 'all' || sub.paymentMethod === cardVal;
+                
+                let matchPerson = false;
+                if (personVal === 'all') {
+                    matchPerson = true;
+                } else {
+                    const targetNorm = norm(personVal);
+                    if (sub.isSplit && sub.splitDetails && Array.isArray(sub.splitDetails)) {
+                        matchPerson = sub.splitDetails.some(d => norm(d.person) === targetNorm);
+                    } else {
+                        const subPersons = (sub.person || 'Eu').split(',').map(p => norm(p));
+                        matchPerson = subPersons.includes(targetNorm);
+                    }
+                }
+
+                return matchSearch && matchCard && matchPerson;
+            });
+
+            this.renderSubscriptionsList(filtered);
+        };
+
+        if (searchInput) searchInput.addEventListener('input', applyFilters);
+        if (cardFilter) cardFilter.addEventListener('change', applyFilters);
+        if (personFilter) personFilter.addEventListener('change', applyFilters);
+
+        const refreshSubHandler = () => {
+            this.subscriptions = window.Storage.get('subscriptions') || [];
+            this.populateDropdowns();
+            this.renderSubscriptions();
+        };
+
+        window.addEventListener('dataUpdated', refreshSubHandler);
+        window.addEventListener('fluxo:dataChanged', refreshSubHandler);
+    }
+
+    async saveSubscription() {
+        const editId = document.getElementById('subEditId').value;
+        const name = document.getElementById('subName').value.trim();
+        const category = document.getElementById('subCategory').value;
+        const amountStr = document.getElementById('subAmount').value;
+        const paymentMethod = document.getElementById('subPaymentMethod').value;
+        const billingDay = parseInt(document.getElementById('subBillingDay').value) || 10;
+        const person = document.getElementById('subPerson')?.value || 'Eu';
+
+        if (!name || !amountStr) {
+            window.UI.showToast('Preencha o nome e o valor da assinatura', 'error');
+            return;
+        }
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            window.UI.showToast('Informe um valor válido maior que zero.', 'error');
+            return;
+        }
+
+        const isSplitEnabled = document.getElementById('subEnableSplit')?.checked;
+        let splitItems = [];
+
+        if (isSplitEnabled) {
+            const list = document.getElementById('subSplitPersonsList');
+            const checkedCbs = Array.from(list.querySelectorAll('.sub-split-cb:checked'));
+
+            if (checkedCbs.length === 0) {
+                window.UI.showToast('Selecione pelo menos uma pessoa para a divisão.', 'error');
+                return;
+            }
+
+            let sum = 0;
+            for (const cb of checkedCbs) {
+                const personName = cb.getAttribute('data-person');
+                const valInput = list.querySelector(`.sub-split-val[data-person="${CSS.escape(personName)}"]`);
+                const val = parseFloat(valInput?.value || 0);
+                if (isNaN(val) || val <= 0) {
+                    window.UI.showToast(`Informe o valor da parte para ${personName}.`, 'error');
+                    return;
+                }
+                splitItems.push({ person: personName, amount: val });
+                sum += val;
+            }
+
+            sum = Math.round(sum * 100) / 100;
+            const diff = Math.abs(sum - amount);
+            if (diff > 0.05) {
+                window.UI.showToast(`A soma das partes (${window.Utils.formatCurrency(sum)}) deve ser igual ao valor da assinatura (${window.Utils.formatCurrency(amount)}).`, 'error');
+                return;
+            }
+        }
+
+        let subToSave;
+
+        if (editId) {
+            const index = this.subscriptions.findIndex(s => s.id === editId);
+            if (index !== -1) {
+                subToSave = {
+                    ...this.subscriptions[index],
+                    name,
+                    category,
+                    amount,
+                    paymentMethod,
+                    billingDay,
+                    person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
+                    isSplit: isSplitEnabled,
+                    splitDetails: isSplitEnabled ? splitItems : null,
+                    updatedAt: new Date().toISOString()
+                };
+                this.subscriptions[index] = subToSave;
+            }
+        } else {
+            subToSave = {
+                id: window.Utils.generateId(),
+                name,
+                category,
+                amount,
+                paymentMethod,
+                billingDay,
+                person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
+                status: 'ativa',
+                isSplit: isSplitEnabled,
+                splitDetails: isSplitEnabled ? splitItems : null,
+                createdAt: new Date().toISOString()
+            };
+            this.subscriptions.push(subToSave);
+        }
+
+        if (subToSave) {
+            try {
+                await window.Storage.saveRecord('subscriptions', subToSave);
+                await this.syncSubscriptionTransactions(subToSave);
+                
+                window.UI.closeModal('subscriptionModal');
+                window.UI.showToast(editId ? 'Assinatura atualizada com sucesso!' : 'Assinatura cadastrada com sucesso! 🔄', 'success');
+                this.renderSubscriptions();
+            } catch (e) {
+                console.error(e);
+                window.UI.showToast('Erro ao salvar assinatura', 'error');
+            }
+        }
+    }
+
+    async syncSubscriptionTransactions(sub, forceMonthPrefix) {
+        let allTxs = window.Storage.get('transactions') || [];
+        const today = new Date();
+        const currentYear = today.getFullYear();
+        const currentMonth = today.getMonth();
+        const currentMonthPrefix = forceMonthPrefix || `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        
+        const promises = [];
+        const d = new Date(currentYear, currentMonth, sub.billingDay || 10);
+        const dateStr = d.toISOString().split('T')[0];
+
+        const existingIndex = allTxs.findIndex(t => t.subscriptionId === sub.id && t.date === dateStr);
+        if (existingIndex > -1) {
+            if (sub.status === 'cancelada') {
+                const txIdToDelete = allTxs[existingIndex].id;
+                allTxs.splice(existingIndex, 1);
+                promises.push(window.Storage.deleteRecord('transactions', txIdToDelete));
+            } else {
+                allTxs[existingIndex] = {
+                    ...allTxs[existingIndex],
+                    description: sub.name,
+                    amount: sub.amount,
+                    category: sub.category || 'Assinaturas',
+                    paymentMethod: sub.paymentMethod,
+                    person: sub.person || 'Eu',
+                    recurringStatus: sub.status,
+                    isSplit: sub.isSplit || false,
+                    splitDetails: sub.splitDetails || null,
+                    updatedAt: new Date().toISOString()
+                };
+                promises.push(window.Storage.saveRecord('transactions', allTxs[existingIndex]));
+            }
+        } else if (sub.status !== 'cancelada') {
+            const newTx = {
+                id: window.Utils.generateId(),
+                type: 'expense',
+                description: sub.name,
+                amount: sub.amount,
+                date: dateStr,
+                category: sub.category || 'Assinaturas',
+                paymentMethod: sub.paymentMethod,
+                person: sub.person || 'Eu',
+                isRecurring: true,
+                isSubscription: true,
+                subscriptionId: sub.id,
+                recurringStatus: sub.status,
+                isSplit: sub.isSplit || false,
+                splitDetails: sub.splitDetails || null,
+                createdAt: new Date().toISOString()
+            };
+            allTxs.push(newTx);
+            promises.push(window.Storage.saveRecord('transactions', newTx));
+        }
+        
+        sub.lastSyncedMonth = currentMonthPrefix;
+        promises.push(window.Storage.saveRecord('subscriptions', sub));
+
+        await Promise.all(promises);
     }
 
     populateDropdowns() {

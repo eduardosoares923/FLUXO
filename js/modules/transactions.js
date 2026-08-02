@@ -924,65 +924,38 @@ class TransactionsController {
 
             if (paymentMode === 'recurring') {
                 // Fixa / Recorrente (Spotify, YouTube Premium, Faculdade, Claro Flex...)
+                // Gera APENAS 1 lançamento no mês escolhido (não preenche 12 meses futuros em 2027)
                 const frequency = document.getElementById('txRecurringFrequency')?.value || 'mensal';
-                const monthsRaw = document.getElementById('txRecurringMonths')?.value || '12';
                 const status = document.getElementById('txRecurringStatus')?.value || 'ativo';
-
-                const isContinuous = monthsRaw === 'continuous';
-                const count = isContinuous ? 12 : (parseInt(monthsRaw) || 12);
                 const isPaused = status === 'pausado';
 
-                const baseDateParts = dateStr.split('-');
-                const baseYear = parseInt(baseDateParts[0]);
-                const baseMonth = parseInt(baseDateParts[1]) - 1;
-                const baseDay = parseInt(baseDateParts[2]);
+                const recTx = {
+                    id: window.Utils.generateId(),
+                    type,
+                    description: description,
+                    amount: rawAmount,
+                    category,
+                    paymentMethod,
+                    person: isSplitEnabled ? splitItems.map(s => s.person).join(', ') : person,
+                    date: dateStr,
+                    isRecurring: true,
+                    recurringFrequency: frequency,
+                    recurringStatus: status,
+                    isPaused,
+                    isSplit: isSplitEnabled,
+                    splitDetails: isSplitEnabled ? splitItems : null,
+                    userId,
+                    createdAt: new Date().toISOString()
+                };
 
-                const savePromises = [];
-                for (let i = 0; i < count; i++) {
-                    let targetDate;
-                    if (frequency === 'semanal') {
-                        targetDate = new Date(baseYear, baseMonth, baseDay + (i * 7));
-                    } else if (frequency === 'anual') {
-                        targetDate = new Date(baseYear + i, baseMonth, baseDay);
-                    } else {
-                        // Mensal (Default)
-                        const lastDayOfTargetMonth = new Date(baseYear, baseMonth + i + 1, 0).getDate();
-                        const validDay = Math.min(baseDay, lastDayOfTargetMonth);
-                        targetDate = new Date(baseYear, baseMonth + i, validDay);
-                    }
-
-                    const instYear = targetDate.getFullYear();
-                    const instMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
-                    const instDay = String(targetDate.getDate()).padStart(2, '0');
-                    const instDateStr = `${instYear}-${instMonth}-${instDay}`;
-
-                    const recTx = {
-                        id: window.Utils.generateId(),
-                        type,
-                        description: description,
-                        amount: rawAmount,
-                        category,
-                        paymentMethod,
-                        person,
-                        date: instDateStr,
-                        isRecurring: true,
-                        recurringFrequency: frequency,
-                        isContinuous,
-                        recurringStatus: status,
-                        isPaused,
-                        userId,
-                        createdAt: new Date().toISOString()
-                    };
-                    savePromises.push(window.Storage.saveRecord('transactions', recTx));
-                }
-                await Promise.all(savePromises);
+                await window.Storage.saveRecord('transactions', recTx);
 
                 if (paymentMethod.startsWith('card_') && type === 'expense' && !isPaused) {
                     const cardId = paymentMethod.replace('card_', '');
                     const cards = window.Storage.get('cards') || [];
                     const card = cards.find(c => c.id === cardId);
                     if (card) {
-                        card.usedLimit = (card.usedLimit || 0) + (rawAmount * count);
+                        card.usedLimit = (card.usedLimit || 0) + rawAmount;
                         await window.Storage.saveRecord('cards', card);
                     }
                 }
