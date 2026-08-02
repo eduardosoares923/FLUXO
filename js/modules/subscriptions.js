@@ -319,7 +319,7 @@ class SubscriptionsController {
         if (subToSave) {
             try {
                 await window.Storage.saveRecord('subscriptions', subToSave);
-                this.syncSubscriptionTransactions(subToSave);
+                await this.syncSubscriptionTransactions(subToSave);
                 
                 window.UI.closeModal('subscriptionModal');
                 window.UI.showToast(editId ? 'Assinatura atualizada com sucesso!' : 'Assinatura cadastrada com sucesso! 🔄', 'success');
@@ -331,11 +331,13 @@ class SubscriptionsController {
         }
     }
 
-    syncSubscriptionTransactions(sub) {
+    async syncSubscriptionTransactions(sub) {
         let allTxs = window.Storage.get('transactions') || [];
         const today = new Date();
         const currentYear = today.getFullYear();
         const currentMonth = today.getMonth();
+        
+        const promises = [];
 
         // Ensure monthly transaction exists for past 2 months & next 12 months
         for (let offset = -2; offset <= 12; offset++) {
@@ -347,7 +349,7 @@ class SubscriptionsController {
                 if (sub.status === 'cancelada') {
                     const txIdToDelete = allTxs[existingIndex].id;
                     allTxs.splice(existingIndex, 1);
-                    window.Storage.deleteRecord('transactions', txIdToDelete);
+                    promises.push(window.Storage.deleteRecord('transactions', txIdToDelete));
                 } else {
                     allTxs[existingIndex] = {
                         ...allTxs[existingIndex],
@@ -361,7 +363,7 @@ class SubscriptionsController {
                         splitDetails: sub.splitDetails || null,
                         updatedAt: new Date().toISOString()
                     };
-                    window.Storage.saveRecord('transactions', allTxs[existingIndex]);
+                    promises.push(window.Storage.saveRecord('transactions', allTxs[existingIndex]));
                 }
             } else if (sub.status !== 'cancelada') {
                 const newTx = {
@@ -382,9 +384,11 @@ class SubscriptionsController {
                     createdAt: new Date().toISOString()
                 };
                 allTxs.push(newTx);
-                window.Storage.saveRecord('transactions', newTx);
+                promises.push(window.Storage.saveRecord('transactions', newTx));
             }
         }
+        
+        await Promise.all(promises);
     }
 
     openEditModal(id) {
