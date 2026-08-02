@@ -118,7 +118,7 @@ class CardsController {
 
         const paidRecordId = `inv_${id}_${currentMonthStr}`;
         const paidInvoices = window.Storage.get('paidInvoices') || [];
-        const existingRecords = paidInvoices.filter(p => p.id === paidRecordId || (p.cardId === id && p.monthStr === currentMonthStr));
+        const existingRecords = paidInvoices.filter(p => String(p.id) === paidRecordId || (String(p.cardId) === String(id) && p.monthStr === currentMonthStr));
 
         const formattedLabel = this.formatMonthLabel(currentMonthStr);
 
@@ -398,7 +398,7 @@ class CardsController {
             const closeD = card.closeDay || 28;
             const dueD = card.dueDay || 10;
 
-            const isPaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === currentMonthStr);
+            const isPaid = paidInvoices.some(p => String(p.cardId) === String(card.id) && p.monthStr === currentMonthStr);
 
             const cardTxs = allTransactions.filter(tx => tx.type === 'expense' && tx.paymentMethod === `card_${card.id}`);
             
@@ -416,7 +416,7 @@ class CardsController {
                 const invMonth = window.Utils.getCardInvoiceMonth ? window.Utils.getCardInvoiceMonth(tx.date, closeD, dueD) : '';
                 const amount = parseFloat(tx.amount) || 0;
                 
-                const isTxInvoicePaid = paidInvoices.some(p => p.cardId === card.id && p.monthStr === invMonth);
+                const isTxInvoicePaid = paidInvoices.some(p => String(p.cardId) === String(card.id) && p.monthStr === invMonth);
                 const isSub = tx.isSubscription || tx.isRecurring;
                 
                 if (!isTxInvoicePaid) {

@@ -165,7 +165,7 @@ window.Storage = {
         return new Promise((resolve, reject) => {
             // Otimista local remove
             const localData = this.get(collection) || [];
-            const filtered = localData.filter(item => item.id !== id);
+            const filtered = localData.filter(item => String(item.id) !== String(id));
             this.set(collection, filtered);
             this.notifyDataChanged(collection);
 
