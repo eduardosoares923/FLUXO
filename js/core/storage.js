@@ -2,7 +2,7 @@
 const APP_PREFIX = 'fluxo_';
 
 window.Storage = {
-    syncCollections: ['users', 'accounts', 'transactions', 'cards', 'settings', 'persons', 'paidInvoices'],
+    syncCollections: ['users', 'accounts', 'transactions', 'cards', 'settings', 'persons', 'paidInvoices', 'subscriptions'],
     isFirebaseReady: false,
     unsubscribes: {},
 
@@ -27,6 +27,31 @@ window.Storage = {
                 snapshot.forEach(doc => {
                     dataArray.push({ id: doc.id, ...doc.data() });
                 });
+                
+                const localData = this.get(collection) || [];
+
+                // If Firestore is empty for this collection, but localStorage has items:
+                // Auto-upload local items to Firestore so they are not wiped out
+                if (snapshot.empty && localData.length > 0) {
+                    localData.forEach(item => {
+                        if (item && item.id) {
+                            const cleanRecord = JSON.parse(JSON.stringify(item));
+                            db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
+                        }
+                    });
+                    return; // Wait for the next snapshot with uploaded items
+                }
+
+                // If Firestore has items, preserve any local items not yet in Firestore by uploading them
+                if (!snapshot.empty && localData.length > 0) {
+                    localData.forEach(item => {
+                        if (item && item.id && !dataArray.some(d => String(d.id) === String(item.id))) {
+                            const cleanRecord = JSON.parse(JSON.stringify(item));
+                            db.collection(collection).doc(String(item.id)).set(cleanRecord, { merge: true });
+                            dataArray.push(item);
+                        }
+                    });
+                }
                 
                 // Store in local cache
                 localStorage.setItem(APP_PREFIX + collection, JSON.stringify(dataArray));
