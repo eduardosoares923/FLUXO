@@ -11,8 +11,6 @@ function dayKey(d) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// Ícone por categoria: dá identidade visual às transações recentes em vez
-// de uma lista só de texto. Categoria não mapeada cai num ícone genérico.
 const CATEGORY_ICONS = {
   alimentação: 'fa-utensils',
   mercado: 'fa-cart-shopping',
@@ -33,9 +31,6 @@ function iconForCategory(category, type) {
   return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
 }
 
-// Linha de tendência: saldo acumulado dia a dia nos últimos 14 dias (não
-// barras soltas), desenhada com animação de "traço" na entrada. É dado
-// real, calculado a partir das transações, não decoração.
 function FlowChart({ days }) {
   const width = 260;
   const height = 90;
@@ -69,19 +64,16 @@ function FlowChart({ days }) {
   );
 }
 
-// Anima um número de 0 até o valor final quando ele muda, dá vida ao
-// saldo em destaque em vez de aparecer pronto.
 function useCountUp(target, duration = 900) {
   const [value, setValue] = useState(0);
   const frame = useRef(null);
 
   useEffect(() => {
     const start = performance.now();
-    const from = 0;
     function tick(now) {
       const progress = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(from + (target - from) * eased);
+      setValue(target * eased);
       if (progress < 1) frame.current = requestAnimationFrame(tick);
     }
     frame.current = requestAnimationFrame(tick);
@@ -91,14 +83,38 @@ function useCountUp(target, duration = 900) {
   return value;
 }
 
+// Próxima data de cobrança de uma assinatura ativa a partir de hoje,
+// considerando que o dia de cobrança já pode ter passado neste mês.
+function nextBillingDate(billingDay, today) {
+  const day = Number(billingDay) || 10;
+  let candidate = new Date(today.getFullYear(), today.getMonth(), day);
+  if (candidate < today) candidate = new Date(today.getFullYear(), today.getMonth() + 1, day);
+  return candidate;
+}
+
 export default function Dashboard() {
   const { session, canAccessPerson } = useAuth();
   const { data: transactions, loading: loadingTx } = useCollection('transactions');
   const { data: accounts, loading: loadingAcc } = useCollection('accounts');
+  const { data: subscriptions } = useCollection('subscriptions');
+  const { data: cards } = useCollection('cards');
 
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+  const [navDate, setNavDate] = useState(() => new Date());
+
+  const navMonth = navDate.getMonth();
+  const navYear = navDate.getFullYear();
+  const monthLabel = navDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const isCurrentMonth = navMonth === new Date().getMonth() && navYear === new Date().getFullYear();
+
+  function goPrevMonth() {
+    setNavDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1));
+  }
+  function goNextMonth() {
+    setNavDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1));
+  }
+  function goToday() {
+    setNavDate(new Date());
+  }
 
   const visibleAccounts = useMemo(
     () => (session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner))),
@@ -114,9 +130,9 @@ export default function Dashboard() {
     () =>
       visibleTx.filter((tx) => {
         const d = parseTxDate(tx.date);
-        return d && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        return d && d.getMonth() === navMonth && d.getFullYear() === navYear;
       }),
-    [visibleTx, currentMonth, currentYear]
+    [visibleTx, navMonth, navYear]
   );
 
   const { totalIncome, totalExpense } = useMemo(() => {
@@ -130,8 +146,19 @@ export default function Dashboard() {
     return { totalIncome: income, totalExpense: expense };
   }, [currentPeriodTxs]);
 
+  // Saldo atual é sempre o saldo real de agora (independe do mês navegado),
+  // usa TODAS as transações, não só o período em exibição.
   const currentBalance = useMemo(() => {
-    if (visibleAccounts.length === 0) return totalIncome - totalExpense;
+    if (visibleAccounts.length === 0) {
+      let income = 0;
+      let expense = 0;
+      visibleTx.forEach((tx) => {
+        const amt = getEffectiveAmount(tx);
+        if (tx.type === 'income') income += amt;
+        else expense += amt;
+      });
+      return income - expense;
+    }
     return visibleAccounts.reduce((sum, acc) => {
       const accIdStr = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
       let accIncome = 0;
@@ -146,11 +173,75 @@ export default function Dashboard() {
       const initial = parseFloat(acc.balance) || 0;
       return sum + initial + accIncome - accExpense;
     }, 0);
-  }, [visibleAccounts, visibleTx, totalIncome, totalExpense]);
+  }, [visibleAccounts, visibleTx]);
 
   const animatedBalance = useCountUp(currentBalance);
 
+  // Resumo por conta: saldo atual de cada uma + movimentação do mês navegado
+  const accountsSummary = useMemo(
+    () =>
+      visibleAccounts.map((acc) => {
+        const accIdStr = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
+        let allIncome = 0;
+        let allExpense = 0;
+        let periodIncome = 0;
+        let periodExpense = 0;
+        visibleTx.forEach((tx) => {
+          if (tx.paymentMethod !== accIdStr) return;
+          const amt = getEffectiveAmount(tx);
+          const d = parseTxDate(tx.date);
+          const inPeriod = d && d.getMonth() === navMonth && d.getFullYear() === navYear;
+          if (tx.type === 'income') {
+            allIncome += amt;
+            if (inPeriod) periodIncome += amt;
+          } else {
+            allExpense += amt;
+            if (inPeriod) periodExpense += amt;
+          }
+        });
+        const balance = (parseFloat(acc.balance) || 0) + allIncome - allExpense;
+        return { ...acc, balance, periodNet: periodIncome - periodExpense };
+      }),
+    [visibleAccounts, visibleTx, navMonth, navYear]
+  );
+
+  // Resumo por pessoa no mês navegado
+  const personsSummary = useMemo(() => {
+    const map = new Map();
+    currentPeriodTxs.forEach((tx) => {
+      const label = tx.person || 'Sem pessoa';
+      if (!map.has(label)) map.set(label, { person: label, income: 0, expense: 0 });
+      const entry = map.get(label);
+      const amt = getEffectiveAmount(tx);
+      if (tx.type === 'income') entry.income += amt;
+      else entry.expense += amt;
+    });
+    return [...map.values()].sort((a, b) => b.expense + b.income - (a.expense + a.income));
+  }, [currentPeriodTxs]);
+
+  // Alertas de assinatura: cobrança prevista pros próximos 5 dias
+  const upcomingSubscriptions = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return (subscriptions || [])
+      .filter((s) => s.status !== 'pausada' && canAccessPerson(s.person))
+      .map((s) => {
+        const due = nextBillingDate(s.billingDay, today);
+        const diffDays = Math.round((due - today) / (1000 * 60 * 60 * 24));
+        return { ...s, diffDays };
+      })
+      .filter((s) => s.diffDays >= 0 && s.diffDays <= 5)
+      .sort((a, b) => a.diffDays - b.diffDays);
+  }, [subscriptions, canAccessPerson]);
+
+  function cardNameFor(paymentMethod) {
+    if (!paymentMethod?.startsWith('card_')) return 'Conta corrente';
+    const card = cards.find((c) => `card_${c.id}` === paymentMethod);
+    return card ? `Cartão ${card.name}` : 'Cartão';
+  }
+
   const last14Days = useMemo(() => {
+    const now = new Date();
     const buckets = [];
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now);
@@ -166,8 +257,6 @@ export default function Dashboard() {
       const amt = getEffectiveAmount(tx);
       byKey.get(key).net += tx.type === 'income' ? amt : -amt;
     });
-    // saldo acumulado, começando de zero relativo (mostra a tendência, não
-    // o saldo absoluto, que já está no número grande do hero)
     let running = 0;
     return buckets.map((b) => {
       running += b.net;
@@ -189,7 +278,43 @@ export default function Dashboard() {
 
   return (
     <div className="dashboard-page">
-      <h2>Olá, {session.name.split(' ')[0]}</h2>
+      <div className="page-header">
+        <h2>Olá, {session.name.split(' ')[0]}</h2>
+        <div className="month-nav">
+          <button onClick={goPrevMonth} aria-label="Mês anterior">
+            <i className="fa-solid fa-chevron-left" />
+          </button>
+          <span className="month-nav-label">{monthLabel}</span>
+          <button onClick={goNextMonth} aria-label="Próximo mês">
+            <i className="fa-solid fa-chevron-right" />
+          </button>
+          {!isCurrentMonth && (
+            <button className="btn btn-ghost month-nav-today" onClick={goToday}>
+              Hoje
+            </button>
+          )}
+        </div>
+      </div>
+
+      {upcomingSubscriptions.length > 0 && (
+        <div className="subscription-alerts">
+          {upcomingSubscriptions.map((s) => (
+            <div className="subscription-alert" key={s.id}>
+              <span className="icon-badge subscription-alert-icon">
+                <i className="fa-solid fa-bell" />
+              </span>
+              <div>
+                <strong>Assinatura "{s.name}"</strong>
+                <div className="subscription-alert-text">
+                  Cobrança de {formatCurrency(s.amount)} prevista para{' '}
+                  {s.diffDays === 0 ? 'hoje' : s.diffDays === 1 ? 'amanhã' : `em ${s.diffDays} dias`} no{' '}
+                  {cardNameFor(s.paymentMethod)}.
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="hero-balance">
         <div className="hero-balance-info">
@@ -226,29 +351,70 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="recent-tx-card">
-        <h3>Transações recentes</h3>
-        {recentTx.length === 0 ? (
-          <p className="empty-state">Nenhuma transação encontrada no período.</p>
-        ) : (
-          recentTx.map((tx) => (
-            <div className="tx-row" key={tx.id}>
-              <span className={`tx-icon ${tx.type === 'income' ? 'income' : 'expense'}`}>
-                <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
-              </span>
-              <div className="tx-row-info">
-                <div className="tx-desc">{tx.description}</div>
-                <div className="tx-date">
-                  {formatDate(tx.date)} &bull; {tx.category}
+      <div className="dashboard-columns">
+        <div className="recent-tx-card">
+          <h3>Transações recentes</h3>
+          {recentTx.length === 0 ? (
+            <p className="empty-state">Nenhuma transação encontrada no período.</p>
+          ) : (
+            recentTx.map((tx) => (
+              <div className="tx-row" key={tx.id}>
+                <span className={`tx-icon ${tx.type === 'income' ? 'income' : 'expense'}`}>
+                  <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                </span>
+                <div className="tx-row-info">
+                  <div className="tx-desc">{tx.description}</div>
+                  <div className="tx-date">
+                    {formatDate(tx.date)} &bull; {tx.category}
+                  </div>
+                </div>
+                <div className={`tx-amount ${tx.type === 'income' ? 'income' : 'expense'}`}>
+                  {tx.type === 'income' ? '+ ' : '- '}
+                  {formatCurrency(getEffectiveAmount(tx))}
                 </div>
               </div>
-              <div className={`tx-amount ${tx.type === 'income' ? 'income' : 'expense'}`}>
-                {tx.type === 'income' ? '+ ' : '- '}
-                {formatCurrency(getEffectiveAmount(tx))}
-              </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
+
+        <div className="dashboard-side">
+          <div className="recent-tx-card">
+            <h3>Por conta</h3>
+            {accountsSummary.length === 0 ? (
+              <p className="empty-state">Nenhuma conta cadastrada.</p>
+            ) : (
+              accountsSummary.map((acc) => (
+                <div className="summary-line" key={acc.id}>
+                  <span>{acc.name}</span>
+                  <div className="summary-line-values">
+                    <strong>{formatCurrency(acc.balance)}</strong>
+                    <small className={acc.periodNet >= 0 ? 'income' : 'expense'}>
+                      {acc.periodNet >= 0 ? '+' : ''}
+                      {formatCurrency(acc.periodNet)} no mês
+                    </small>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="recent-tx-card">
+            <h3>Por pessoa</h3>
+            {personsSummary.length === 0 ? (
+              <p className="empty-state">Nenhuma movimentação no período.</p>
+            ) : (
+              personsSummary.map((p) => (
+                <div className="summary-line" key={p.person}>
+                  <span>{p.person}</span>
+                  <div className="summary-line-values">
+                    <small className="income">+{formatCurrency(p.income)}</small>
+                    <small className="expense">-{formatCurrency(p.expense)}</small>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
