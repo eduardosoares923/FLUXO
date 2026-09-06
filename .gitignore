@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -27,3 +27,8 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Credentials & Service Accounts
+serviceAccountKey.json
+serviceAccountKey*.json
+*serviceAccount*.json
