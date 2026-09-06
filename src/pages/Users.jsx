@@ -6,6 +6,7 @@ import { useAuth, upsertUserLookup } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { auth } from '../firebase';
 import { userSchema } from '../schemas/financialSchemas';
+import { toPersonKeys } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { toast } from '../stores/useToastStore';
@@ -22,6 +23,7 @@ export default function Users() {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(userSchema),
@@ -33,8 +35,11 @@ export default function Users() {
       password: '',
       role: 'usuario',
       person: '',
+      allowedPersons: '',
     },
   });
+
+  const watchedRole = watch('role');
 
   if (!hasPermission('manage_users')) {
     return <p className="empty-state">Você não tem permissão para acessar esta página.</p>;
@@ -49,6 +54,7 @@ export default function Users() {
       password: '',
       role: 'usuario',
       person: '',
+      allowedPersons: '',
     });
     setEditingId(null);
     setError('');
@@ -64,6 +70,7 @@ export default function Users() {
       password: '',
       role: u.role || 'usuario',
       person: u.person || u.name || '',
+      allowedPersons: Array.isArray(u.allowedPersons) ? u.allowedPersons.join(', ') : u.allowedPersons || '',
     });
     setEditingId(u.id);
     setError('');
@@ -84,6 +91,9 @@ export default function Users() {
         uid = cred.user.uid;
       }
 
+      const person = data.person?.trim() || data.name.trim();
+      const allowedPersons = data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '';
+
       const record = {
         id: uid,
         name: data.name.trim(),
@@ -91,8 +101,16 @@ export default function Users() {
         email: data.email.trim().toLowerCase(),
         cpf: data.cpf?.trim() || '',
         role: data.role,
-        person: data.person?.trim() || data.name.trim(),
+        person,
+        allowedPersons,
         status: 'ativo',
+        // Chaves normalizadas: é isso que as regras do Firestore comparam
+        // (não fazem normalize()/split() como o JS do navegador faz).
+        // personKeys = "quem eu sou" (pra bater com owner/person de
+        // contas/cartões/transações). allowedPersonKeys = "quem um gerente
+        // pode ver", vazio quando não é gerente ou não tem restrição.
+        personKeys: toPersonKeys([person, data.name, data.username].filter(Boolean)),
+        allowedPersonKeys: allowedPersons ? toPersonKeys(allowedPersons) : [],
       };
 
       await saveRecord(record);
@@ -250,6 +268,16 @@ export default function Users() {
 
             <label>Pessoa vinculada</label>
             <input {...register('person')} placeholder="Nome da pessoa para vínculo financeiro" />
+
+            {watchedRole === 'gerente' && (
+              <>
+                <label>Pessoas permitidas (gerente)</label>
+                <input
+                  {...register('allowedPersons')}
+                  placeholder="Ex: Eduardo, Mãe (separado por vírgula; vazio = vê todo mundo)"
+                />
+              </>
+            )}
 
             {error && <div className="login-error">{error}</div>}
 

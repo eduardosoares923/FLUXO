@@ -14,11 +14,14 @@ service cloud.firestore {
       return isSignedIn() && myUser().role == 'admin';
     }
 
-    function isManager() {
-      return isSignedIn() && (myUser().role == 'admin' || myUser().role == 'gerente');
+    function isGerente() {
+      return isSignedIn() && myUser().role == 'gerente';
     }
 
-    function isMyPerson(personName) {
+    // Compatibilidade: continua aceitando comparação exata (owner == meu
+    // nome/username/pessoa) pra documentos antigos que ainda não foram
+    // salvos de novo e por isso não têm personKeys/ownerKey ainda.
+    function isMyPersonLegacy(personName) {
       return isSignedIn() && (
         personName == myUser().person ||
         personName == myUser().name ||
@@ -26,13 +29,54 @@ service cloud.firestore {
       );
     }
 
+    // Um gerente sem "allowedPersonKeys" definido (ou lista vazia) vê todo
+    // mundo, do mesmo jeito que a tela de Usuários trata campo em branco
+    // como "sem restrição". Com lista definida, só vê quem está nela.
+    function gerenteSemRestricao() {
+      return !('allowedPersonKeys' in myUser()) || myUser().allowedPersonKeys.size() == 0;
+    }
+
+    function gerentePodeVerChave(personKey) {
+      return isGerente() && (gerenteSemRestricao() || personKey in myUser().allowedPersonKeys);
+    }
+
+    function gerentePodeVerChaves(personKeys) {
+      return isGerente() && (gerenteSemRestricao() || personKeys.hasAny(myUser().allowedPersonKeys));
+    }
+
+    // --- dono por campo único (accounts/cards: ownerKey normalizado) ---
+    function donoSouEu(data) {
+      return isSignedIn() && (
+        (('ownerKey' in data) && ('personKeys' in myUser()) && data.ownerKey in myUser().personKeys) ||
+        (!('ownerKey' in data) && isMyPersonLegacy(data.owner))
+      );
+    }
+
+    function donoPermitidoGerente(data) {
+      return ('ownerKey' in data) ? gerentePodeVerChave(data.ownerKey) : isGerente();
+    }
+
+    // --- pessoa por campo com possível lista (transactions/subscriptions:
+    //     personKeys normalizado, suporta "Eduardo, Mãe") ---
+    function souUmaDasPessoas(data) {
+      return isSignedIn() && (
+        (('personKeys' in data) && ('personKeys' in myUser()) && data.personKeys.hasAny(myUser().personKeys)) ||
+        (!('personKeys' in data) && isMyPersonLegacy(data.person))
+      );
+    }
+
+    function pessoaPermitidaGerente(data) {
+      return ('personKeys' in data) ? gerentePodeVerChaves(data.personKeys) : isGerente();
+    }
+
     // --- users: dados completos (nome, e-mail, cpf, cargo, permissões) ---
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isManager());
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isGerente());
       allow create: if isAdmin();
       allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId
                       && request.resource.data.role == resource.data.role
-                      && request.resource.data.permissions == resource.data.permissions);
+                      && request.resource.data.permissions == resource.data.permissions
+                      && request.resource.data.allowedPersonKeys == resource.data.allowedPersonKeys);
       allow delete: if isAdmin();
     }
 
@@ -43,41 +87,44 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // --- accounts: restrito por dono (owner) ou permissão gerencial/admin ---
+    // --- accounts: restrito por dono (owner/ownerKey) ---
     match /accounts/{id} {
-      allow read: if isManager() || isMyPerson(resource.data.owner);
-      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.owner));
-      allow update, delete: if isManager() || isMyPerson(resource.data.owner);
+      allow read: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
+      allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
+      allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
     }
 
-    // --- cards: restrito por dono (owner) ou permissão gerencial/admin ---
+    // --- cards: restrito por dono (owner/ownerKey) ---
     match /cards/{id} {
-      allow read: if isManager() || isMyPerson(resource.data.owner);
-      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.owner));
-      allow update, delete: if isManager() || isMyPerson(resource.data.owner);
+      allow read: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
+      allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
+      allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
     }
 
-    // --- transactions: restrito por autor (userId), pessoa ou permissão gerencial/admin ---
+    // --- transactions: restrito por autor (userId), pessoa(s) ou gerente autorizado ---
     match /transactions/{id} {
-      allow read: if isManager() ||
+      allow read: if isAdmin() ||
                   resource.data.userId == request.auth.uid ||
-                  isMyPerson(resource.data.person);
-      allow create: if isManager() || (
+                  souUmaDasPessoas(resource.data) ||
+                  pessoaPermitidaGerente(resource.data);
+      allow create: if isAdmin() || (
         isSignedIn() && (
           request.resource.data.userId == request.auth.uid ||
-          isMyPerson(request.resource.data.person)
+          souUmaDasPessoas(request.resource.data) ||
+          pessoaPermitidaGerente(request.resource.data)
         )
       );
-      allow update, delete: if isManager() ||
+      allow update, delete: if isAdmin() ||
                             resource.data.userId == request.auth.uid ||
-                            isMyPerson(resource.data.person);
+                            souUmaDasPessoas(resource.data) ||
+                            pessoaPermitidaGerente(resource.data);
     }
 
-    // --- subscriptions: restrito por pessoa ou permissão gerencial/admin ---
+    // --- subscriptions: restrito por pessoa(s) ou gerente autorizado ---
     match /subscriptions/{id} {
-      allow read: if isManager() || isMyPerson(resource.data.person);
-      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.person));
-      allow update, delete: if isManager() || isMyPerson(resource.data.person);
+      allow read: if isAdmin() || souUmaDasPessoas(resource.data) || pessoaPermitidaGerente(resource.data);
+      allow create: if isAdmin() || (isSignedIn() && (souUmaDasPessoas(request.resource.data) || pessoaPermitidaGerente(request.resource.data)));
+      allow update, delete: if isAdmin() || souUmaDasPessoas(resource.data) || pessoaPermitidaGerente(resource.data);
     }
 
     // --- paidInvoices: controle de faturas pagas ---
@@ -88,13 +135,22 @@ service cloud.firestore {
     // --- persons: catálogo de pessoas vinculadas ---
     match /persons/{id} {
       allow read: if isSignedIn();
-      allow write: if isManager();
+      allow write: if isAdmin() || isGerente();
     }
 
     // --- settings: configurações globais do sistema e categorias ---
     match /settings/{id} {
       allow read: if isSignedIn();
-      allow write: if isManager();
+      allow write: if isAdmin() || isGerente();
     }
   }
 }
+
+// NOTA DE MIGRAÇÃO: documentos de accounts/cards/transactions/subscriptions
+// criados ANTES dessa mudança não têm os campos ownerKey/personKeys ainda.
+// Pra eles, a regra usa o fallback de comparação exata (isMyPersonLegacy),
+// que é o mesmo comportamento de antes (com a mesma limitação: não separa
+// "Eduardo, Mãe" nem ignora acento/maiúscula). Basta abrir cada registro
+// antigo pra editar e salvar de novo (sem precisar mudar nada) que ele passa
+// a gravar a chave normalizada e migra sozinho. Se preferir, dá pra pedir
+// um script único de migração em vez de reeditar um por um.

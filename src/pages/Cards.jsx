@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, normalize } from '../utils/format';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
 
@@ -66,13 +66,15 @@ export default function Cards() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
+    const owner = form.owner.trim() || session.person;
     await saveRecord({
       id: editingId || undefined,
       name: form.name.trim(),
       limit: parseFloat(form.limit) || 0,
       closeDay: parseInt(form.closeDay) || 28,
       dueDay: parseInt(form.dueDay) || 10,
-      owner: form.owner.trim() || session.person,
+      owner,
+      ownerKey: normalize(owner),
     });
     setShowForm(false);
   }

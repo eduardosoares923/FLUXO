@@ -37,6 +37,7 @@ export const userSchema = z.object({
   password: z.string().optional().default(''),
   role: z.enum(['admin', 'gerente', 'usuario', 'visitante']).default('usuario'),
   person: z.string().trim().optional().default(''),
+  allowedPersons: z.string().trim().optional().default(''),
 });
 
 export const subscriptionSchema = z.object({

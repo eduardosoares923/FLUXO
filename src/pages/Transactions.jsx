@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, formatDate, getCardInvoiceMonth } from '../utils/format';
+import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys } from '../utils/format';
 
 const CATEGORY_ICONS = {
   alimentação: 'fa-utensils',
@@ -76,6 +76,7 @@ export default function Transactions() {
     e.preventDefault();
     if (!form.description.trim() || !form.amount) return;
 
+    const person = form.person.trim() || session.person;
     const record = {
       id: editingId || undefined,
       description: form.description.trim(),
@@ -84,7 +85,8 @@ export default function Transactions() {
       category: form.category.trim(),
       date: form.date,
       paymentMethod: form.paymentMethod,
-      person: form.person.trim() || session.person,
+      person,
+      personKeys: toPersonKeys(person),
       userId: session.id,
     };
 

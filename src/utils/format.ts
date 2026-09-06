@@ -84,3 +84,14 @@ export function getCardInvoiceMonth(txDateStr: string | null | undefined, closeD
 export function normalize(str: string | null | undefined): string {
   return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
+
+// Transforma um campo "pessoa" (que pode ser "Eduardo" ou "Eduardo, Mãe")
+// numa lista de chaves normalizadas, pra comparar de forma consistente
+// tanto no app quanto nas regras do Firestore (que não fazem
+// normalize()/split() do mesmo jeito que o JS do navegador).
+export function toPersonKeys(value: string | string[] | null | undefined): string[] {
+  if (!value) return [];
+  const arr = Array.isArray(value) ? value : String(value).split(',');
+  const keys = arr.map((p) => normalize(p)).filter(Boolean);
+  return [...new Set(keys)];
+}

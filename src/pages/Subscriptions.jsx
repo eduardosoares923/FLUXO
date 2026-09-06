@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, getCardInvoiceMonth } from '../utils/format';
+import { formatCurrency, getCardInvoiceMonth, toPersonKeys } from '../utils/format';
 import { subscriptionSchema } from '../schemas/financialSchemas';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -278,6 +278,7 @@ export default function Subscriptions() {
         category: data.category?.trim() || 'Assinaturas',
         paymentMethod: data.paymentMethod,
         person: finalPerson,
+        personKeys: toPersonKeys(finalPerson),
         status,
         isSplit,
         splitDetails: finalSplitDetails,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency } from '../utils/format';
+import { formatCurrency, normalize } from '../utils/format';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
 
@@ -30,12 +30,14 @@ export default function Accounts() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) return;
+    const owner = form.owner.trim() || session.person;
     await saveRecord({
       id: editingId || undefined,
       name: form.name.trim(),
       bank: form.bank.trim(),
       balance: parseFloat(form.balance) || 0,
-      owner: form.owner.trim() || session.person,
+      owner,
+      ownerKey: normalize(owner),
     });
     setShowForm(false);
   }
