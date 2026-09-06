@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { useAuth, upsertUserLookup } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { auth } from '../firebase';
@@ -80,22 +79,53 @@ export default function Users() {
   async function onSubmit(data) {
     setError('');
     try {
-      let uid = editingId;
-
       if (!editingId) {
+        // Criação: passa pela API serverless (Admin SDK), pra NÃO trocar a
+        // sessão do navegador pro usuário recém-criado (é isso que
+        // createUserWithEmailAndPassword no cliente fazia, e derrubava o
+        // admin da própria sessão).
         if (!data.password || data.password.length < 6) {
           setError('A senha deve ter pelo menos 6 caracteres.');
           return;
         }
-        const cred = await createUserWithEmailAndPassword(auth, data.email, data.password);
-        uid = cred.user.uid;
+
+        const idToken = await auth.currentUser.getIdToken();
+        const response = await fetch('/api/create-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            name: data.name.trim(),
+            username: data.username.trim(),
+            email: data.email.trim().toLowerCase(),
+            cpf: data.cpf?.trim() || '',
+            password: data.password,
+            role: data.role,
+            person: data.person?.trim() || data.name.trim(),
+            allowedPersons: data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '',
+          }),
+        });
+
+        const result = await response.json();
+        if (!response.ok) {
+          setError(result.error || 'Erro ao criar usuário.');
+          return;
+        }
+
+        toast.success('Usuário criado com sucesso!');
+        setShowForm(false);
+        return;
       }
 
+      // Edição: continua direto no Firestore, isso não mexe em nenhuma
+      // sessão de autenticação, só nos dados do documento já existente.
       const person = data.person?.trim() || data.name.trim();
       const allowedPersons = data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '';
 
       const record = {
-        id: uid,
+        id: editingId,
         name: data.name.trim(),
         username: data.username.trim(),
         email: data.email.trim().toLowerCase(),
@@ -104,18 +134,13 @@ export default function Users() {
         person,
         allowedPersons,
         status: 'ativo',
-        // Chaves normalizadas: é isso que as regras do Firestore comparam
-        // (não fazem normalize()/split() como o JS do navegador faz).
-        // personKeys = "quem eu sou" (pra bater com owner/person de
-        // contas/cartões/transações). allowedPersonKeys = "quem um gerente
-        // pode ver", vazio quando não é gerente ou não tem restrição.
         personKeys: toPersonKeys([person, data.name, data.username].filter(Boolean)),
         allowedPersonKeys: allowedPersons ? toPersonKeys(allowedPersons) : [],
       };
 
       await saveRecord(record);
       await upsertUserLookup(record);
-      toast.success(editingId ? 'Usuário atualizado com sucesso!' : 'Usuário criado com sucesso!');
+      toast.success('Usuário atualizado com sucesso!');
       setShowForm(false);
     } catch (err) {
       console.error('Erro ao salvar usuário:', err);
