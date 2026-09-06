@@ -704,3 +704,20 @@
 .summary-line small.income { color: var(--success); }
 .summary-line-values small.expense,
 .summary-line small.expense { color: var(--danger); }
+
+/* Modal de fatura do cartão */
+.invoice-modal { width: min(460px, 92vw); }
+
+.invoice-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  margin-top: 0.75rem;
+  border-top: 1px solid var(--glass-border);
+  font-size: 1.05rem;
+}
+
+.invoice-total strong { font-variant-numeric: tabular-nums; }
+
+.credit-card { cursor: pointer; }
