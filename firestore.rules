@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function myUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && myUser().role == 'admin';
+    }
+
+    function isManager() {
+      return isSignedIn() && (myUser().role == 'admin' || myUser().role == 'gerente');
+    }
+
+    function isMyPerson(personName) {
+      return isSignedIn() && (
+        personName == myUser().person ||
+        personName == myUser().name ||
+        personName == myUser().username
+      );
+    }
+
+    // --- users: dados completos (nome, e-mail, cpf, cargo, permissões) ---
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isManager());
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId
+                      && request.resource.data.role == resource.data.role
+                      && request.resource.data.permissions == resource.data.permissions);
+      allow delete: if isAdmin();
+    }
+
+    // --- user_lookup: SOMENTE mapeamento identificador -> email de login ---
+    match /user_lookup/{lookupId} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if isAdmin();
+    }
+
+    // --- accounts: restrito por dono (owner) ou permissão gerencial/admin ---
+    match /accounts/{id} {
+      allow read: if isManager() || isMyPerson(resource.data.owner);
+      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.owner));
+      allow update, delete: if isManager() || isMyPerson(resource.data.owner);
+    }
+
+    // --- cards: restrito por dono (owner) ou permissão gerencial/admin ---
+    match /cards/{id} {
+      allow read: if isManager() || isMyPerson(resource.data.owner);
+      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.owner));
+      allow update, delete: if isManager() || isMyPerson(resource.data.owner);
+    }
+
+    // --- transactions: restrito por autor (userId), pessoa ou permissão gerencial/admin ---
+    match /transactions/{id} {
+      allow read: if isManager() ||
+                  resource.data.userId == request.auth.uid ||
+                  isMyPerson(resource.data.person);
+      allow create: if isManager() || (
+        isSignedIn() && (
+          request.resource.data.userId == request.auth.uid ||
+          isMyPerson(request.resource.data.person)
+        )
+      );
+      allow update, delete: if isManager() ||
+                            resource.data.userId == request.auth.uid ||
+                            isMyPerson(resource.data.person);
+    }
+
+    // --- subscriptions: restrito por pessoa ou permissão gerencial/admin ---
+    match /subscriptions/{id} {
+      allow read: if isManager() || isMyPerson(resource.data.person);
+      allow create: if isManager() || (isSignedIn() && isMyPerson(request.resource.data.person));
+      allow update, delete: if isManager() || isMyPerson(resource.data.person);
+    }
+
+    // --- paidInvoices: controle de faturas pagas ---
+    match /paidInvoices/{id} {
+      allow read, write: if isSignedIn();
+    }
+
+    // --- persons: catálogo de pessoas vinculadas ---
+    match /persons/{id} {
+      allow read: if isSignedIn();
+      allow write: if isManager();
+    }
+
+    // --- settings: configurações globais do sistema e categorias ---
+    match /settings/{id} {
+      allow read: if isSignedIn();
+      allow write: if isManager();
+    }
+  }
+}

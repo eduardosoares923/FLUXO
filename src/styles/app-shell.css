@@ -1,0 +1,596 @@
+/* Identidade visual do FLUXO — versão aprovada após protótipo.
+   Conceito: "caderno de contas" com energia — tinta escura, acento dourado,
+   mas com profundidade real (blobs de fundo, glass, ícones com badge
+   colorido) e movimento proposital (contagem de números, linha de tendência
+   desenhando, leve inclinação nos cartões ao passar o mouse). */
+:root {
+  --bg-primary: #0b1210;
+  --bg-secondary: #141d1a;
+  --text-primary: #f2f0ea;
+  --text-secondary: #8fa39a;
+  --accent-primary: #e3b04b;
+  --accent-hover: #cf9b38;
+  --accent-light: #f5d78a;
+  --success: #5fd08f;
+  --danger: #ff6f5e;
+  --warning: #e0b64c;
+  --blue: #4d8dff;
+
+  --glass-bg: rgba(255, 255, 255, 0.035);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --radius-md: 0.6rem;
+  --radius-lg: 1rem;
+}
+
+[data-theme="light"] {
+  --bg-primary: #f4f1ea;
+  --bg-secondary: #ffffff;
+  --text-primary: #1c2422;
+  --text-secondary: #5c6b66;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(28, 36, 34, 0.1);
+}
+
+.app-loading,
+.page-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  color: var(--text-secondary);
+}
+
+/* Fundo animado: manchas de gradiente se movendo bem devagar atrás de tudo */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.bg-blobs {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.14;
+  animation: drift 24s ease-in-out infinite;
+}
+
+.blob.b1 { width: 520px; height: 520px; background: var(--accent-primary); top: -180px; left: -120px; }
+.blob.b2 { width: 420px; height: 420px; background: var(--success); bottom: -160px; left: 30%; animation-duration: 30s; animation-delay: -6s; }
+.blob.b3 { width: 380px; height: 380px; background: var(--blue); top: 10%; right: -100px; animation-duration: 27s; animation-delay: -12s; }
+
+@keyframes drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -30px) scale(1.08); }
+  66% { transform: translate(-30px, 20px) scale(0.95); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blob { animation: none; }
+}
+
+/* Fileira de cards de resumo/KPI, reutilizável em QUALQUER tela (Dashboard,
+   Relatórios, Assinaturas, etc). Um único padrão evita cada tela inventar
+   seu próprio jeito de organizar isso, e evita a caixa "quebrar" e empilhar
+   na vertical quando alguém mexe no card sem mexer no container. */
+.summary-row,
+.kpi-grid {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.summary-row > *,
+.kpi-grid > * {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* Base genérica do badge de ícone: reutilizada na sidebar, chips, contas e
+   tabela de transações. Os seletores mais específicos abaixo (dentro de
+   .sidebar-link, .stat-chip etc) só ajustam tamanho/cor por contexto. */
+.icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sidebar {
+  position: relative;
+  z-index: 1;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(10px);
+}
+
+.app-content {
+  flex: 1;
+  padding: 2rem 2.4rem;
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* Logo com brilho de gradiente correndo */
+.sidebar-header h1 {
+  font-size: 1.4rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  background: linear-gradient(100deg, var(--accent-light), var(--accent-primary) 40%, var(--accent-light) 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shine 5s linear infinite;
+}
+
+@keyframes shine {
+  to { background-position: 200% center; }
+}
+
+/* Sidebar: ícone com badge colorido, barra de acento no ativo */
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 12px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.92rem;
+  margin-bottom: 0.3rem;
+  position: relative;
+  transition: all 0.25s ease;
+}
+
+.sidebar-link .icon-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.85rem;
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-link:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateX(2px);
+}
+
+.sidebar-link.active {
+  color: var(--accent-light);
+}
+
+.sidebar-link.active .icon-badge {
+  background: linear-gradient(135deg, var(--accent-light), var(--accent-primary));
+  color: #241a06;
+  box-shadow: 0 0 16px rgba(227, 176, 75, 0.5);
+}
+
+.sidebar-link.active::before {
+  content: '';
+  position: absolute;
+  left: -0.6rem;
+  top: 20%;
+  bottom: 20%;
+  width: 3px;
+  border-radius: 2px;
+  background: linear-gradient(var(--accent-light), var(--accent-primary));
+  box-shadow: 0 0 10px var(--accent-primary);
+}
+
+.sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-top: 1px solid var(--glass-border);
+  margin-top: auto;
+}
+
+.sidebar-footer img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+
+.sidebar-footer .logout-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+/* Hero do saldo: glow no canto, número grande, gráfico de tendência */
+.hero-balance {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  background: linear-gradient(135deg, rgba(227, 176, 75, 0.12), rgba(255, 255, 255, 0.02));
+  border: 1px solid var(--glass-border);
+  border-radius: 22px;
+  padding: 2rem 2.2rem;
+  margin: 1.5rem 0 1.4rem;
+  flex-wrap: wrap;
+}
+
+.hero-balance::after {
+  content: '';
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(227, 176, 75, 0.3), transparent 70%);
+  top: -140px;
+  right: -80px;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.hero-balance-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-balance-label {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.hero-balance-value {
+  font-size: 2.8rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.hero-balance-trend {
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.hero-balance-trend.up { color: var(--success); }
+.hero-balance-trend.down { color: var(--danger); }
+
+.hero-balance-chart {
+  flex: 1;
+  min-width: 240px;
+  max-width: 380px;
+  position: relative;
+  z-index: 1;
+}
+
+.flow-chart { width: 100%; height: 90px; overflow: visible; }
+
+.flow-line {
+  fill: none;
+  stroke: url(#flowGradient);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: draw-line 1.6s ease forwards 0.2s;
+}
+
+@keyframes draw-line {
+  to { stroke-dashoffset: 0; }
+}
+
+.flow-dot-end {
+  filter: drop-shadow(0 0 6px var(--accent-primary));
+}
+
+.flow-chart-empty {
+  fill: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* Chips com ícone colorido (receitas/despesas) */
+.stat-chips {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.stat-chip {
+  flex: 1;
+  min-width: 200px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 1.05rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.stat-chip:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 14px 30px -14px rgba(0, 0, 0, 0.5);
+}
+
+.stat-chip .icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  flex-shrink: 0;
+}
+
+.stat-chip.income .icon-badge { background: rgba(95, 208, 143, 0.15); color: var(--success); }
+.stat-chip.expense .icon-badge { background: rgba(255, 111, 94, 0.15); color: var(--danger); }
+
+.stat-chip span { font-size: 0.8rem; color: var(--text-secondary); display: block; }
+.stat-chip strong { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.stat-chip.income strong { color: var(--success); }
+.stat-chip.expense strong { color: var(--danger); }
+
+.accounts-grid,
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.account-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.account-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 14px 28px -16px rgba(0, 0, 0, 0.5);
+}
+
+.account-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.account-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.account-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(77, 141, 255, 0.15);
+  color: var(--blue);
+  font-size: 0.85rem;
+}
+
+.tx-table-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  margin-right: 0.6rem;
+  vertical-align: middle;
+}
+
+.tx-table-icon.expense { background: rgba(255, 111, 94, 0.14); color: var(--danger); }
+.tx-table-icon.income { background: rgba(95, 208, 143, 0.14); color: var(--success); }
+
+/* Cartões: proporção física, gradiente por banco, inclinação leve no hover */
+.cards-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+.credit-card {
+  position: relative;
+  aspect-ratio: 1.6 / 1;
+  border-radius: 20px;
+  padding: 1.25rem 1.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  box-shadow: 0 16px 30px -16px rgba(0, 0, 0, 0.6);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+}
+
+.credit-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 85% -10%, rgba(255, 255, 255, 0.22), transparent 55%);
+  pointer-events: none;
+}
+
+.credit-card:hover {
+  transform: translateY(-6px) rotate(-0.6deg) scale(1.015);
+  box-shadow: 0 26px 44px -18px rgba(0, 0, 0, 0.7);
+}
+
+.credit-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+
+.credit-card-chip {
+  width: 34px;
+  height: 25px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, rgba(255, 214, 130, 0.95), rgba(200, 160, 60, 0.85));
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.credit-card .card-actions button { color: inherit; opacity: 0.85; }
+.credit-card .card-actions button:hover { opacity: 1; }
+
+.credit-card-limit-label { display: block; font-size: 0.7rem; letter-spacing: 0.03em; opacity: 0.8; margin-bottom: 0.15rem; }
+.credit-card-limit strong { font-size: 1.6rem; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.credit-card-bottom { display: flex; flex-direction: column; gap: 0.15rem; }
+.credit-card-name { font-weight: 700; font-size: 0.95rem; }
+.credit-card-dates { font-size: 0.78rem; opacity: 0.85; }
+
+.card-actions button,
+.tx-table button {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  margin-left: 0.5rem;
+}
+
+.card-actions button:hover,
+.tx-table button:hover { color: var(--accent-primary); }
+
+.tx-table { width: 100%; border-collapse: collapse; }
+.tx-table.full th {
+  padding: 0.6rem 0.5rem; text-align: left; font-size: 0.75rem; letter-spacing: 0.02em;
+  color: var(--text-secondary); border-bottom: 1px solid var(--glass-border);
+}
+.tx-table.full td { padding: 0.6rem 0.5rem; border-bottom: 1px solid var(--glass-border); text-align: left; }
+.tx-table .income { color: var(--success); font-weight: 600; }
+.tx-table .expense { color: var(--danger); font-weight: 600; }
+
+/* Lista de transações recentes com ícone por categoria */
+.recent-tx-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 0.75rem;
+}
+
+.recent-tx-card h3 { padding: 0.5rem 0.75rem 0.25rem; }
+
+.tx-row {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.75rem 0.75rem;
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.tx-row:hover { background: rgba(255, 255, 255, 0.035); }
+
+.tx-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.tx-icon.expense { background: rgba(255, 111, 94, 0.14); color: var(--danger); }
+.tx-icon.income { background: rgba(95, 208, 143, 0.14); color: var(--success); }
+
+.tx-row-info { flex: 1; }
+.tx-desc { font-weight: 600; font-size: 0.92rem; }
+.tx-date { font-size: 0.78rem; color: var(--text-secondary); }
+.tx-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.tx-amount.income { color: var(--success); }
+.tx-amount.expense { color: var(--danger); }
+
+.empty-state { color: var(--text-secondary); text-align: center; padding: 1.5rem 0; }
+
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(4, 8, 7, 0.6);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  backdrop-filter: blur(3px);
+}
+
+.modal-card {
+  background: var(--bg-secondary); border: 1px solid var(--glass-border); border-radius: 18px;
+  padding: 1.5rem; width: min(420px, 90vw); max-height: 90vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.35rem;
+}
+
+.modal-card label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+.modal-card input,
+.modal-card select {
+  padding: 0.5rem; border-radius: 10px; border: 1px solid var(--glass-border);
+  background: var(--bg-primary); color: var(--text-primary);
+}
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1; }
+
+.login-card {
+  background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 18px;
+  padding: 2rem; width: min(360px, 90vw); display: flex; flex-direction: column; gap: 0.5rem;
+  backdrop-filter: blur(10px);
+}
+
+.login-card h1 {
+  background: linear-gradient(100deg, var(--accent-light), var(--accent-primary) 40%, var(--accent-light) 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shine 5s linear infinite;
+  font-size: 1.6rem; letter-spacing: 0.02em;
+}
+
+.login-card label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+.login-card input { padding: 0.6rem; border-radius: 10px; border: 1px solid var(--glass-border); background: var(--bg-primary); color: var(--text-primary); }
+
+.password-field { display: flex; align-items: center; }
+.password-field input { flex: 1; }
+.password-field button { background: none; border: none; color: var(--text-secondary); margin-left: -2rem; cursor: pointer; }
+
+.login-error { color: var(--danger); font-size: 0.85rem; }
+
+.login-btn,
+.btn {
+  padding: 0.6rem 1rem; border-radius: 10px; border: none; cursor: pointer; font-weight: 600;
+  transition: all 0.25s ease;
+}
+
+.btn-primary,
+.login-btn { background: var(--accent-primary); color: #1c1206; }
+.btn-primary:hover,
+.login-btn:hover { background: var(--accent-hover); box-shadow: 0 0 16px rgba(227, 176, 75, 0.4); }
+
+.btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--glass-border); }
+.btn-ghost:hover { color: var(--text-primary); border-color: var(--text-secondary); }
