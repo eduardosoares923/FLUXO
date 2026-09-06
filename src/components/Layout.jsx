@@ -1,5 +1,7 @@
 import { NavLink, Navigate, Outlet } from 'react-router-dom';
+import { Suspense } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { RouteLoading } from './RouteLoading';
 
 const roleLabels = {
   admin: 'Administrador',
@@ -82,7 +84,9 @@ export function Layout() {
         </div>
       </aside>
       <main className="app-content">
-        <Outlet />
+        <Suspense fallback={<RouteLoading />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   );
