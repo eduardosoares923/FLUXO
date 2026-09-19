@@ -375,6 +375,14 @@ export default function Transactions() {
   if (loading) return <PageLoading message="Carregando transações..." />;
   if (error) return <PageError error={error} title="Erro ao carregar transações" />;
 
+  // Agrupamento de transações por data
+  const groupedTx = visible.reduce((acc, tx) => {
+    if (!acc[tx.date]) acc[tx.date] = [];
+    acc[tx.date].push(tx);
+    return acc;
+  }, {});
+  const sortedDates = Object.keys(groupedTx).sort((a, b) => b.localeCompare(a));
+
   return (
     <div className="transactions-page">
       <div className="page-header">
@@ -386,129 +394,108 @@ export default function Transactions() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-          <i
-            className="fa-solid fa-magnifying-glass"
-            style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}
-          />
+      <div className="filters-bar" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginBottom: '1.5rem', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: '220px' }}>
+          <i className="fa-solid fa-magnifying-glass" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
           <input
             type="text"
-            placeholder="Buscar por descrição ou categoria..."
+            placeholder="Buscar por descrição..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            style={{ paddingLeft: '36px', width: '100%' }}
+            style={{ paddingLeft: '38px', width: '100%' }}
           />
         </div>
 
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 'auto', minWidth: '150px' }}>
-          <option value="all">Todos os tipos</option>
-          <option value="income">Receitas</option>
-          <option value="expense">Despesas</option>
-        </select>
+        <div className="chip-filters" style={{ display: 'flex', gap: '0.5rem' }}>
+          <button onClick={() => setTypeFilter('all')} className={`btn btn-sm ${typeFilter === 'all' ? 'btn-primary' : 'btn-ghost'}`} style={{ borderRadius: '20px' }}>Todas</button>
+          <button onClick={() => setTypeFilter('income')} className={`btn btn-sm ${typeFilter === 'income' ? 'btn-primary' : 'btn-ghost'}`} style={{ borderRadius: '20px' }}>Receitas</button>
+          <button onClick={() => setTypeFilter('expense')} className={`btn btn-sm ${typeFilter === 'expense' ? 'btn-primary' : 'btn-ghost'}`} style={{ borderRadius: '20px' }}>Despesas</button>
+        </div>
 
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ width: 'auto', minWidth: '160px' }}>
-          <option value="all">Todas as categorias</option>
-          {availableCategories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ width: 'auto', borderRadius: '20px' }}>
+          <option value="all">Filtro: Categoria</option>
+          {availableCategories.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
       {selectedIds.size > 0 && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'rgba(255, 111, 94, 0.1)',
-            border: '1px solid rgba(255, 111, 94, 0.3)',
-            borderRadius: '10px',
-            padding: '0.6rem 1rem',
-            marginBottom: '1rem',
-          }}
-        >
-          <span>{selectedIds.size} selecionada(s)</span>
-          <button className="btn btn-ghost" onClick={() => setConfirmBulkDelete(true)}>
+        <div className="bulk-action-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255, 111, 94, 0.15)', borderRadius: '12px', padding: '0.8rem 1.2rem', marginBottom: '1.5rem' }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{selectedIds.size} selecionada(s)</span>
+          <button className="btn btn-ghost" onClick={() => setConfirmBulkDelete(true)} style={{ color: 'var(--danger)', borderColor: 'rgba(255,111,94,0.3)' }}>
             <i className="fa-solid fa-trash" /> Excluir selecionadas
           </button>
         </div>
       )}
 
       {visible.length === 0 ? (
-        <EmptyState
-          icon="fa-arrow-right-arrow-left"
-          title="Nenhuma transação encontrada"
-          description="Registre receitas e despesas, ou ajuste os filtros de busca."
-          actionLabel={canEdit ? 'Nova transação' : undefined}
-          onAction={canEdit ? openNew : undefined}
-        />
+        <EmptyState icon="fa-arrow-right-arrow-left" title="Nenhuma transação encontrada" description="Registre receitas e despesas, ou ajuste os filtros de busca." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
       ) : (
-        <table className="tx-table full">
-          <thead>
-            <tr>
-              {canEdit && (
-                <th style={{ width: '2rem' }}>
-                  <input type="checkbox" checked={selectedIds.size === visible.length} onChange={toggleSelectAll} />
-                </th>
-              )}
-              <th>Data</th>
-              <th>Descrição</th>
-              <th>Categoria</th>
-              <th>Pessoa</th>
-              <th>Valor</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((tx) => (
-              <tr key={tx.id}>
-                {canEdit && (
-                  <td>
-                    <input type="checkbox" checked={selectedIds.has(tx.id)} onChange={() => toggleSelect(tx.id)} />
-                  </td>
-                )}
-                <td>{formatDate(tx.date)}</td>
-                <td>
-                  <span className={`icon-badge tx-table-icon ${tx.type === 'income' ? 'income' : 'expense'}`}>
-                    <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
-                  </span>
-                  {tx.description}
-                  {tx.groupId && (
-                    <i
-                      className="fa-solid fa-layer-group"
-                      title="Faz parte de um parcelamento"
-                      style={{ marginLeft: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}
-                    />
-                  )}
-                </td>
-                <td>{tx.category}</td>
-                <td>{tx.person}</td>
-                <td className={tx.type === 'income' ? 'income' : 'expense'}>
-                  {tx.type === 'income' ? '+ ' : '- '}
-                  {formatCurrency(tx.amount)}
-                </td>
-                <td>
-                  <button onClick={() => setDetailsTx(tx)} title="Ver detalhes">
-                    <i className="fa-solid fa-eye" />
-                  </button>
-                  {canEdit && (
-                    <>
-                      <button onClick={() => openEdit(tx)} title="Editar">
-                        <i className="fa-solid fa-pen" />
-                      </button>
-                      <button onClick={() => requestDelete(tx)} title="Excluir">
-                        <i className="fa-solid fa-trash" />
-                      </button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="tx-list">
+          {canEdit && (
+            <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+              <input type="checkbox" checked={selectedIds.size === visible.length} onChange={toggleSelectAll} id="selectAllTx" />
+              <label htmlFor="selectAllTx">Selecionar todas as listadas</label>
+            </div>
+          )}
+          
+          {sortedDates.map(dateStr => (
+            <div key={dateStr} className="tx-date-group" style={{ marginBottom: '1.5rem' }}>
+              <div className="tx-group-header" style={{ position: 'sticky', top: '-2px', background: 'var(--bg-primary)', zIndex: 10, padding: '0.8rem 0 0.4rem', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.9rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '0.5rem' }}>
+                {formatDate(dateStr)}
+              </div>
+              
+              <div className="tx-group-items" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {groupedTx[dateStr].map(tx => (
+                  <div key={tx.id} className="tx-row" style={{ display: 'flex', alignItems: 'center', padding: '0.8rem 1rem', background: 'var(--glass-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)', gap: '1rem', transition: 'transform 0.2s' }}>
+                    
+                    {canEdit && <input type="checkbox" checked={selectedIds.has(tx.id)} onChange={() => toggleSelect(tx.id)} />}
+                    
+                    <div className={`tx-icon ${tx.type}`} style={{ width: '46px', height: '46px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: tx.type === 'income' ? 'rgba(95, 208, 143, 0.15)' : 'rgba(255, 111, 94, 0.15)', color: tx.type === 'income' ? 'var(--success)' : 'var(--danger)', fontSize: '1.2rem', flexShrink: 0 }}>
+                      <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                    </div>
+                    
+                    <div className="tx-info" style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.05rem' }}>
+                        {tx.description}
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                          {tx.category || 'Sem categoria'}
+                        </span>
+                        {tx.person && (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                            <i className="fa-solid fa-user" style={{marginRight: '4px'}}/> {tx.person}
+                          </span>
+                        )}
+                        {tx.groupId && (
+                           <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', background: 'rgba(227, 176, 75, 0.15)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: 500 }}>
+                             <i className="fa-solid fa-layer-group" style={{marginRight: '4px'}}/> Parcelado
+                           </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="tx-value" style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.3rem' }}>
+                      <div style={{ fontWeight: 800, fontSize: '1.15rem', color: tx.type === 'income' ? 'var(--success)' : 'var(--danger)' }}>
+                        {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
+                      </div>
+                      <div className="tx-actions" style={{ display: 'flex', gap: '0.8rem' }}>
+                         <button onClick={() => setDetailsTx(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><i className="fa-solid fa-eye" /></button>
+                         {canEdit && (
+                           <>
+                             <button onClick={() => openEdit(tx)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><i className="fa-solid fa-pen" /></button>
+                             <button onClick={() => requestDelete(tx)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', opacity: 0.8 }}><i className="fa-solid fa-trash" /></button>
+                           </>
+                         )}
+                      </div>
+                    </div>
+
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* Modal de nova/editar transação */}
