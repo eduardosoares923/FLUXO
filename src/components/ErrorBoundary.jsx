@@ -11,6 +11,14 @@ export class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, errorInfo) {
+    // Se o erro for um módulo que sumiu devido a um novo deploy no Vercel,
+    // atualiza a página automaticamente para puxar a versão nova,
+    // poupando o usuário de ver a tela de erro fatal.
+    if (error?.message && error.message.includes('Failed to fetch dynamically imported module')) {
+      window.location.reload();
+      return;
+    }
+
     console.error(`[ErrorBoundary ${this.props.name || 'Geral'}] Erro capturado:`, error, errorInfo);
     this.setState({ errorInfo });
     if (this.props.onError) {
