@@ -43,7 +43,8 @@
 /* Fundo animado: manchas de gradiente se movendo bem devagar atrás de tudo */
 .app-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
   background: var(--bg-primary);
 }
