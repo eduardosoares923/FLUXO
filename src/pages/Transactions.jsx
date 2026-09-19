@@ -440,7 +440,7 @@ export default function Transactions() {
           
           {sortedDates.map(dateStr => (
             <div key={dateStr} className="tx-date-group" style={{ marginBottom: '1.5rem' }}>
-              <div className="tx-group-header" style={{ position: 'sticky', top: '-2px', background: 'var(--bg-primary)', zIndex: 10, padding: '0.8rem 0 0.4rem', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.9rem', borderBottom: '1px solid var(--glass-border)', marginBottom: '0.5rem' }}>
+              <div className="tx-group-header" style={{ padding: '1.2rem 0.5rem 0.6rem', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '0.85rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                 {formatDate(dateStr)}
               </div>
               
