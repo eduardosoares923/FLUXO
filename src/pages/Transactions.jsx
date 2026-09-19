@@ -376,13 +376,23 @@ export default function Transactions() {
   if (loading) return <PageLoading message="Carregando transações..." />;
   if (error) return <PageError error={error} title="Erro ao carregar transações" />;
 
-  // Agrupamento de transações por data
-  const groupedTx = visible.reduce((acc, tx) => {
-    if (!acc[tx.date]) acc[tx.date] = [];
-    acc[tx.date].push(tx);
-    return acc;
-  }, {});
-  const sortedDates = Object.keys(groupedTx).sort((a, b) => b.localeCompare(a));
+  // OTIMIZAÇÃO: Limita a quantidade de itens desenhados na tela para não travar o navegador
+  const [displayLimit, setDisplayLimit] = useState(50);
+
+  // OTIMIZAÇÃO: Memoriza cálculos pesados para não congelar o navegador ao digitar na busca
+  const { groupedTx, sortedDates, hasMore } = useMemo(() => {
+    const sliced = visible.slice(0, displayLimit);
+    const groups = sliced.reduce((acc, tx) => {
+      if (!acc[tx.date]) acc[tx.date] = [];
+      acc[tx.date].push(tx);
+      return acc;
+    }, {});
+    return {
+      groupedTx: groups,
+      sortedDates: Object.keys(groups).sort((a, b) => b.localeCompare(a)),
+      hasMore: visible.length > displayLimit
+    };
+  }, [visible, displayLimit]);
 
   return (
     <div className="transactions-page">
@@ -531,6 +541,21 @@ export default function Transactions() {
               </div>
             </div>
           ))}
+          
+          {/* Botão de carregar mais (Lazy Load) */}
+          {hasMore && (
+            <div style={{ textAlign: 'center', marginTop: '1.5rem', marginBottom: '2rem' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setDisplayLimit(prev => prev + 50)}
+                style={{ padding: '0.8rem 2rem', borderRadius: '30px', fontWeight: 600, background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.05)'}
+                onMouseLeave={(e) => e.target.style.background = 'var(--glass-bg)'}
+              >
+                Carregar mais transações <i className="fa-solid fa-chevron-down" style={{ marginLeft: '8px' }} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
