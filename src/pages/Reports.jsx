@@ -16,6 +16,7 @@ export default function Reports() {
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedPerson, setSelectedPerson] = useState('todos');
+  const [isPersonOpen, setIsPersonOpen] = useState(false);
 
   // Pessoas disponíveis
   const availablePersons = useMemo(() => {
@@ -244,18 +245,46 @@ export default function Reports() {
             style={{ width: 'auto' }}
           />
 
-          <select
-            value={selectedPerson}
-            onChange={(e) => setSelectedPerson(e.target.value)}
-            style={{ width: 'auto' }}
-          >
-            <option value="todos">Todos (Consolidado)</option>
-            {availablePersons.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
+          {/* Dropdown Customizado de Pessoas */}
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => setIsPersonOpen(!isPersonOpen)}
+              className="btn btn-ghost"
+              style={{ background: 'var(--glass-bg)', borderRadius: '12px', padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', gap: '0.8rem', border: isPersonOpen ? '1px solid var(--accent-primary)' : '1px solid transparent', color: selectedPerson === 'todos' ? 'var(--text-primary)' : 'var(--accent-primary)', boxShadow: 'none', fontWeight: 500 }}
+            >
+              {selectedPerson === 'todos' ? 'Todas as Pessoas' : selectedPerson}
+              <i className={`fa-solid fa-chevron-${isPersonOpen ? 'up' : 'down'}`} style={{ fontSize: '0.75rem', opacity: 0.7 }} />
+            </button>
+
+            {isPersonOpen && (
+              <>
+                <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setIsPersonOpen(false)} />
+                <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#0b1210', border: '1px solid var(--glass-border)', borderRadius: '14px', padding: '0.5rem', zIndex: 50, minWidth: '220px', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }}>
+                  
+                  <div 
+                    onClick={() => { setSelectedPerson('todos'); setIsPersonOpen(false); }}
+                    style={{ padding: '0.7rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s', background: selectedPerson === 'todos' ? 'rgba(227, 176, 75, 0.15)' : 'transparent', color: selectedPerson === 'todos' ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: selectedPerson === 'todos' ? 600 : 400 }}
+                    onMouseEnter={(e) => e.target.style.background = selectedPerson === 'todos' ? 'rgba(227, 176, 75, 0.15)' : 'rgba(255, 255, 255, 0.05)'}
+                    onMouseLeave={(e) => e.target.style.background = selectedPerson === 'todos' ? 'rgba(227, 176, 75, 0.15)' : 'transparent'}
+                  >
+                    Todos (Consolidado)
+                  </div>
+
+                  {availablePersons.map(p => (
+                    <div 
+                      key={p}
+                      onClick={() => { setSelectedPerson(p); setIsPersonOpen(false); }}
+                      style={{ padding: '0.7rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s', background: selectedPerson === p ? 'rgba(227, 176, 75, 0.15)' : 'transparent', color: selectedPerson === p ? 'var(--accent-primary)' : 'var(--text-secondary)', fontWeight: selectedPerson === p ? 600 : 400 }}
+                      onMouseEnter={(e) => e.target.style.background = selectedPerson === p ? 'rgba(227, 176, 75, 0.15)' : 'rgba(255, 255, 255, 0.05)'}
+                      onMouseLeave={(e) => e.target.style.background = selectedPerson === p ? 'rgba(227, 176, 75, 0.15)' : 'transparent'}
+                    >
+                      {p}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           <button
             type="button"
