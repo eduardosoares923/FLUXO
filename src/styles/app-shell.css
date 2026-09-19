@@ -747,3 +747,45 @@
 ::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in srgb, var(--text-secondary) 80%, transparent);
 }
+
+/* Padronização global de barras de busca, inputs e selects (Filtros e Formulários) */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="date"],
+select {
+  padding: 0.65rem 0.9rem;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.25s ease;
+}
+
+/* Foco ativo com a cor de destaque (dourado) */
+input:focus,
+select:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(227, 176, 75, 0.15);
+}
+
+/* Texto de "Buscar por..." mais sutil */
+input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+/* Efeito ao passar o mouse por cima do campo */
+input:hover:not(:focus),
+select:hover:not(:focus) {
+  background: var(--glass-bg);
+}
+
+/* Remove a setinha feia nativa do select no Windows (opcional) e melhora a seta */
+select {
+  cursor: pointer;
+}
