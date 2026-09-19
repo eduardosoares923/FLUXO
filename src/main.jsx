@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
+import './styles/tailwind.css';
 import './styles/style.css';
 import './styles/components.css';
 import './styles/dashboard.css';
