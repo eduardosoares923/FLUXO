@@ -63,6 +63,7 @@ export default function Transactions() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false);
 
   // Parcelamento
   const [paymentMode, setPaymentMode] = useState('single'); // 'single' | 'installments'
@@ -412,10 +413,45 @@ export default function Transactions() {
           <button onClick={() => setTypeFilter('expense')} className={`btn btn-sm ${typeFilter === 'expense' ? 'btn-primary' : 'btn-ghost'}`} style={{ borderRadius: '20px' }}>Despesas</button>
         </div>
 
-        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={{ width: 'auto', borderRadius: '20px' }}>
-          <option value="all">Filtro: Categoria</option>
-          {availableCategories.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        {/* Dropdown de Categoria Customizado */}
+        <div style={{ position: 'relative' }}>
+          <button 
+            onClick={() => setIsCategoryOpen(!isCategoryOpen)}
+            className="btn btn-ghost"
+            style={{ background: 'var(--glass-bg)', borderRadius: '12px', padding: '0.65rem 1rem', display: 'flex', alignItems: 'center', gap: '0.8rem', border: isCategoryOpen ? '1px solid var(--accent-primary)' : '1px solid transparent', color: categoryFilter === 'all' ? 'var(--text-primary)' : 'var(--accent-primary)', boxShadow: 'none', fontWeight: 500 }}
+          >
+            {categoryFilter === 'all' ? 'Filtro: Categoria' : categoryFilter}
+            <i className={`fa-solid fa-chevron-${isCategoryOpen ? 'up' : 'down'}`} style={{ fontSize: '0.75rem', opacity: 0.7 }} />
+          </button>
+
+          {isCategoryOpen && (
+            <>
+              <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setIsCategoryOpen(false)} />
+              
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, background: '#0b1210', border: '1px solid var(--glass-border)', borderRadius: '14px', padding: '0.5rem', zIndex: 50, minWidth: '240px', maxHeight: '300px', overflowY: 'auto', boxShadow: '0 10px 40px rgba(0,0,0,0.8)' }}>
+                <div 
+                  onClick={() => { setCategoryFilter('all'); setIsCategoryOpen(false); }}
+                  style={{ padding: '0.7rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s', background: categoryFilter === 'all' ? 'rgba(227, 176, 75, 0.15)' : 'transparent', color: categoryFilter === 'all' ? 'var(--accent-primary)' : 'var(--text-primary)', fontWeight: categoryFilter === 'all' ? 600 : 400 }}
+                  onMouseEnter={(e) => e.target.style.background = categoryFilter === 'all' ? 'rgba(227, 176, 75, 0.15)' : 'rgba(255, 255, 255, 0.05)'}
+                  onMouseLeave={(e) => e.target.style.background = categoryFilter === 'all' ? 'rgba(227, 176, 75, 0.15)' : 'transparent'}
+                >
+                  Todas as Categorias
+                </div>
+                {availableCategories.map(c => (
+                  <div 
+                    key={c}
+                    onClick={() => { setCategoryFilter(c); setIsCategoryOpen(false); }}
+                    style={{ padding: '0.7rem 1rem', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s', background: categoryFilter === c ? 'rgba(227, 176, 75, 0.15)' : 'transparent', color: categoryFilter === c ? 'var(--accent-primary)' : 'var(--text-secondary)', fontWeight: categoryFilter === c ? 600 : 400 }}
+                    onMouseEnter={(e) => e.target.style.background = categoryFilter === c ? 'rgba(227, 176, 75, 0.15)' : 'rgba(255, 255, 255, 0.05)'}
+                    onMouseLeave={(e) => e.target.style.background = categoryFilter === c ? 'rgba(227, 176, 75, 0.15)' : 'transparent'}
+                  >
+                    {c}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {selectedIds.size > 0 && (
