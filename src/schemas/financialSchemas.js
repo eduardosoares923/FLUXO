@@ -48,3 +48,8 @@ export const subscriptionSchema = z.object({
   paymentMethod: z.string().min(1, 'Forma de pagamento é obrigatória'),
   person: z.string().trim().optional().default(''),
 });
+
+export const personSchema = z.object({
+  name: z.string().trim().min(2, 'O nome deve ter pelo menos 2 caracteres'),
+  color: z.string().trim().min(4, 'Cor inválida').default('#3b82f6'),
+});
