@@ -277,6 +277,38 @@ export default function Transactions() {
         await Promise.all(saves);
         toast.success(`Lançamento parcelado em ${installmentsCount}x de ${formatCurrency(installmentAmount)}!`);
       } else {
+        const originalTx = editingId ? transactions.find(t => t.id === editingId) : null;
+        
+        if (originalTx?.groupId) {
+          const updateAll = window.confirm(
+            "Esta é uma compra parcelada!\n\nDeseja aplicar essas alterações (Categoria, Valor, Conta, Pessoa) para TODAS as parcelas deste grupo?\n\n[OK] = Alterar todas as parcelas\n[Cancelar] = Alterar apenas esta parcela"
+          );
+          
+          if (updateAll) {
+            const groupTxs = transactions.filter(t => t.groupId === originalTx.groupId);
+            const baseDesc = data.description.trim().replace(/\s*\(\d+\/\d+\)$/, '');
+            
+            const saves = groupTxs.map(t => {
+              return saveRecord({
+                ...t,
+                description: t.totalInstallments ? `${baseDesc} (${t.installmentIndex}/${t.totalInstallments})` : data.description.trim(),
+                amount: Number(data.amount), 
+                type: data.type,
+                category: data.category?.trim() || '',
+                paymentMethod: data.paymentMethod,
+                person: finalPerson,
+                personKeys: toPersonKeys(finalPerson),
+                isSplit,
+                splitDetails: finalSplitDetails,
+              });
+            });
+            await Promise.all(saves);
+            toast.success(`${groupTxs.length} parcelas atualizadas com sucesso!`);
+            setShowForm(false);
+            return;
+          }
+        }
+
         const record = {
           id: editingId || undefined,
           description: data.description.trim(),
@@ -501,8 +533,13 @@ export default function Transactions() {
                     </div>
                     
                     <div className="tx-info" style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.05rem' }}>
-                        {tx.description}
+                      <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.05rem', display: 'flex', alignItems: 'center' }}>
+                        {tx.description.replace(/\s*\(\d+\/\d+\)$/, '')}
+                        {tx.groupId && tx.totalInstallments && (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--accent-primary)', background: 'rgba(227, 176, 75, 0.15)', padding: '3px 8px', borderRadius: '6px', marginLeft: '8px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <i className="fa-solid fa-layer-group" style={{ fontSize: '0.65rem' }} /> Parcela {tx.installmentIndex}/{tx.totalInstallments}
+                          </span>
+                        )}
                       </div>
                       <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
@@ -513,7 +550,7 @@ export default function Transactions() {
                             <i className="fa-solid fa-user" style={{marginRight: '4px'}}/> {tx.person}
                           </span>
                         )}
-                        {tx.groupId && (
+                        {tx.groupId && !tx.totalInstallments && (
                            <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', background: 'rgba(227, 176, 75, 0.15)', padding: '0.2rem 0.6rem', borderRadius: '12px', fontWeight: 500 }}>
                              <i className="fa-solid fa-layer-group" style={{marginRight: '4px'}}/> Parcelado
                            </span>
@@ -621,23 +658,36 @@ export default function Transactions() {
                 </label>
 
                 {paymentMode === 'installments' && (
-                  <div style={{ display: 'flex', gap: '0.6rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: '90px' }}>
-                      <label style={{ fontSize: '0.78rem' }}>Nº de parcelas</label>
+                  <div style={{ display: 'flex', gap: '0.8rem', marginTop: '0.8rem', flexWrap: 'wrap' }}>
+                    <div style={{ width: '80px' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Parcelas</label>
                       <input
                         type="number"
                         min="2"
                         max="48"
                         value={installmentsCount}
                         onChange={(e) => setInstallmentsCount(parseInt(e.target.value) || 2)}
+                        style={{ textAlign: 'center', fontWeight: 'bold' }}
                       />
                     </div>
-                    <div style={{ flex: 1, minWidth: '140px' }}>
-                      <label style={{ fontSize: '0.78rem' }}>Valor informado é</label>
-                      <select value={installmentValueType} onChange={(e) => setInstallmentValueType(e.target.value)}>
-                        <option value="total">Total da compra</option>
-                        <option value="per">Valor de cada parcela</option>
-                      </select>
+                    <div style={{ flex: 1, minWidth: '160px' }}>
+                      <label style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>O valor R$ {watchedAmount || '0'} é o:</label>
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+                        <button 
+                          type="button" 
+                          onClick={() => setInstallmentValueType('total')}
+                          style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '8px', background: installmentValueType === 'total' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)', color: installmentValueType === 'total' ? '#000' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', fontWeight: 600, transition: '0.2s' }}
+                        >
+                          Total
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={() => setInstallmentValueType('per')}
+                          style={{ flex: 1, padding: '8px', fontSize: '0.75rem', borderRadius: '8px', background: installmentValueType === 'per' ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)', color: installmentValueType === 'per' ? '#000' : 'var(--text-secondary)', border: 'none', cursor: 'pointer', fontWeight: 600, transition: '0.2s' }}
+                        >
+                          Parcela
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
