@@ -602,6 +602,22 @@ export default function Transactions() {
           <form className="modal-card" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
             <h3>{editingId ? 'Editar transação' : 'Nova transação'}</h3>
 
+            {(() => {
+              const currentTx = editingId ? transactions.find(t => t.id === editingId) : null;
+              if (currentTx?.groupId && currentTx?.totalInstallments) {
+                return (
+                  <div style={{ background: 'rgba(227, 176, 75, 0.15)', border: '1px solid var(--accent-primary)', color: 'var(--text-primary)', padding: '0.8rem', borderRadius: '8px', marginBottom: '1.2rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '10px', lineHeight: '1.4' }}>
+                    <i className="fa-solid fa-layer-group" style={{ fontSize: '1.2rem', color: 'var(--accent-primary)' }} />
+                    <div>
+                      Você está editando a <strong style={{ color: 'var(--accent-primary)' }}>Parcela {currentTx.installmentIndex} de {currentTx.totalInstallments}</strong>.<br/>
+                      <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>Ao salvar, você poderá replicar as alterações para o resto do grupo.</span>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             <label>Descrição</label>
             <input {...register('description')} placeholder="Ex: Supermercado" />
             {errors.description && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>{errors.description.message}</span>}
