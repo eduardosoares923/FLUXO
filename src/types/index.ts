@@ -24,6 +24,8 @@ export interface Transaction {
   installmentAmount?: number;
   totalPurchaseAmount?: number;
   invoiceMonth?: string;
+  subscriptionId?: string;
+  isSubscription?: boolean;
 }
 
 export interface Account {
