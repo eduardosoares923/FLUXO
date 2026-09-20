@@ -618,49 +618,63 @@ export default function Transactions() {
               return null;
             })()}
 
-            <label>Descrição</label>
-            <input {...register('description')} placeholder="Ex: Supermercado" />
-            {errors.description && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>{errors.description.message}</span>}
+            <div className="form-grid">
+              <div className="full-width">
+                <label>Descrição</label>
+                <input {...register('description')} placeholder="Ex: Supermercado" />
+                {errors.description && <span style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{errors.description.message}</span>}
+              </div>
 
-            <label>Tipo</label>
-            <select {...register('type')}>
-              <option value="expense">Despesa</option>
-              <option value="income">Receita</option>
-            </select>
+              <div>
+                <label>Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total)' : ''}</label>
+                <input type="number" step="0.01" {...register('amount')} />
+                {errors.amount && <span style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '4px' }}>{errors.amount.message}</span>}
+              </div>
 
-            <label>Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(total da compra)' : ''}</label>
-            <input type="number" step="0.01" {...register('amount')} />
-            {errors.amount && <span style={{ color: '#f87171', fontSize: '0.8rem' }}>{errors.amount.message}</span>}
+              <div>
+                <label>Tipo</label>
+                <select {...register('type')}>
+                  <option value="expense">Despesa</option>
+                  <option value="income">Receita</option>
+                </select>
+              </div>
 
-            <label>Data {paymentMode === 'installments' ? '(1ª parcela)' : ''}</label>
-            <input type="date" {...register('date')} />
+              <div>
+                <label>Data {paymentMode === 'installments' ? '(1ª parc.)' : ''}</label>
+                <input type="date" {...register('date')} />
+              </div>
 
-            <label>Categoria</label>
-            <input {...register('category')} list="tx-categories" placeholder="Ex: Alimentação" />
-            <datalist id="tx-categories">
-              {availableCategories.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
+              <div>
+                <label>Categoria</label>
+                <input {...register('category')} list="tx-categories" placeholder="Ex: Alimentação" />
+                <datalist id="tx-categories">
+                  {availableCategories.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
 
-            <label>Forma de pagamento</label>
-            <select {...register('paymentMethod')}>
-              <option value="account">Conta corrente (padrão)</option>
-              <optgroup label="Contas">
-                {accounts.map((a) => (
-                  <option key={a.id} value={`acc_${a.id}`}>
-                    {a.name}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="Cartões">
-                {cards.map((c) => (
-                  <option key={c.id} value={`card_${c.id}`}>
-                    Cartão {c.name}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+              <div className="full-width">
+                <label>Forma de pagamento</label>
+                <select {...register('paymentMethod')}>
+                  <option value="account">Conta corrente (padrão)</option>
+                  <optgroup label="Contas">
+                    {accounts.map((a) => (
+                      <option key={a.id} value={`acc_${a.id}`}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Cartões">
+                    {cards.map((c) => (
+                      <option key={c.id} value={`card_${c.id}`}>
+                        Cartão {c.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+            </div>
 
             {!editingId && watchedType === 'expense' && (
               <div style={{ margin: '0.75rem 0', padding: '10px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', border: '1px solid #334155' }}>

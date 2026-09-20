@@ -548,11 +548,38 @@
   display: flex; flex-direction: column; gap: 0.35rem;
 }
 
-.modal-card label { font-size: 0.85rem; color: var(--text-secondary); margin-top: 0.5rem; }
+.modal-card label { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 0.3rem; font-weight: 500; }
 .modal-card input,
 .modal-card select {
-  padding: 0.5rem; border-radius: 10px; border: 1px solid var(--glass-border);
-  background: var(--bg-primary); color: var(--text-primary);
+  padding: 0.65rem; border-radius: 10px; border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.02); color: var(--text-primary);
+  transition: all 0.2s ease;
+}
+
+.modal-card input:focus,
+.modal-card select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(227, 176, 75, 0.15);
+  background: var(--bg-primary);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem 1rem;
+  margin-top: 0.5rem;
+}
+.form-grid > div {
+  display: flex;
+  flex-direction: column;
+}
+.form-grid .full-width {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 500px) {
+  .form-grid { grid-template-columns: 1fr; gap: 0.6rem; }
 }
 
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
