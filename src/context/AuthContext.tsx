@@ -1,45 +1,36 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  signOut,
-} from 'firebase/auth';
-import {
-  doc,
-  getDoc,
-  setDoc,
-  collection,
-  getDocs,
-  query,
-  where,
-} from 'firebase/firestore';
+import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
+import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { normalize } from '../utils/format';
+import { User } from '../types';
 
-const AuthContext = createContext(null);
-
-export function useAuth() {
-  return useContext(AuthContext);
+interface AuthContextType {
+  session: User | null;
+  loading: boolean;
+  login: (identifier: string, pass: string) => Promise<FirebaseUser>;
+  logout: () => Promise<void>;
+  hasPermission: (module: string, action?: string) => boolean;
+  canAccessPerson: (personName?: string | null, tx?: any) => boolean;
 }
 
-export function AuthProvider({ children }) {
-  const [session, setSession] = useState(null);
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export function useAuth(): AuthContextType {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth deve ser usado dentro de um AuthProvider');
+  return context;
+}
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [session, setSession] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setSession(null);
-        setLoading(false);
-        return;
-      }
-      await syncSessionFromFirestore(user.uid, user.email);
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
-
-  const syncSessionFromFirestore = useCallback(async (uid, authEmail) => {
+  const syncSessionFromFirestore = useCallback(async (uid: string, authEmail: string | null) => {
     try {
       const userRef = doc(db, 'users', uid);
       const snap = await getDoc(userRef);
@@ -47,7 +38,6 @@ export function AuthProvider({ children }) {
       let userDocId = uid;
 
       if (!userData && authEmail) {
-        // Fallback: usuário já existia por e-mail mas doc ainda não tem o uid como id
         const q = query(collection(db, 'users'), where('email', '==', authEmail.toLowerCase()));
         const qs = await getDocs(q);
         if (!qs.empty) {
@@ -62,24 +52,21 @@ export function AuthProvider({ children }) {
           setSession(null);
           return;
         }
-        const newSession = {
+        const newSession: User = {
           id: userDocId,
           name: userData.name || 'Usuário',
           username: userData.username || (userData.email ? userData.email.split('@')[0] : 'usuario'),
-          cpf: userData.cpf || '',
-          email: userData.email || authEmail,
+          email: userData.email || authEmail || '',
           avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}`,
-          role: userData.role || 'usuario',
+          role: userData.role || 'viewer',
           person: userData.person || userData.name || 'Eu',
-          permissions: userData.permissions || {},
-          allowedPersons: userData.allowedPersons || null,
         };
+        // Propriedades dinâmicas de permissões que não ficam no User base:
+        (newSession as any).permissions = userData.permissions || {};
+        (newSession as any).allowedPersons = userData.allowedPersons || null;
+        
         setSession(newSession);
       } else {
-        // Não deveria acontecer em uso normal: a criação de usuário é feita
-        // pela tela de Usuários (admin), nunca no primeiro login "às cegas"
-        // como no app antigo (isso era um risco: qualquer login virava admin
-        // se a base estivesse vazia).
         await signOut(auth);
         setSession(null);
       }
@@ -89,35 +76,30 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  /**
-   * Login por username, e-mail ou CPF.
-   *
-   * FIX DE SEGURANÇA: a versão antiga fazia `db.collection('users').get()`
-   * (lia TODOS os usuários) só para achar o e-mail correspondente ao
-   * identificador digitado. Isso exigia que a coleção 'users' fosse legível
-   * publicamente, expondo nome/e-mail/CPF/cargo de todo mundo.
-   *
-   * Agora usamos uma coleção separada e minimalista `user_lookup`, onde cada
-   * documento tem como ID o identificador normalizado (username, e-mail ou
-   * CPF só com dígitos) e como conteúdo APENAS `{ email }`. As regras do
-   * Firestore permitem `get` (leitura de um doc específico, cujo ID você já
-   * precisa saber) mas proíbem `list` nessa coleção — então não dá para
-   * "varrer" todos os usuários, só resolver um identificador que a pessoa
-   * já digitou.
-   */
-  const login = useCallback(async (identifier, password) => {
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+      await syncSessionFromFirestore(user.uid, user.email);
+      setLoading(false);
+    });
+    return unsub;
+  }, [syncSessionFromFirestore]);
+
+  const login = useCallback(async (identifier: string, password: string) => {
     const cleanInput = identifier.trim();
     const lookupKey = normalize(cleanInput).replace(/\s+/g, '');
     const cleanCpf = cleanInput.replace(/\D/g, '');
 
-    let authEmail = null;
+    let authEmail: string | null = null;
 
-    // 1. Se já parece um e-mail, tenta usar direto
     if (cleanInput.includes('@')) {
       authEmail = cleanInput.toLowerCase();
     }
 
-    // 2. Tenta resolver por username (lookupKey) ou CPF via user_lookup
     if (!authEmail) {
       const tryIds = [lookupKey];
       if (cleanCpf.length >= 11) tryIds.push(cleanCpf);
@@ -132,9 +114,7 @@ export function AuthProvider({ children }) {
       }
     }
 
-    if (!authEmail) {
-      throw { code: 'auth/user-not-found' };
-    }
+    if (!authEmail) throw { code: 'auth/user-not-found' };
 
     const cred = await signInWithEmailAndPassword(auth, authEmail, password);
     await syncSessionFromFirestore(cred.user.uid, authEmail);
@@ -146,22 +126,20 @@ export function AuthProvider({ children }) {
     setSession(null);
   }, []);
 
-  const hasPermission = useCallback((module, action = 'view') => {
+  const hasPermission = useCallback((module: string, action = 'view') => {
     if (!session) return false;
     if (session.role === 'admin') return true;
     if (module === 'admin') return session.role === 'admin';
     if (module === 'gerente') return ['admin', 'gerente'].includes(session.role);
-    if (module === 'config_system') {
-      return session.role === 'admin' || (session.permissions?.settings || []).includes('edit');
-    }
-    if (module === 'manage_users') {
-      return session.role === 'admin' || (session.permissions?.users || []).includes('view');
-    }
-    const modPerms = session.permissions?.[module] || [];
-    return modPerms.includes(action);
+    
+    const sessAny = session as any;
+    if (module === 'config_system') return session.role === 'admin' || (sessAny.permissions?.settings || []).includes('edit');
+    if (module === 'manage_users') return session.role === 'admin' || (sessAny.permissions?.users || []).includes('view');
+    
+    return (sessAny.permissions?.[module] || []).includes(action);
   }, [session]);
 
-  const canAccessPerson = useCallback((personName, tx = null) => {
+  const canAccessPerson = useCallback((personName?: string | null, tx: any = null) => {
     if (!session) return false;
     if (session.role === 'admin') return true;
     if (tx && tx.userId && String(tx.userId) === String(session.id)) return true;
@@ -170,6 +148,7 @@ export function AuthProvider({ children }) {
     const target = normalize(personName);
     if (!target) return true;
     const targetPersons = target.split(',').map((p) => p.trim());
+    const sessAny = session as any;
 
     for (const t of targetPersons) {
       if (session.person && normalize(session.person) === t) return true;
@@ -178,11 +157,10 @@ export function AuthProvider({ children }) {
       if (session.email && normalize(session.email.split('@')[0]) === t) return true;
 
       if (session.role === 'gerente') {
-        if (Array.isArray(session.allowedPersons)) {
-          if (session.allowedPersons.some((p) => normalize(p) === t)) return true;
-        } else if (typeof session.allowedPersons === 'string' && session.allowedPersons.trim()) {
-          const list = session.allowedPersons.split(',').map(normalize);
-          if (list.includes(t)) return true;
+        if (Array.isArray(sessAny.allowedPersons)) {
+          if (sessAny.allowedPersons.some((p: string) => normalize(p) === t)) return true;
+        } else if (typeof sessAny.allowedPersons === 'string' && sessAny.allowedPersons.trim()) {
+          if (sessAny.allowedPersons.split(',').map(normalize).includes(t)) return true;
         } else {
           return true;
         }
@@ -192,21 +170,14 @@ export function AuthProvider({ children }) {
   }, [session]);
 
   const value = { session, loading, login, logout, hasPermission, canAccessPerson };
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-/**
- * Helper usado pela tela de Usuários ao criar/editar um usuário: mantém a
- * coleção user_lookup em dia (username, e-mail e CPF -> email de login).
- * Só deve ser chamado por quem tem permissão de manage_users (a regra do
- * Firestore também deve exigir isso do lado do servidor).
- */
-export async function upsertUserLookup(userRecord) {
+export async function upsertUserLookup(userRecord: any) {
   const email = (userRecord.email || '').toLowerCase();
   if (!email) return;
 
-  const ids = new Set();
+  const ids = new Set<string>();
   if (userRecord.username) ids.add(normalize(userRecord.username).replace(/\s+/g, ''));
   if (email) ids.add(normalize(email));
   if (userRecord.cpf) {
