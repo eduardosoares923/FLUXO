@@ -164,6 +164,9 @@ export default function Users() {
   if (loading) return <PageLoading message="Carregando usuários..." />;
   if (collectionError) return <PageError error={collectionError} title="Erro ao carregar usuários" />;
 
+  // OTIMIZAÇÃO: Limite de renderização
+  const [displayLimit, setDisplayLimit] = useState(50);
+
   return (
     <div className="users-page">
       <div className="page-header">
@@ -182,75 +185,55 @@ export default function Users() {
           onAction={openNew}
         />
       ) : (
-        <table className="tx-table full hoverable">
-          <thead>
-            <tr>
-              <th>Nome</th>
-              <th>Usuário</th>
-              <th>E-mail</th>
-              <th>Cargo</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.id}>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                    <span className="icon-badge user-avatar-badge">
-                      <i className="fa-solid fa-user" />
-                    </span>
-                    <div>
-                      <strong>{u.name}</strong>
-                      {u.person && u.person !== u.name && (
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                          Pessoa: {u.person}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </td>
-                <td>{u.username}</td>
-                <td>{u.email}</td>
-                <td>
-                  <span
-                    style={{
-                      fontSize: '0.75rem',
-                      padding: '3px 8px',
-                      borderRadius: '10px',
-                      background:
-                        u.role === 'admin'
-                          ? 'rgba(227, 176, 75, 0.15)'
-                          : u.role === 'gerente'
-                          ? 'rgba(77, 141, 255, 0.15)'
-                          : 'rgba(255, 255, 255, 0.05)',
-                      color:
-                        u.role === 'admin'
-                          ? 'var(--accent-primary)'
-                          : u.role === 'gerente'
-                          ? 'var(--blue)'
-                          : 'var(--text-secondary)',
-                      fontWeight: 600,
-                      textTransform: 'capitalize',
-                    }}
-                  >
-                    {u.role}
+        <div className="tx-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+          {users.slice(0, displayLimit).map((u) => (
+            <div key={u.id} className="tx-row" style={{ display: 'flex', alignItems: 'center', padding: '1rem', background: 'var(--glass-bg)', borderRadius: '14px', border: '1px solid var(--glass-border)', gap: '1rem', transition: 'transform 0.2s' }}>
+              
+              <div className="user-icon" style={{ width: '46px', height: '46px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: u.role === 'admin' ? 'rgba(227, 176, 75, 0.15)' : u.role === 'gerente' ? 'rgba(77, 141, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)', color: u.role === 'admin' ? 'var(--accent-primary)' : u.role === 'gerente' ? 'var(--blue)' : 'var(--text-secondary)', fontSize: '1.2rem', flexShrink: 0 }}>
+                <i className="fa-solid fa-user" />
+              </div>
+
+              <div className="user-info" style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '1.05rem' }}>
+                  {u.name}
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.3rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                    <i className="fa-solid fa-at" style={{marginRight: '4px'}}/> {u.username}
                   </span>
-                </td>
-                <td>
-                  <button onClick={() => openEdit(u)} title="Editar usuário">
-                    <i className="fa-solid fa-pen" />
-                  </button>
-                  {u.id !== session?.id && (
-                    <button onClick={() => setDeleteId(u.id)} title="Excluir usuário">
-                      <i className="fa-solid fa-trash" />
-                    </button>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', background: 'rgba(255, 255, 255, 0.05)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                    <i className="fa-regular fa-envelope" style={{marginRight: '4px'}}/> {u.email}
+                  </span>
+                  {u.person && u.person !== u.name && (
+                    <span style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', background: 'rgba(227, 176, 75, 0.1)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                      <i className="fa-solid fa-link" style={{marginRight: '4px'}}/> {u.person}
+                    </span>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </div>
+              </div>
+
+              <div className="user-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.75rem', padding: '3px 10px', borderRadius: '10px', background: u.role === 'admin' ? 'rgba(227, 176, 75, 0.15)' : u.role === 'gerente' ? 'rgba(77, 141, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)', color: u.role === 'admin' ? 'var(--accent-primary)' : u.role === 'gerente' ? 'var(--blue)' : 'var(--text-secondary)', fontWeight: 600, textTransform: 'capitalize' }}>
+                  {u.role}
+                </span>
+                <div style={{ display: 'flex', gap: '0.8rem', marginTop: '0.2rem' }}>
+                  <button onClick={() => openEdit(u)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}><i className="fa-solid fa-pen" /></button>
+                  {u.id !== session?.id && (
+                    <button onClick={() => setDeleteId(u.id)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', opacity: 0.8 }}><i className="fa-solid fa-trash" /></button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {users.length > displayLimit && (
+            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+              <button className="btn btn-secondary" onClick={() => setDisplayLimit(prev => prev + 50)} style={{ borderRadius: '30px', padding: '0.8rem 2rem' }}>
+                Carregar mais <i className="fa-solid fa-chevron-down" />
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {showForm && (
