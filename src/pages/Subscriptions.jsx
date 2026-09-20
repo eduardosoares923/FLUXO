@@ -339,6 +339,9 @@ export default function Subscriptions() {
   if (loading) return <PageLoading message="Carregando assinaturas..." />;
   if (error) return <PageError error={error} title="Erro ao carregar assinaturas" />;
 
+  // OTIMIZAÇÃO: Limite de tela para evitar travamentos
+  const [displayLimit, setDisplayLimit] = useState(50);
+
   return (
     <div className="subscriptions-page">
       <div className="page-header">
@@ -446,7 +449,7 @@ export default function Subscriptions() {
         />
       ) : (
         <div className="accounts-grid">
-          {visible.map((s) => {
+          {visible.slice(0, displayLimit).map((s) => {
             const isPaused = s.status === 'pausada';
             return (
               <div
@@ -557,6 +560,20 @@ export default function Subscriptions() {
               </div>
             );
           })}
+          
+          {visible.length > displayLimit && (
+            <div style={{ textAlign: 'center', marginTop: '1.5rem', marginBottom: '2rem' }}>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setDisplayLimit(prev => prev + 50)}
+                style={{ padding: '0.8rem 2rem', borderRadius: '30px', fontWeight: 600, background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: 'var(--text-primary)', cursor: 'pointer', transition: 'all 0.2s' }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.05)'}
+                onMouseLeave={(e) => e.target.style.background = 'var(--glass-bg)'}
+              >
+                Carregar mais assinaturas <i className="fa-solid fa-chevron-down" style={{ marginLeft: '8px' }} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
