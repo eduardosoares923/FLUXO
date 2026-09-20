@@ -1,45 +1,29 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import {
-  collection,
-  onSnapshot,
-  doc,
-  setDoc,
-  deleteDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../firebase';
 import { generateId } from '../utils/format';
 
-/**
- * Substitui a camada de sincronização de storage.js com suporte a cache global
- * do TanStack Query:
- *  - escuta a coleção em tempo real (onSnapshot)
- *  - atualiza o cache do Query com queryClient.setQueryData([collectionName], items)
- *  - salva/exclui de forma otimista no cache e no Firestore
- *  - ignora temporariamente itens excluídos para evitar ressuscitação no snapshot
- */
-export function useCollection(collectionName) {
+export function useCollection<T extends { id?: string }>(collectionName: string) {
   const queryClient = useQueryClient();
-  const pendingDeletes = useRef(new Set());
+  const pendingDeletes = useRef<Set<string>>(new Set());
 
-  // Inscrição no cache do TanStack Query
-  const { data = [] } = useQuery({
+  const { data = [] } = useQuery<T[]>({
     queryKey: [collectionName],
-    queryFn: () => queryClient.getQueryData([collectionName]) ?? [],
-    initialData: () => queryClient.getQueryData([collectionName]) ?? [],
+    queryFn: () => queryClient.getQueryData<T[]>([collectionName]) ?? [],
+    initialData: () => queryClient.getQueryData<T[]>([collectionName]) ?? [],
     staleTime: Infinity,
   });
 
-  const [loading, setLoading] = useState(() => !queryClient.getQueryData([collectionName]));
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState<boolean>(() => !queryClient.getQueryData([collectionName]));
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, collectionName),
       (snapshot) => {
-        const items = [];
-        snapshot.forEach((d) => items.push({ id: d.id, ...d.data() }));
+        const items: T[] = [];
+        snapshot.forEach((d) => items.push({ id: d.id, ...d.data() } as T));
         const filtered = pendingDeletes.current.size
           ? items.filter((it) => !pendingDeletes.current.has(String(it.id)))
           : items;
@@ -50,7 +34,7 @@ export function useCollection(collectionName) {
       },
       (err) => {
         console.error(`Erro de sincronização em ${collectionName}:`, err);
-        setError(err);
+        setError(err as Error);
         setLoading(false);
       }
     );
@@ -58,11 +42,11 @@ export function useCollection(collectionName) {
   }, [collectionName, queryClient]);
 
   const saveRecord = useCallback(
-    async (record) => {
+    async (record: T): Promise<T> => {
       const rec = { ...record };
       if (!rec.id) rec.id = generateId();
 
-      queryClient.setQueryData([collectionName], (prev = []) => {
+      queryClient.setQueryData<T[]>([collectionName], (prev = []) => {
         const idx = prev.findIndex((it) => String(it.id) === String(rec.id));
         if (idx >= 0) {
           const copy = [...prev];
@@ -84,19 +68,16 @@ export function useCollection(collectionName) {
   );
 
   const deleteRecord = useCallback(
-    async (id) => {
+    async (id: string | number) => {
       const strId = String(id);
       pendingDeletes.current.add(strId);
 
-      queryClient.setQueryData([collectionName], (prev = []) =>
+      queryClient.setQueryData<T[]>([collectionName], (prev = []) =>
         prev.filter((it) => String(it.id) !== strId)
       );
 
       try {
         await deleteDoc(doc(db, collectionName, strId));
-      } catch (e) {
-        console.error(`Erro ao excluir em ${collectionName}:`, e);
-        throw e;
       } finally {
         setTimeout(() => pendingDeletes.current.delete(strId), 3000);
       }
@@ -105,12 +86,12 @@ export function useCollection(collectionName) {
   );
 
   const deleteRecords = useCallback(
-    async (ids) => {
+    async (ids: (string | number)[]) => {
       const strIds = ids.map(String);
       const idSet = new Set(strIds);
       strIds.forEach((id) => pendingDeletes.current.add(id));
 
-      queryClient.setQueryData([collectionName], (prev = []) =>
+      queryClient.setQueryData<T[]>([collectionName], (prev = []) =>
         prev.filter((it) => !idSet.has(String(it.id)))
       );
 
