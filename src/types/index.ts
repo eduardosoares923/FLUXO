@@ -39,6 +39,7 @@ export interface User {
   name: string;
   email: string;
   username: string;
-  role: 'admin' | 'gerente' | 'viewer';
+  role: 'admin' | 'gerente' | 'viewer' | 'usuario' | string;
   person?: string;
+  avatar?: string;
 }
