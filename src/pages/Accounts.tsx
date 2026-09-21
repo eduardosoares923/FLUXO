@@ -2,186 +2,83 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, normalize } from '../utils/format';
-import { User } from '../types';
+import { Account, User } from '../types';
 
-// Definimos o formato exato que a tela de Contas espera
-interface AccountData {
-  id?: string;
-  name: string;
-  bank: string;
-  balance: number | string;
-  owner: string;
-  ownerKey?: string;
-}
-
-const emptyForm: AccountData = { name: '', bank: '', balance: '', owner: '' };
+const emptyForm = { name: '', bank: '', balance: '', owner: '' };
 
 export default function Accounts() {
-  const { session, hasPermission, canAccessPerson } = useAuth() as { 
-    session: User; 
-    hasPermission: (mod: string, act?: string) => boolean;
-    canAccessPerson: (p?: string) => boolean;
-  };
-  const { data: accounts, loading, saveRecord, deleteRecord } = useCollection<AccountData>('accounts');
-  
-  const [form, setForm] = useState<AccountData>(emptyForm);
+  const { session, hasPermission, canAccessPerson } = useAuth() as { session: User, hasPermission: any, canAccessPerson: any };
+  const { data: accounts, loading, saveRecord, deleteRecord } = useCollection<Account>('accounts');
+  const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
   const canEdit = hasPermission('accounts', 'edit');
-  const visible = session?.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner));
+  const visible = session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner));
 
-  function openNew() {
-    setForm(emptyForm);
-    setEditingId(null);
-    setShowForm(true);
-  }
-
-  function openEdit(acc: AccountData) {
-    setForm({ name: acc.name || '', bank: acc.bank || '', balance: acc.balance ?? '', owner: acc.owner || '' });
-    setEditingId(acc.id || null);
-    setShowForm(true);
-  }
+  function openEdit(acc: Account) { setForm({ name: acc.name, bank: acc.bank || '', balance: String(acc.balance), owner: acc.owner || '' }); setEditingId(acc.id); setShowForm(true); }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name?.trim()) return;
-    const owner = form.owner?.trim() || session?.person || '';
-    
-    await saveRecord({
-      id: editingId || undefined,
-      name: form.name.trim(),
-      bank: form.bank?.trim() || '',
-      balance: typeof form.balance === 'string' ? parseFloat(form.balance) || 0 : form.balance || 0,
-      owner,
-      ownerKey: normalize(owner),
-    });
+    if (!form.name.trim()) return;
+    const owner = form.owner.trim() || session.person;
+    await saveRecord({ id: editingId || undefined, name: form.name.trim(), bank: form.bank.trim(), balance: parseFloat(form.balance) || 0, owner, ownerKey: normalize(owner) });
     setShowForm(false);
   }
 
-  async function handleDelete(id?: string) {
-    if (!id || !confirm('Excluir esta conta?')) return;
-    await deleteRecord(id);
-  }
-
-  if (loading) return <div className="flex items-center justify-center h-[60vh] text-[#8fa39a] animate-pulse">Carregando contas...</div>;
+  if (loading) return <div className="p-10 text-center text-[#8fa39a] animate-pulse">Carregando contas...</div>;
 
   return (
-    <div className="animate-in fade-in duration-500">
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-[1.6rem] font-bold text-[#f2f0ea]">Contas Bancárias</h2>
-        {canEdit && (
-          <button 
-            className="flex items-center gap-2 bg-gradient-to-br from-[#f5d78a] to-[#e3b04b] text-[#1c1206] px-4 py-2.5 rounded-xl font-bold transition-all hover:scale-105 hover:shadow-[0_0_20px_rgba(227,176,75,0.4)]"
-            onClick={openNew}
-          >
-            <i className="fa-solid fa-plus text-sm" /> Nova Conta
-          </button>
-        )}
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6">
+      {/* Cabeçalho */}
+      <div className="flex justify-between items-center mb-8">
+        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Contas</h2>
+        {canEdit && <button onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform"><i className="fa-solid fa-plus mr-2" />Nova Conta</button>}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {/* Grid Simplificado */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
         {visible.map((acc) => (
-          <div 
-            key={acc.id} 
-            className="group bg-white/[0.035] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_16px_32px_-16px_rgba(0,0,0,0.6)] hover:border-white/[0.15] relative overflow-hidden"
-          >
-            {/* Brilho de fundo no hover */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            
-            <div className="flex justify-between items-start relative z-10">
-              <div className="flex items-center gap-3">
-                <span className="w-[38px] h-[38px] rounded-[10px] bg-[#4d8dff]/15 text-[#4d8dff] flex items-center justify-center text-[1.1rem]">
-                  <i className="fa-solid fa-building-columns" />
-                </span>
-                <strong className="text-[#f2f0ea] text-lg truncate max-w-[140px] leading-tight">{acc.name}</strong>
+          <div key={acc.id} className="bg-white/[0.02] border border-white/[0.08] p-5 sm:p-6 rounded-3xl shadow-xl flex flex-col justify-between hover:bg-white/[0.04] transition-colors">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-[#e3b04b]/10 text-[#e3b04b] rounded-2xl flex items-center justify-center text-xl shrink-0"><i className="fa-solid fa-building-columns" /></div>
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold text-white truncate">{acc.name}</h3>
+                  <span className="text-xs text-[#8fa39a] truncate block">{acc.bank || 'Instituição não informada'}</span>
+                </div>
               </div>
-              
               {canEdit && (
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEdit(acc)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" title="Editar">
-                    <i className="fa-solid fa-pen text-[0.8rem]" />
-                  </button>
-                  <button onClick={() => handleDelete(acc.id)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center" title="Excluir">
-                    <i className="fa-solid fa-trash text-[0.8rem]" />
-                  </button>
+                <div className="flex gap-2 text-[#8fa39a] shrink-0">
+                  <button onClick={() => openEdit(acc)} className="hover:text-white p-1"><i className="fa-solid fa-pen" /></button>
+                  <button onClick={() => confirm('Excluir esta conta?') && deleteRecord(acc.id)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
                 </div>
               )}
             </div>
             
-            <div className="mt-3 relative z-10">
-              <span className="block text-[0.75rem] text-[#8fa39a] mb-0.5 tracking-wide uppercase font-semibold">Saldo Atual</span>
-              <span className="text-[1.7rem] font-bold font-mono tracking-tight text-[#f2f0ea]">
-                {formatCurrency(acc.balance)}
-              </span>
-            </div>
-            
-            <div className="flex items-center justify-between mt-1 text-[0.8rem] text-[#8fa39a] relative z-10">
-              <span>{acc.bank || 'Sem instituição'}</span>
-              {acc.owner && <span className="bg-white/[0.06] px-2.5 py-1 rounded-md text-[0.75rem] font-medium">{acc.owner}</span>}
+            <div className="mt-6 flex justify-between items-end">
+              <strong className="text-2xl font-mono text-[#f2f0ea]">{formatCurrency(acc.balance)}</strong>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg truncate max-w-[100px]">{acc.owner || 'Geral'}</span>
             </div>
           </div>
         ))}
-        {visible.length === 0 && (
-          <p className="col-span-full text-center text-[#8fa39a] py-16 bg-white/[0.02] rounded-2xl border border-white/5 border-dashed">
-            Nenhuma conta cadastrada ainda.
-          </p>
-        )}
       </div>
 
-      {/* MODAL DE CRIAÇÃO/EDIÇÃO EM TAILWIND PURE */}
+      {visible.length === 0 && <p className="text-[#8fa39a] mt-10">Nenhuma conta cadastrada.</p>}
+
+      {/* Modal Básico */}
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowForm(false)}>
-          <form 
-            className="bg-[#141d1a] border border-white/10 rounded-[20px] p-6 sm:p-8 w-full max-w-[540px] flex flex-col gap-5 shadow-[0_20px_50px_rgba(0,0,0,0.5)] animate-in zoom-in-95 duration-200" 
-            onClick={(e) => e.stopPropagation()} 
-            onSubmit={handleSubmit}
-          >
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-1">{editingId ? 'Editar Conta' : 'Nova Conta Bancária'}</h3>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+          <form onSubmit={handleSubmit} className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white">
+            <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar Conta' : 'Nova Conta'}</h3>
+            <input placeholder="Nome (Ex: Conta Corrente)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+            <input placeholder="Banco (Opcional)" value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+            <input type="number" step="0.01" placeholder="Saldo Inicial" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+            <input placeholder="Dono da Conta (Opcional)" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
             
-            {/* O famoso Grid Inteligente, agora nativo via Tailwind */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-              <div className="sm:col-span-2">
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase tracking-wide">Nome da Conta</label>
-                <input 
-                  className="w-full p-3 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] transition-all hover:bg-white/[0.04] focus:outline-none focus:border-[#e3b04b] focus:ring-2 focus:ring-[#e3b04b]/20"
-                  value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required autoFocus placeholder="Ex: Conta Corrente Nubank"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase tracking-wide">Instituição / Banco</label>
-                <input 
-                  className="w-full p-3 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] transition-all hover:bg-white/[0.04] focus:outline-none focus:border-[#e3b04b] focus:ring-2 focus:ring-[#e3b04b]/20"
-                  value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} placeholder="Ex: Nubank"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase tracking-wide">Saldo Inicial (R$)</label>
-                <input
-                  type="number" step="0.01"
-                  className="w-full p-3 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] transition-all hover:bg-white/[0.04] focus:outline-none focus:border-[#e3b04b] focus:ring-2 focus:ring-[#e3b04b]/20 font-mono text-lg"
-                  value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })}
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase tracking-wide">Responsável / Dono</label>
-                <input 
-                  className="w-full p-3 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] transition-all hover:bg-white/[0.04] focus:outline-none focus:border-[#e3b04b] focus:ring-2 focus:ring-[#e3b04b]/20"
-                  value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} placeholder="Ex: Nome do Sócio"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-white/[0.06]">
-              <button type="button" className="px-5 py-2.5 rounded-xl text-[#8fa39a] font-medium hover:text-white hover:bg-white/5 transition-colors" onClick={() => setShowForm(false)}>
-                Cancelar
-              </button>
-              <button type="submit" className="px-6 py-2.5 rounded-xl bg-gradient-to-br from-[#f5d78a] to-[#e3b04b] text-[#1c1206] font-bold transition-all hover:scale-105 shadow-[0_4px_12px_rgba(227,176,75,0.3)]">
-                Salvar Conta
-              </button>
+            <div className="flex gap-3 mt-4">
+              <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
+              <button type="submit" className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors">Salvar</button>
             </div>
           </form>
         </div>

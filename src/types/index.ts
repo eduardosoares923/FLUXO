@@ -32,8 +32,11 @@ export interface Account {
   id?: string;
   name: string;
   balance: number;
-  color: string;
-  type: string;
+  color?: string;
+  type?: string;
+  bank?: string;
+  owner?: string;
+  ownerKey?: string;
 }
 
 export interface User {

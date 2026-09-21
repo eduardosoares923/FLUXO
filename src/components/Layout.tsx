@@ -4,121 +4,75 @@ import { useAuth } from '../context/AuthContext';
 import { RouteLoading } from './RouteLoading';
 import { User } from '../types';
 
-const roleLabels: Record<string, string> = {
-  admin: 'Administrador',
-  gerente: 'Gerente',
-  usuario: 'Usuário',
-  visitante: 'Visitante',
-};
-
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: 'fa-gauge', module: null },
+  { to: '/', label: 'Painel', icon: 'fa-gauge', module: null },
+  { to: '/transactions', label: 'Transações', icon: 'fa-arrow-right-arrow-left', module: 'transactions' },
   { to: '/accounts', label: 'Contas', icon: 'fa-wallet', module: 'accounts' },
   { to: '/cards', label: 'Cartões', icon: 'fa-credit-card', module: 'cards' },
-  { to: '/transactions', label: 'Transações', icon: 'fa-arrow-right-arrow-left', module: 'transactions' },
   { to: '/subscriptions', label: 'Assinaturas', icon: 'fa-rotate', module: 'subscriptions' },
   { to: '/reports', label: 'Relatórios', icon: 'fa-chart-line', module: 'reports' },
   { to: '/users', label: 'Usuários', icon: 'fa-users', module: 'manage_users' },
-  { to: '/settings', label: 'Configurações', icon: 'fa-gear', module: 'config_system' },
+  { to: '/settings', label: 'Ajustes', icon: 'fa-gear', module: 'config_system' },
 ];
 
 export function ProtectedRoute() {
-  const { session, loading } = useAuth() as { session: User | null; loading: boolean };
-  if (loading) return <div className="flex items-center justify-center h-screen text-[#8fa39a]">Carregando...</div>;
-  if (!session) return <Navigate to="/login" replace />;
-  return <Outlet />;
+  const { session, loading } = useAuth() as { session: User | null, loading: boolean };
+  if (loading) return <RouteLoading />;
+  return session ? <Outlet /> : <Navigate to="/login" replace />;
 }
 
 export function PublicOnlyRoute() {
-  const { session, loading } = useAuth() as { session: User | null; loading: boolean };
-  if (loading) return <div className="flex items-center justify-center h-screen text-[#8fa39a]">Carregando...</div>;
-  if (session) return <Navigate to="/" replace />;
-  return <Outlet />;
-}
-
-// Manchas de gradiente animadas atrás de tudo (Tailwind)
-function BackgroundBlobs() {
-  return (
-    <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none" aria-hidden="true">
-      <div className="absolute rounded-full blur-[80px] opacity-[0.14] animate-[drift_24s_ease-in-out_infinite] w-[520px] h-[520px] bg-[#e3b04b] -top-[180px] -left-[120px]" />
-      <div className="absolute rounded-full blur-[80px] opacity-[0.14] animate-[drift_30s_ease-in-out_infinite] w-[420px] h-[420px] bg-[#5fd08f] -bottom-[160px] left-[30%] delay-[-6s]" />
-      <div className="absolute rounded-full blur-[80px] opacity-[0.14] animate-[drift_27s_ease-in-out_infinite] w-[380px] h-[380px] bg-[#4d8dff] top-[10%] -right-[100px] delay-[-12s]" />
-    </div>
-  );
+  const { session, loading } = useAuth() as { session: User | null, loading: boolean };
+  if (loading) return <RouteLoading />;
+  return session ? <Navigate to="/" replace /> : <Outlet />;
 }
 
 export function Layout() {
-  const { session, logout, hasPermission } = useAuth() as { session: User; logout: () => void; hasPermission: (mod: string) => boolean };
+  const { session, logout, hasPermission } = useAuth() as { session: User, logout: () => void, hasPermission: any };
 
   return (
-    <div className="flex min-h-screen bg-[#0b1210] relative text-[#f2f0ea]">
-      <BackgroundBlobs />
-      
-      {/* Sidebar inteira convertida para Tailwind */}
-      <aside className="relative z-10 w-[260px] bg-white/[0.02] backdrop-blur-md border-r border-white/[0.08] flex flex-col transition-all">
+    <div className="flex h-screen bg-[#0e1412] text-[#f2f0ea] overflow-hidden">
+      {/* BACKGROUND DECORATIVO */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden opacity-20">
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#e3b04b] rounded-full blur-[150px] mix-blend-screen" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#3b82f6] rounded-full blur-[150px] mix-blend-screen" />
+      </div>
+
+      {/* SIDEBAR - DESKTOP ONLY */}
+      <aside className="hidden md:flex flex-col w-64 bg-[#141d1a]/80 backdrop-blur-xl border-r border-white/10 z-20">
         <div className="p-6">
-          <h1 className="text-[1.4rem] font-extrabold tracking-wide bg-gradient-to-r from-[#f5d78a] via-[#e3b04b] to-[#f5d78a] bg-[length:200%_auto] bg-clip-text text-transparent animate-[shine_5s_linear_infinite]">
-            FLUXO
-          </h1>
+          <h1 className="text-2xl font-black tracking-tighter text-white">FLUXO</h1>
         </div>
-        
-        <nav className="flex-1 px-4 space-y-1">
+        <nav className="flex-1 overflow-y-auto px-4 flex flex-col gap-1">
           {NAV_ITEMS.filter((item) => !item.module || hasPermission(item.module)).map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.to === '/'}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium text-[0.92rem] transition-all duration-300 ${
-                  isActive 
-                    ? 'text-[#f5d78a] bg-white/[0.04]' 
-                    : 'text-[#8fa39a] hover:text-[#f2f0ea] hover:bg-white/[0.04] hover:translate-x-1'
-                }`
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  {/* Badge de Ícone */}
-                  <span className={`w-[30px] h-[30px] rounded-[9px] flex items-center justify-center text-[0.85rem] shrink-0 transition-all duration-300 ${
-                    isActive 
-                      ? 'bg-gradient-to-br from-[#f5d78a] to-[#e3b04b] text-[#241a06] shadow-[0_0_16px_rgba(227,176,75,0.5)]' 
-                      : 'bg-white/5 group-hover:bg-white/10'
-                  }`}>
-                    <i className={`fa-solid ${item.icon}`} />
-                  </span>
-                  <span>{item.label}</span>
-                  
-                  {/* Linha indicadora dourada */}
-                  {isActive && (
-                    <div className="absolute left-[-2px] top-1/2 -translate-y-1/2 h-3/5 w-[3px] rounded-full bg-gradient-to-b from-[#f5d78a] to-[#e3b04b] shadow-[0_0_10px_#e3b04b]" />
-                  )}
-                </>
-              )}
+            <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => `flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all ${isActive ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : 'text-[#8fa39a] hover:bg-white/5 hover:text-white'}`}>
+              <i className={`fa-solid ${item.icon} w-5 text-center`} /> <span>{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        
-        <div className="p-4 border-t border-white/[0.08] mt-auto flex items-center gap-3">
-          <img src={session.avatar} alt={session.name} className="w-9 h-9 rounded-full object-cover border border-white/10" />
-          <div className="flex-1 min-w-0">
-            <div className="truncate text-sm font-semibold">{session.name}</div>
-            <div className="text-[0.7rem] text-[#8fa39a] truncate">{roleLabels[session.role] || 'Usuário'}</div>
+        <div className="p-4 border-t border-white/10 flex items-center justify-between">
+          <div className="flex items-center gap-3 truncate">
+            <img src={session.avatar || `https://ui-avatars.com/api/?name=${session.name}&background=e3b04b&color=000`} alt="Avatar" className="w-10 h-10 rounded-xl" />
+            <div className="truncate"><div className="font-bold text-sm truncate">{session.name.split(' ')[0]}</div><div className="text-[10px] text-[#8fa39a] uppercase tracking-widest">{session.role}</div></div>
           </div>
-          <button 
-            onClick={logout} 
-            title="Sair"
-            className="text-[#8fa39a] hover:text-[#e3b04b] transition-colors p-2"
-          >
-            <i className="fa-solid fa-right-from-bracket text-lg" />
-          </button>
+          <button onClick={logout} className="p-2 text-[#8fa39a] hover:text-red-400 transition-colors"><i className="fa-solid fa-right-from-bracket" /></button>
         </div>
       </aside>
 
-      <main className="flex-1 p-8 overflow-y-auto relative z-10 h-screen">
-        <Suspense fallback={<RouteLoading />}>
-          <Outlet />
-        </Suspense>
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="flex-1 h-full overflow-y-auto relative z-10 scroll-smooth">
+        <Suspense fallback={<RouteLoading />}><Outlet /></Suspense>
       </main>
+
+      {/* BOTTOM NAV - MOBILE ONLY */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-[#141d1a]/90 backdrop-blur-xl border-t border-white/10 z-50 flex items-center justify-around px-2 pb-safe pt-2">
+        {NAV_ITEMS.filter((item) => !item.module || hasPermission(item.module)).slice(0, 5).map((item) => (
+          <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => `flex flex-col items-center justify-center p-2 min-w-[60px] gap-1 transition-colors ${isActive ? 'text-[#e3b04b]' : 'text-[#8fa39a]'}`}>
+            <i className={`fa-solid ${item.icon} text-xl`} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }
