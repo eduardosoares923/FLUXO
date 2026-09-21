@@ -59,3 +59,9 @@ export interface Card {
   owner?: string;
   ownerKey?: string;
 }
+
+export interface Person {
+  id?: string;
+  name: string;
+  personKey?: string;
+}
