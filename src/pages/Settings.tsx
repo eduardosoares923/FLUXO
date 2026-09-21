@@ -22,6 +22,8 @@ export default function Settings() {
   const { data: cards, saveRecord: saveCard } = useCollection('cards');
   const { data: transactions, saveRecord: saveTx } = useCollection('transactions');
   const { data: subscriptions, saveRecord: saveSub } = useCollection('subscriptions');
+  const { data: persons, saveRecord: savePerson } = useCollection('persons');
+  const { data: paidInvoices, saveRecord: savePaidInvoice } = useCollection('paidInvoices');
 
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [newCat, setNewCat] = useState('');
@@ -92,6 +94,8 @@ export default function Settings() {
         transactions,
         subscriptions,
         categories,
+        persons,
+        paidInvoices,
       };
 
       const jsonStr = JSON.stringify(backupData, null, 2);
@@ -143,6 +147,12 @@ export default function Settings() {
       }
       if (Array.isArray(parsed.subscriptions)) {
         for (const s of parsed.subscriptions) { await saveSub(s); count++; }
+      }
+      if (Array.isArray(parsed.persons)) {
+        for (const p of parsed.persons) { await savePerson(p); count++; }
+      }
+      if (Array.isArray(parsed.paidInvoices)) {
+        for (const inv of parsed.paidInvoices) { await savePaidInvoice(inv); count++; }
       }
       if (Array.isArray(parsed.transactions)) {
         for (const t of parsed.transactions) { await saveTx(t); count++; }
@@ -254,7 +264,7 @@ export default function Settings() {
           </div>
           Backup e Segurança de Dados
         </h3>
-        <p className="text-sm text-[#8fa39a] mb-6">Exporte uma cópia completa de suas contas, cartões e transações em JSON ou restaure um backup anterior.</p>
+        <p className="text-sm text-[#8fa39a] mb-6">Exporte uma cópia completa de suas contas, cartões, transações, assinaturas, pessoas e faturas pagas em JSON, ou restaure um backup anterior.</p>
 
         <div className="flex flex-col sm:flex-row gap-4">
           <button onClick={handleExportBackup} className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium border border-white/10 transition-colors">
