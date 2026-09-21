@@ -45,3 +45,13 @@ export interface User {
   person?: string;
   avatar?: string;
 }
+
+export interface Card {
+  id?: string;
+  name: string;
+  limit: number;
+  closeDay: number;
+  dueDay: number;
+  owner?: string;
+  ownerKey?: string;
+}
