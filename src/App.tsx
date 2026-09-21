@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute, PublicOnlyRoute, Layout } from './components/Layout';
@@ -54,3 +54,4 @@ export default function App() {
     </ErrorBoundary>
   );
 }
+
