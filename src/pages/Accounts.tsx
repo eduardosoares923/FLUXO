@@ -6,6 +6,12 @@ import { Account, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
 
+function displayBalance(acc: Account & { computedBalance?: number }) {
+  const initial = Number(acc.balance) || 0;
+  const computed = acc.computedBalance !== undefined ? Number(acc.computedBalance) : 0;
+  return initial + computed;
+}
+
 export default function Accounts() {
   const { session, hasPermission, canAccessPerson } = useAuth() as { session: User, hasPermission: any, canAccessPerson: any };
   const { data: accounts, loading, saveRecord, deleteRecord } = useCollection<Account>('accounts');
@@ -57,7 +63,7 @@ export default function Accounts() {
             </div>
             
             <div className="mt-6 flex justify-between items-end">
-              <strong className="text-2xl font-mono text-[#f2f0ea]">{formatCurrency(acc.balance)}</strong>
+              <strong className="text-2xl font-mono text-[#f2f0ea]">{formatCurrency(displayBalance(acc))}</strong>
               <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg truncate max-w-[100px]">{acc.owner || 'Geral'}</span>
             </div>
           </div>

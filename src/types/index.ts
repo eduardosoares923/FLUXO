@@ -32,6 +32,7 @@ export interface Account {
   id?: string;
   name: string;
   balance: number;
+  computedBalance?: number;
   color?: string;
   type?: string;
   bank?: string;

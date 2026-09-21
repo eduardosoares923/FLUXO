@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, normalize } from '../utils/format';
-import { Card, User } from '../types';
+import { formatCurrency, formatDate, getCardInvoiceMonth, normalize } from '../utils/format';
+import { toast } from '../stores/useToastStore';
+import { Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
 
-// Cores simplificadas direto no Tailwind
 const BRAND_STYLES = [
   { match: /amazon/i, bg: 'bg-gradient-to-br from-gray-900 to-[#ff9900]' },
   { match: /inter/i, bg: 'bg-gradient-to-br from-[#ff7a00] to-[#ff9a3c]' },
@@ -21,102 +21,211 @@ function getBrandBg(name: string) {
   return found ? found.bg : 'bg-gradient-to-br from-slate-800 to-slate-900';
 }
 
+function formatMonthLabel(monthStr: string) {
+  if (!monthStr) return '';
+  const [year, month] = monthStr.split('-');
+  const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  return `${names[parseInt(month) - 1] || month} de ${year}`;
+}
+
+function shiftMonth(monthStr: string, offset: number) {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + offset, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+interface PaidInvoice {
+  id?: string;
+  cardId: string;
+  monthStr: string;
+  total: number;
+  paidAt: string;
+}
+
 export default function Cards() {
-  const { session, hasPermission, canAccessPerson } = useAuth() as { session: User, hasPermission: any, canAccessPerson: any };
+  const { session, hasPermission, canAccessPerson } = useAuth() as { session: User; hasPermission: any; canAccessPerson: any };
   const { data: cards, loading, saveRecord, deleteRecord } = useCollection<Card>('cards');
+  const { data: transactions } = useCollection<Transaction>('transactions');
+  const { data: paidInvoices, saveRecord: savePaid, deleteRecord: deletePaid } = useCollection<PaidInvoice>('paidInvoices');
+
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
 
+  const [invoiceCard, setInvoiceCard] = useState<Card | null>(null);
+  const [invoiceMonth, setInvoiceMonth] = useState('');
+
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
 
-  function openEdit(card: Card) { 
-    setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '' }); 
-    setEditingId(card.id); 
-    setShowForm(true); 
+  function openEdit(card: Card) {
+    setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '' });
+    setEditingId(card.id!);
+    setShowForm(true);
   }
-  
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
     const owner = form.owner.trim() || session.person;
-    await saveRecord({ id: editingId || undefined, name: form.name.trim(), limit: parseFloat(form.limit) || 0, closeDay: parseInt(form.closeDay) || 28, dueDay: parseInt(form.dueDay) || 10, owner, ownerKey: normalize(owner) });
+    await saveRecord({ id: editingId || undefined, name: form.name.trim(), limit: parseFloat(form.limit) || 0, closeDay: parseInt(form.closeDay) || 28, dueDay: parseInt(form.dueDay) || 10, owner, ownerKey: normalize(owner) } as Card);
     setShowForm(false);
+  }
+
+  function openInvoice(card: Card) {
+    setInvoiceCard(card);
+    setInvoiceMonth(getCardInvoiceMonth(new Date().toISOString().slice(0, 10), card.closeDay));
+  }
+
+  function changeInvoiceMonth(offset: number) {
+    setInvoiceMonth((m) => shiftMonth(m, offset));
+  }
+
+  const invoiceTxs = useMemo(() => {
+    if (!invoiceCard) return [];
+    return transactions
+      .filter((tx) => tx.paymentMethod === `card_${invoiceCard.id}`)
+      .filter((tx) => getCardInvoiceMonth(tx.date, invoiceCard.closeDay) === invoiceMonth)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [transactions, invoiceCard, invoiceMonth]);
+
+  const invoiceTotal = useMemo(
+    () => invoiceTxs.reduce((sum, tx) => sum + (tx.type === 'expense' ? Number(tx.amount) || 0 : -(Number(tx.amount) || 0)), 0),
+    [invoiceTxs]
+  );
+
+  const paidRecordId = invoiceCard ? `inv_${invoiceCard.id}_${invoiceMonth}` : null;
+  const isPaid = useMemo(() => paidInvoices.some((p) => p.id === paidRecordId), [paidInvoices, paidRecordId]);
+
+  async function togglePaid() {
+    if (!invoiceCard || !paidRecordId) return;
+    try {
+      if (isPaid) {
+        await deletePaid(paidRecordId);
+        toast.info(`Fatura de ${formatMonthLabel(invoiceMonth)} reaberta.`);
+      } else {
+        await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString() } as PaidInvoice);
+        toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga!`);
+      }
+    } catch {
+      toast.error('Erro ao atualizar status da fatura.');
+    }
   }
 
   if (loading) return <div className="p-10 text-center text-[#8fa39a] animate-pulse">Carregando cartões...</div>;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-20">
-      {/* Cabeçalho */}
       <div className="flex justify-between items-center mb-8">
         <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Cartões</h2>
         {canEdit && (
           <button onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform">
-            <i className="fa-solid fa-plus mr-2"/> Novo Cartão
+            <i className="fa-solid fa-plus mr-2" /> Novo Cartão
           </button>
         )}
       </div>
 
-      {/* Grid Responsivo Super Limpo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {visible.map((card) => (
-          <div key={card.id} className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform`}>
-            
+          <div
+            key={card.id}
+            onClick={() => openInvoice(card)}
+            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer`}
+          >
             <div className="flex justify-between items-start">
-              {/* Chip do Cartão */}
               <div className="w-12 h-8 bg-yellow-100/40 rounded flex items-center justify-center">
                 <div className="w-8 h-5 border border-yellow-800/30 rounded-sm" />
               </div>
-              
-              {/* Botões de Ação */}
               {canEdit && (
-                <div className="flex gap-3">
+                <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => openEdit(card)} className="hover:text-yellow-300"><i className="fa-solid fa-pen" /></button>
-                  <button onClick={() => confirm('Excluir este cartão?') && deleteRecord(card.id)} className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
+                  <button onClick={() => confirm('Excluir este cartão?') && deleteRecord(card.id!)} className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
                 </div>
               )}
             </div>
 
-            {/* Limite */}
             <div className="mt-4">
               <div className="text-[10px] opacity-70 uppercase tracking-widest font-bold">Limite</div>
               <div className="text-2xl font-mono">{formatCurrency(card.limit)}</div>
             </div>
 
-            {/* Rodapé: Nome e Datas */}
             <div className="flex justify-between items-end">
               <div className="text-lg font-bold tracking-wide uppercase truncate mr-2">{card.name}</div>
               <div className="text-xs text-right opacity-90 leading-tight shrink-0">
-                F: {card.closeDay} <br/>V: {card.dueDay}
+                F: {card.closeDay} <br />V: {card.dueDay}
               </div>
             </div>
           </div>
         ))}
       </div>
 
+      {visible.length > 0 && <p className="text-[#8fa39a] text-sm mt-4">Clique num cartão pra ver a fatura.</p>}
       {visible.length === 0 && <p className="text-[#8fa39a] mt-10">Nenhum cartão cadastrado.</p>}
 
-      {/* Modal Básico Simplificado */}
       {showForm && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
           <form onSubmit={handleSubmit} className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white">
             <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar' : 'Novo'} Cartão</h3>
-            
-            <input placeholder="Nome do Cartão (Ex: Nubank)" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-            <input type="number" step="0.01" placeholder="Limite Total" value={form.limit} onChange={(e) => setForm({...form, limit: e.target.value})} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-            
+            <input placeholder="Nome do Cartão (Ex: Nubank)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+            <input type="number" step="0.01" placeholder="Limite Total" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
             <div className="flex gap-4">
-              <input type="number" placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({...form, closeDay: e.target.value})} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-              <input type="number" placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({...form, dueDay: e.target.value})} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+              <input type="number" placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({ ...form, closeDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+              <input type="number" placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
             </div>
-
             <div className="flex gap-3 mt-4">
               <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
               <button type="submit" className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors">Salvar</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {invoiceCard && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setInvoiceCard(null)}>
+          <div className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-md text-white" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-2">Fatura: {invoiceCard.name}</h3>
+
+            <div className="flex items-center justify-center gap-3 my-3">
+              <button onClick={() => changeInvoiceMonth(-1)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
+                <i className="fa-solid fa-chevron-left" />
+              </button>
+              <span className="font-semibold capitalize min-w-[140px] text-center">{formatMonthLabel(invoiceMonth)}</span>
+              <button onClick={() => changeInvoiceMonth(1)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
+                <i className="fa-solid fa-chevron-right" />
+              </button>
+            </div>
+
+            {invoiceTxs.length === 0 ? (
+              <p className="text-[#8fa39a] text-center py-6">Nenhum lançamento nesta fatura.</p>
+            ) : (
+              <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
+                {invoiceTxs.map((tx) => (
+                  <div key={tx.id} className="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/5">
+                    <div>
+                      <div className="font-medium text-sm">{tx.description}</div>
+                      <div className="text-xs text-[#8fa39a]">{formatDate(tx.date)}</div>
+                    </div>
+                    <div className={`font-mono font-bold ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex justify-between items-center border-t border-white/10 mt-3 pt-3">
+              <span className="text-[#8fa39a]">Total da fatura</span>
+              <strong className="font-mono text-lg">{formatCurrency(invoiceTotal)}</strong>
+            </div>
+
+            <div className="flex justify-between gap-3 mt-4">
+              <button onClick={togglePaid} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${isPaid ? 'bg-white/5 hover:bg-white/10' : 'bg-[#e3b04b] text-black hover:bg-[#f5d78a]'}`}>
+                <i className={`fa-solid ${isPaid ? 'fa-rotate-left' : 'fa-check'} mr-2`} />
+                {isPaid ? 'Reabrir fatura' : 'Marcar como paga'}
+              </button>
+              <button onClick={() => setInvoiceCard(null)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Fechar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
