@@ -217,219 +217,149 @@ export default function Subscriptions() {
     return pm;
   }
 
-  if (loading) return <PageLoading message="Carregando assinaturas..." />;
+    if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
   if (error) return <PageError error={error as Error} title="Erro ao carregar assinaturas" />;
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[1200px] mx-auto pb-12">
-      <div className="flex items-center justify-between mb-8">
-        <h2 className="text-[1.6rem] font-bold text-[#f2f0ea]">Assinaturas e Recorrências</h2>
+    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6 animate-in fade-in">
+      
+      {/* CABEÇALHO */}
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Assinaturas</h2>
         {canEdit && (
-          <button onClick={openNew} className="flex items-center gap-2 bg-gradient-to-br from-[#f5d78a] to-[#e3b04b] text-[#1c1206] px-4 py-2.5 rounded-xl font-bold transition-all hover:scale-105 shadow-[0_4px_14px_rgba(227,176,75,0.25)]">
-            <i className="fa-solid fa-plus text-sm" /> Nova assinatura
+          <button onClick={openNew} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2">
+            <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nova Assinatura</span>
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#e3b04b]" />
-          <span className="text-[0.8rem] uppercase tracking-wide text-[#8fa39a] font-semibold mb-1">Gasto Mensal Recorrente</span>
-          <strong className="text-3xl font-bold font-mono text-[#f2f0ea]">{formatCurrency(totalMonthly)}</strong>
+      {/* KPIs SUPER ENXUTOS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
+          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Custo Mensal Fixado</span>
+          <strong className="text-2xl font-mono text-[#e3b04b]">{formatCurrency(totalMonthly)}</strong>
         </div>
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#34d399]" />
-          <span className="text-[0.8rem] uppercase tracking-wide text-[#8fa39a] font-semibold mb-1">Assinaturas Ativas</span>
-          <div className="flex items-baseline gap-2">
-            <strong className="text-3xl font-bold font-mono text-[#f2f0ea]">{activeCount}</strong>
-            {pausedCount > 0 && <span className="text-[#8fa39a] text-sm">({pausedCount} pausadas)</span>}
-          </div>
+        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
+          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Status Ativas</span>
+          <strong className="text-2xl text-white">{activeCount} <span className="text-sm text-[#8fa39a] font-normal">/ {pausedCount} pausadas</span></strong>
         </div>
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f87171]" />
-          <span className="text-[0.8rem] uppercase tracking-wide text-[#8fa39a] font-semibold mb-1">Próxima Cobrança</span>
-          <strong className="text-xl font-bold text-[#f2f0ea] mt-1 truncate" title={nextDue}>{nextDue}</strong>
+        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
+          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Próxima Cobrança</span>
+          <strong className="text-lg text-white truncate">{nextDue}</strong>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-8">
-        <div className="relative flex-1 min-w-[200px]">
+      {/* FILTROS RESPONSIVOS */}
+      <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl shadow-lg flex flex-col md:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
           <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-[#8fa39a]" />
-          <input type="text" placeholder="Buscar por serviço ou categoria..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+          <input type="text" placeholder="Buscar assinatura..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none" />
         </div>
-        <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="w-full md:w-auto p-2.5 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#e3b04b] outline-none min-w-[180px]">
-          <option value="all">Todas as Formas de Pagamento</option>
-          <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>Conta: {a.name}</option>))}</optgroup>
-          <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>Cartão: {c.name}</option>))}</optgroup>
-        </select>
-        <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="w-full md:w-auto p-2.5 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#e3b04b] outline-none min-w-[150px]">
-          <option value="all">Todas as Pessoas</option>
-          {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-        </select>
+        <div className="flex gap-3">
+          <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="flex-1 w-full md:w-[150px] px-3 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none">
+            <option value="all">Cobrança</option><option value="account">Contas</option><option value="card">Cartões</option>
+          </select>
+          <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px] px-3 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none">
+            <option value="all">Pessoas</option>{availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
+          </select>
+        </div>
       </div>
 
+      {/* GRID DE CARTÕES DE ASSINATURA */}
       {visible.length === 0 ? (
-        <EmptyState icon="fa-rotate" title="Nenhuma assinatura encontrada" description="Cadastre serviços mensais como Netflix, Spotify, planos de saúde ou condomínio." actionLabel={canEdit ? 'Nova assinatura' : undefined} onAction={canEdit ? openNew : undefined} />
+        <EmptyState icon="fa-rotate" title="Nenhuma assinatura" description="Cadastre seus pagamentos recorrentes (Spotify, Netflix, Conta de Luz)." />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {visible.map((s) => {
-            const isPaused = s.status === 'pausada';
-            return (
-              <div key={s.id} className={`group bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4 transition-all hover:bg-white/[0.05] hover:-translate-y-1 hover:shadow-xl relative overflow-hidden ${isPaused ? 'opacity-70 grayscale-[0.3]' : ''}`}>
-                <div className={`w-1 absolute top-0 bottom-0 left-0 ${isPaused ? 'bg-yellow-500' : 'bg-[#10b981]'}`} />
-                
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-lg text-[#8fa39a]">
-                      <i className="fa-solid fa-repeat" />
-                    </div>
-                    <div>
-                      <strong className="block text-[#f2f0ea] text-lg leading-tight">{s.name}</strong>
-                      <span className={`text-[0.65rem] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${isPaused ? 'bg-yellow-500/20 text-yellow-500' : 'bg-[#10b981]/20 text-[#10b981]'}`}>
-                        {isPaused ? 'Pausada' : 'Ativa'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {canEdit && (
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleTogglePause(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white flex items-center justify-center" title={isPaused ? 'Reativar' : 'Pausar'}>
-                        <i className={`fa-solid ${isPaused ? 'fa-play' : 'fa-pause'} text-[0.85rem]`} />
-                      </button>
-                      <button onClick={() => openEdit(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] flex items-center justify-center">
-                        <i className="fa-solid fa-pen text-[0.85rem]" />
-                      </button>
-                      <button onClick={() => setDeleteId(s.id)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 flex items-center justify-center">
-                        <i className="fa-solid fa-trash text-[0.85rem]" />
-                      </button>
-                    </div>
-                  )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          {visible.map((s) => (
+            <div key={s.id} className={`p-5 rounded-3xl border transition-all ${s.status === 'pausada' ? 'bg-white/[0.01] border-white/5 opacity-60 grayscale' : 'bg-white/[0.03] border-white/[0.08] hover:-translate-y-1 shadow-lg'}`}>
+              <div className="flex justify-between items-start mb-4">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 ${s.status === 'pausada' ? 'bg-white/10 text-[#8fa39a]' : 'bg-[#e3b04b]/15 text-[#e3b04b]'}`}>
+                  <i className="fa-solid fa-rotate" />
                 </div>
-
-                <div className="flex items-end gap-1">
-                  <strong className="text-2xl font-bold font-mono text-[#f2f0ea]">{formatCurrency(s.amount)}</strong>
-                  <span className="text-[0.8rem] text-[#8fa39a] mb-1">/ mês</span>
-                </div>
-
-                <div className="bg-black/20 rounded-xl p-3 flex flex-col gap-2 text-[0.8rem]">
-                  <div className="flex items-center gap-2 text-[#8fa39a]">
-                    <i className="fa-regular fa-calendar w-4 text-center" /> 
-                    <span>Cobra todo dia <strong className="text-white">{s.billingDay}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[#8fa39a]">
-                    <i className="fa-solid fa-credit-card w-4 text-center" />
-                    <span className="truncate">{getPaymentLabel(s.paymentMethod)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[#8fa39a]">
-                    <i className="fa-solid fa-user w-4 text-center" />
-                    <span className="truncate">{s.person || 'Eu'}</span>
-                  </div>
-                </div>
-
-                {s.isSplit && s.splitDetails && (
-                  <div className="mt-2 pt-3 border-t border-white/5 flex flex-wrap gap-2">
-                    {s.splitDetails.map((item: any, idx: number) => (
-                      <span key={idx} className="text-[0.7rem] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-[#f2f0ea] font-medium">
-                        {item.person}: <span className="text-[#8fa39a]">{formatCurrency(item.amount)}</span>
-                      </span>
-                    ))}
+                {canEdit && (
+                  <div className="flex gap-1.5 bg-black/20 p-1.5 rounded-xl border border-white/5">
+                    <button onClick={() => handleTogglePause(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white flex items-center justify-center" title={s.status === 'pausada' ? 'Reativar' : 'Pausar'}><i className={`fa-solid ${s.status === 'pausada' ? 'fa-play' : 'fa-pause'}`} /></button>
+                    <button onClick={() => openEdit(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
+                    <button onClick={() => setDeleteId(s.id)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
                   </div>
                 )}
               </div>
-            );
-          })}
+              <h3 className="text-lg font-bold text-white truncate">{s.name}</h3>
+              <div className="text-xs text-[#8fa39a] mb-5 font-medium flex items-center gap-1.5"><i className="fa-regular fa-calendar" /> Vence dia {s.billingDay}</div>
+              <div className="flex justify-between items-end border-t border-white/5 pt-4">
+                <strong className={`text-2xl font-mono ${s.status === 'pausada' ? 'text-[#8fa39a]' : 'text-white'}`}>{formatCurrency(s.amount)}</strong>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg truncate max-w-[100px]">{s.person}</span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
+      {/* MODAL DE FORMULÁRIO BÁSICO */}
       {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowForm(false)}>
-          <form className="bg-[#141d1a] border border-white/10 rounded-[20px] p-6 sm:p-8 w-full max-w-[540px] flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-2">{editingId ? 'Editar Assinatura' : 'Nova Assinatura'}</h3>
-
-            <div>
-              <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Nome do Serviço</label>
-              <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('name')} placeholder="Ex: Netflix, Academia..." />
-              {errors.name && <span className="text-red-400 text-xs mt-1 block">{errors.name.message as string}</span>}
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={() => setShowForm(false)}>
+          <form className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-md flex flex-col gap-4 text-white max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
+            <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar Assinatura' : 'Nova Assinatura'}</h3>
+            
+            <input placeholder="Nome (Ex: Netflix, Luz)" {...register('name')} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+            {(errors.name as any) && <span className="text-red-400 text-xs mt-[-10px]">{(errors.name as any).message}</span>}
+            
+            <div className="flex gap-4">
+              <input type="number" step="0.01" placeholder="Valor Mensal" {...register('amount')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+              <input type="number" min="1" max="31" placeholder="Dia do Vencimento" {...register('billingDay')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Valor Mensal</label>
-                <input type="number" step="0.01" className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('amount')} placeholder="0.00" />
-                {errors.amount && <span className="text-red-400 text-xs mt-1 block">{errors.amount.message as string}</span>}
-              </div>
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Dia de Cobrança</label>
-                <input type="number" min="1" max="31" className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('billingDay')} />
-                {errors.billingDay && <span className="text-red-400 text-xs mt-1 block">{errors.billingDay.message as string}</span>}
-              </div>
-            </div>
+            <select {...register('paymentMethod')} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]">
+              <option value="account">Conta Padrão</option>
+              <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
+              <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
+            </select>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Forma de Pagamento</label>
-                <select className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('paymentMethod')}>
-                  <optgroup label="Contas Correntes">
-                    <option value="account">Conta Principal</option>
-                    {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>Conta: {a.name}</option>))}
-                  </optgroup>
-                  {cards.length > 0 && (
-                    <optgroup label="Cartões de Crédito">
-                      {cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>Cartão: {c.name}</option>))}
-                    </optgroup>
-                  )}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Categoria</label>
-                <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('category')} placeholder="Assinaturas" />
-              </div>
-            </div>
-
-            <div className="p-4 bg-white/[0.02] border border-white/10 rounded-xl mt-2">
-              <label className="flex items-center gap-3 cursor-pointer text-[#f2f0ea] font-medium">
-                <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="w-4 h-4 accent-[#e3b04b]" />
-                Dividir custo com outras pessoas (Rateio)
+            {/* SEÇÃO RATEIO ENXUTA */}
+            <div className="mt-2 p-4 bg-white/5 rounded-2xl">
+              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-white">
+                <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="accent-[#e3b04b] w-4 h-4" /> Dividir com outras pessoas
               </label>
-
               {isSplit ? (
-                <div className="mt-4 flex flex-col gap-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-[#8fa39a] uppercase font-semibold">Selecione quem divide:</span>
-                    <button type="button" onClick={splitEqually} className="text-xs bg-white/5 hover:bg-white/10 px-2 py-1 rounded text-[#f2f0ea] transition-colors"><i className="fa-solid fa-calculator mr-1" /> Dividir igual</button>
+                <div className="mt-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-xs text-[#8fa39a]">Participantes:</span>
+                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-[#e3b04b] bg-[#e3b04b]/10 px-2 py-1 rounded"><i className="fa-solid fa-calculator" /> Dividir igual</button>
                   </div>
-                  {availablePersons.map((pName) => {
-                    const isChecked = Object.prototype.hasOwnProperty.call(splitItems, pName);
-                    return (
-                      <div key={pName} className="flex items-center justify-between bg-black/20 p-2.5 rounded-lg border border-white/5">
-                        <label className="flex items-center gap-3 cursor-pointer text-[0.9rem] text-[#f2f0ea]">
-                          <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" />
-                          {pName}
-                        </label>
-                        <input type="number" step="0.01" disabled={!isChecked} placeholder="0.00" value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} className="w-24 p-1.5 rounded-md bg-white/5 border border-white/10 text-right text-[0.9rem] text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-30" />
-                      </div>
-                    );
-                  })}
+                  <div className="flex flex-col gap-2">
+                    {availablePersons.map((pName) => {
+                      const isChecked = Object.prototype.hasOwnProperty.call(splitItems, pName);
+                      return (
+                        <div key={pName} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5">
+                          <label className="flex items-center gap-3 text-sm text-white cursor-pointer">
+                            <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" /> {pName}
+                          </label>
+                          <input type="number" step="0.01" disabled={!isChecked} value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} className="w-24 p-1.5 rounded-md bg-black/30 border border-white/10 text-right text-sm disabled:opacity-30 outline-none focus:border-[#e3b04b]" placeholder="0.00" />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : (
-                <div className="mt-4">
-                  <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Pessoa Titular</label>
-                  <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('person')} placeholder={session?.person} />
+                <div className="mt-3">
+                  <input {...register('person')} placeholder={`Pessoa (padrão: ${session.person})`} className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-white focus:border-[#e3b04b] outline-none" />
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-white/[0.06]">
-              <button type="button" className="px-5 py-2.5 rounded-xl text-[#8fa39a] font-medium hover:text-white transition-colors" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button type="submit" className="px-6 py-2.5 rounded-xl bg-[#e3b04b] text-[#1c1206] font-bold transition-all hover:scale-105" disabled={isSubmitting}>
-                {isSubmitting ? 'Salvando...' : 'Salvar Assinatura'}
+            <div className="flex gap-3 mt-4">
+              <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
+              <button type="submit" disabled={isSubmitting} className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors disabled:opacity-50">
+                {isSubmitting ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      <ConfirmModal isOpen={!!deleteId} title="Excluir Assinatura" message="Tem certeza que deseja excluir esta assinatura? Os lançamentos vinculados a ela do mês atual serão removidos." confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
+      {/* CONFIRMAÇÃO DE EXCLUSÃO BÁSICA */}
+      <ConfirmModal isOpen={!!deleteId} title="Excluir Assinatura" message="Tem certeza que deseja excluir esta assinatura? (Não afeta cobranças já geradas)" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
     </div>
   );
 }
+
