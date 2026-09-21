@@ -1,10 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, getCardInvoiceMonth, toPersonKeys } from '../utils/format';
-import { subscriptionSchema } from '../schemas/financialSchemas';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { toast } from '../stores/useToastStore';
@@ -37,7 +35,6 @@ export default function Subscriptions() {
   }, [personsList]);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
-    resolver: zodResolver(subscriptionSchema),
     defaultValues: { name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: '' },
   });
 

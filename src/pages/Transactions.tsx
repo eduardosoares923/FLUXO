@@ -1,10 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys, generateId } from '../utils/format';
-import { transactionSchema } from '../schemas/financialSchemas';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { toast } from '../stores/useToastStore';
@@ -70,7 +68,6 @@ export default function Transactions() {
   const availableCategories = useMemo(() => [...new Set(transactions.map((tx) => tx.category).filter(Boolean))].sort(), [transactions]);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
-    resolver: zodResolver(transactionSchema),
     defaultValues: { description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: '' },
   });
 

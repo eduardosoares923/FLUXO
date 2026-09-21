@@ -2,10 +2,6 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache } from 'firebase/firestore';
 
-// A apiKey do Firebase NÃO é um segredo (é enviada ao navegador de qualquer forma),
-// a segurança real do banco vem das Firestore Security Rules (veja firestore.rules).
-// Mesmo assim, deixamos configurável via variáveis de ambiente para facilitar
-// trocar de projeto (ex: homologação vs produção) sem editar código.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyAcrEo6UQaQOJ588RLDj3dT2aR_-sZ09Ms',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'fluxoprov2.firebaseapp.com',
@@ -17,8 +13,5 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const db = initializeFirestore(app, { localCache: persistentLocalCache() });
 
-// Persistência offline (equivalente ao enablePersistence do SDK antigo)
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache(),
-});

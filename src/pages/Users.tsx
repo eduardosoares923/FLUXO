@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth, upsertUserLookup } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { auth } from '../firebase';
-import { userSchema } from '../schemas/financialSchemas';
 import { toPersonKeys } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -38,7 +36,6 @@ export default function Users() {
     watch,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
-    resolver: zodResolver(userSchema),
     defaultValues: {
       name: '',
       username: '',
