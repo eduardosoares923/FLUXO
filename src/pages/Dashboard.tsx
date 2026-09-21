@@ -20,7 +20,7 @@ function iconForCategory(category?: string, type?: string) {
 }
 
 function FlowChart({ days }: { days: any[] }) {
-  const width = 260; const height = 90; const pad = 6;
+  const width = 260; const height = 70; const pad = 6;
   if (!days || days.length === 0) return null;
   const values = days.map((d) => d.cumulative);
   const min = Math.min(...values); const max = Math.max(...values);
@@ -37,15 +37,15 @@ function FlowChart({ days }: { days: any[] }) {
   const trendUp = values[values.length - 1] >= values[0];
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full drop-shadow-xl overflow-visible">
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full drop-shadow-lg overflow-visible preserve-3d">
       <defs>
         <linearGradient id="flowGradient" x1="0" y1="0" x2="1" y2="0">
           <stop offset="0%" stopColor={trendUp ? '#34d399' : '#f87171'} />
           <stop offset="100%" stopColor="#e3b04b" />
         </linearGradient>
       </defs>
-      <path d={pathD} fill="none" stroke="url(#flowGradient)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r={5} fill="#e3b04b" stroke="#1c1206" strokeWidth="2" />
+      <path d={pathD} fill="none" stroke="url(#flowGradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={lastX} cy={lastY} r={4} fill="#e3b04b" stroke="#1c1206" strokeWidth="2" />
     </svg>
   );
 }
@@ -96,23 +96,13 @@ export default function Dashboard() {
   const visibleTx = useMemo(() => transactions.filter((tx) => canAccessPerson(tx.person, tx)), [transactions, canAccessPerson]);
   const currentPeriodTxs = useMemo(() => visibleTx.filter((tx) => { const d = parseTxDate(tx.date); return d && d.getMonth() === navMonth && d.getFullYear() === navYear; }), [visibleTx, navMonth, navYear]);
 
-  // MOTOR OTIMIZADO 1: Saldo Dinâmico Inteligente com Fallback (Seguro)
   const currentBalance = useMemo(() => {
-    let sum = 0;
-    let fallbackIncome = 0; let fallbackExpense = 0;
-    const fallbackAccs = new Set();
-
+    let sum = 0; let fallbackIncome = 0; let fallbackExpense = 0; const fallbackAccs = new Set();
     visibleAccounts.forEach(acc => {
       const initial = parseFloat(acc.balance) || 0;
-      if (acc.computedBalance !== undefined) {
-        sum += initial + Number(acc.computedBalance);
-      } else {
-        const accIdStr = acc.id === 'default_account' ? 'account' : `acc_${acc.id}`;
-        fallbackAccs.add(accIdStr);
-        sum += initial;
-      }
+      if (acc.computedBalance !== undefined) sum += initial + Number(acc.computedBalance);
+      else { fallbackAccs.add(acc.id === 'default_account' ? 'account' : `acc_${acc.id}`); sum += initial; }
     });
-
     if (fallbackAccs.size > 0 || visibleAccounts.length === 0) {
       visibleTx.forEach(tx => {
         if (visibleAccounts.length === 0 || fallbackAccs.has(tx.paymentMethod)) {
@@ -127,22 +117,17 @@ export default function Dashboard() {
 
   const animatedBalance = useCountUp(currentBalance);
 
-  // MOTOR OTIMIZADO 2: Processamento Single-Pass (Mata 3 loops de vez)
   const { totalIncome, totalExpense, personsSummary, accountsSummary } = useMemo(() => {
     let income = 0; let expense = 0;
     const pMap = new Map();
     const aMap = new Map(visibleAccounts.map(a => [a.id === 'default_account' ? 'account' : `acc_${a.id}`, { ...a, periodIncome: 0, periodExpense: 0, periodNet: 0 }]));
 
     currentPeriodTxs.forEach((tx) => {
-      const amt = getEffectiveAmount(tx);
-      const isInc = tx.type === 'income';
-      
+      const amt = getEffectiveAmount(tx); const isInc = tx.type === 'income';
       if (isInc) income += amt; else expense += amt;
-      
       const pLabel = tx.person || 'Sem pessoa';
       if (!pMap.has(pLabel)) pMap.set(pLabel, { person: pLabel, income: 0, expense: 0 });
       if (isInc) pMap.get(pLabel).income += amt; else pMap.get(pLabel).expense += amt;
-
       if (aMap.has(tx.paymentMethod)) {
          const accSum = aMap.get(tx.paymentMethod);
          if (isInc) accSum.periodIncome += amt; else accSum.periodExpense += amt;
@@ -150,18 +135,13 @@ export default function Dashboard() {
       }
     });
 
-    // Calcula saldos finais das contas
     const accList = [...aMap.values()].map(acc => {
       const initial = parseFloat(acc.balance) || 0;
-      const comp = acc.computedBalance !== undefined ? Number(acc.computedBalance) : acc.periodNet; // simplificado
+      const comp = acc.computedBalance !== undefined ? Number(acc.computedBalance) : acc.periodNet;
       return { ...acc, balance: initial + comp };
     });
 
-    return {
-      totalIncome: income, totalExpense: expense,
-      personsSummary: [...pMap.values()].sort((a, b) => (b.expense + b.income) - (a.expense + a.income)),
-      accountsSummary: accList
-    };
+    return { totalIncome: income, totalExpense: expense, personsSummary: [...pMap.values()].sort((a, b) => (b.expense + b.income) - (a.expense + a.income)), accountsSummary: accList };
   }, [currentPeriodTxs, visibleAccounts]);
 
   const upcomingSubscriptions = useMemo(() => {
@@ -184,8 +164,7 @@ export default function Dashboard() {
       const key = dayKey(d); if (!byKey.has(key)) return;
       byKey.get(key)!.net += tx.type === 'income' ? getEffectiveAmount(tx) : -getEffectiveAmount(tx);
     });
-    let running = 0;
-    return buckets.map((b) => { running += b.net; return { ...b, cumulative: running }; });
+    let running = 0; return buckets.map((b) => { running += b.net; return { ...b, cumulative: running }; });
   }, [visibleTx]);
 
   const netLast14 = last14Days.length ? last14Days[last14Days.length - 1].cumulative : 0;
@@ -204,93 +183,138 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[1200px] mx-auto pb-12">
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-8 gap-4">
-        <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Olá, {session.name.split(' ')[0]}</h2>
-        <div className="flex items-center gap-4 bg-white/[0.03] border border-white/[0.08] p-2 rounded-2xl shadow-lg">
-          <button onClick={goPrevMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors"><i className="fa-solid fa-chevron-left" /></button>
-          <span className="font-bold text-[#f2f0ea] min-w-[140px] text-center capitalize tracking-wide">{monthLabel}</span>
-          <button onClick={goNextMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors"><i className="fa-solid fa-chevron-right" /></button>
-          {!isCurrentMonth && <button onClick={goToday} className="px-4 h-10 rounded-xl bg-[#e3b04b]/20 text-[#e3b04b] font-bold hover:bg-[#e3b04b]/30 transition-colors ml-2">Hoje</button>}
+    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-4 sm:pt-6 animate-in fade-in duration-500">
+      
+      {/* HEADER RESPONSIVO */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
+        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] truncate w-full sm:w-auto">
+          Olá, {session.name.split(' ')[0]}
+        </h2>
+        <div className="flex items-center justify-between w-full sm:w-auto gap-2 bg-white/[0.03] border border-white/[0.08] p-1.5 sm:p-2 rounded-2xl shadow-lg">
+          <button onClick={goPrevMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors shrink-0">
+            <i className="fa-solid fa-chevron-left" />
+          </button>
+          <span className="font-bold text-[#f2f0ea] min-w-[110px] sm:min-w-[140px] text-center capitalize tracking-wide text-sm sm:text-base truncate">
+            {monthLabel}
+          </span>
+          <button onClick={goNextMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors shrink-0">
+            <i className="fa-solid fa-chevron-right" />
+          </button>
+          {!isCurrentMonth && (
+            <button onClick={goToday} className="px-3 sm:px-4 h-10 rounded-xl bg-[#e3b04b]/20 text-[#e3b04b] font-bold hover:bg-[#e3b04b]/30 transition-colors ml-1 sm:ml-2 text-sm">
+              Hoje
+            </button>
+          )}
         </div>
       </div>
 
+      {/* ALERTAS DE ASSINATURA */}
       {upcomingSubscriptions.length > 0 && (
-        <div className="mb-8 flex flex-col gap-3">
+        <div className="mb-6 sm:mb-8 flex flex-col gap-3">
           {upcomingSubscriptions.map((s) => (
-            <div key={s.id} className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4 flex items-center gap-4 animate-in slide-in-from-top-2">
-              <div className="w-12 h-12 rounded-xl bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-xl shrink-0"><i className="fa-solid fa-bell animate-pulse" /></div>
-              <div>
-                <strong className="text-yellow-500 block mb-1">Assinatura "{s.name}"</strong>
-                <p className="text-sm text-yellow-200/80">Cobrança de {formatCurrency(s.amount)} prevista para {s.diffDays === 0 ? 'hoje' : s.diffDays === 1 ? 'amanhã' : `em ${s.diffDays} dias`} no {cardNameFor(s.paymentMethod)}.</p>
+            <div key={s.id} className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 sm:p-4 flex items-start sm:items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-lg sm:text-xl shrink-0">
+                <i className="fa-solid fa-bell animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <strong className="text-yellow-500 block mb-0.5 sm:mb-1 text-sm sm:text-base truncate">"{s.name}"</strong>
+                <p className="text-xs sm:text-sm text-yellow-200/80 leading-snug">
+                  Cobrança de {formatCurrency(s.amount)} para {s.diffDays === 0 ? 'hoje' : s.diffDays === 1 ? 'amanhã' : `em ${s.diffDays} dias`} ({cardNameFor(s.paymentMethod)}).
+                </p>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <div className="bg-gradient-to-br from-[#1a2320] to-[#141d1a] border border-white/[0.08] rounded-3xl p-6 sm:p-10 mb-8 shadow-2xl flex flex-col md:flex-row justify-between gap-8 relative overflow-hidden">
-        <div className="absolute top-[-50px] right-[-50px] w-64 h-64 bg-[#e3b04b]/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col justify-center relative z-10">
-          <span className="text-[#8fa39a] font-semibold tracking-widest uppercase text-sm mb-2 flex items-center gap-2"><i className="fa-solid fa-wallet" /> Saldo atual</span>
-          <strong className="text-5xl sm:text-6xl font-black text-[#f2f0ea] font-mono tracking-tighter mb-4 drop-shadow-md">{formatCurrency(animatedBalance)}</strong>
-          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-bold w-fit ${netLast14 >= 0 ? 'bg-[#34d399]/20 text-[#34d399]' : 'bg-[#f87171]/20 text-[#f87171]'}`}>
+      {/* HERO BALANCE - ADAPTADO PARA MOBILE */}
+      <div className="bg-gradient-to-br from-[#1a2320] to-[#141d1a] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 mb-6 sm:mb-8 shadow-2xl flex flex-col md:flex-row justify-between gap-6 md:gap-8 relative overflow-hidden">
+        <div className="absolute top-[-50px] right-[-50px] w-48 h-48 sm:w-64 sm:h-64 bg-[#e3b04b]/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="flex flex-col justify-center relative z-10 w-full">
+          <span className="text-[#8fa39a] font-semibold tracking-widest uppercase text-xs sm:text-sm mb-2 flex items-center gap-2">
+            <i className="fa-solid fa-wallet" /> Saldo atual
+          </span>
+          <strong className="text-[2rem] sm:text-5xl md:text-6xl font-black text-[#f2f0ea] font-mono tracking-tighter mb-4 drop-shadow-md break-all leading-none">
+            {formatCurrency(animatedBalance)}
+          </strong>
+          <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-bold w-fit ${netLast14 >= 0 ? 'bg-[#34d399]/20 text-[#34d399]' : 'bg-[#f87171]/20 text-[#f87171]'}`}>
             <i className={`fa-solid ${netLast14 >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`} />
-            {formatCurrency(Math.abs(netLast14))} nos últimos 14 dias
+            {formatCurrency(Math.abs(netLast14))} em 14d
           </span>
         </div>
-        <div className="w-full md:w-[320px] h-[120px] relative z-10 mt-4 md:mt-0 opacity-90"><FlowChart days={last14Days} /></div>
+        <div className="w-full md:w-[280px] h-[80px] sm:h-[100px] relative z-10 mt-2 md:mt-0 opacity-90 shrink-0">
+          <FlowChart days={last14Days} />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-6 flex items-center gap-5 relative overflow-hidden hover:-translate-y-1 transition-transform">
+      {/* STAT CHIPS - 2 COLUNAS NO MOBILE */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 mb-6 sm:mb-8">
+        <div className="bg-white/[0.03] border border-white/[0.08] rounded-[20px] sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 relative overflow-hidden">
           <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#34d399]" />
-          <div className="w-14 h-14 rounded-2xl bg-[#34d399]/10 text-[#34d399] flex items-center justify-center text-2xl shrink-0"><i className="fa-solid fa-arrow-down" /></div>
-          <div><span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Receitas do mês</span><strong className="text-2xl font-bold text-[#f2f0ea] font-mono">{formatCurrency(totalIncome)}</strong></div>
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#34d399]/10 text-[#34d399] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-down" /></div>
+          <div className="min-w-0">
+            <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Receitas</span>
+            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{formatCurrency(totalIncome)}</strong>
+          </div>
         </div>
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-3xl p-6 flex items-center gap-5 relative overflow-hidden hover:-translate-y-1 transition-transform">
+        <div className="bg-white/[0.03] border border-white/[0.08] rounded-[20px] sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 relative overflow-hidden">
           <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f87171]" />
-          <div className="w-14 h-14 rounded-2xl bg-[#f87171]/10 text-[#f87171] flex items-center justify-center text-2xl shrink-0"><i className="fa-solid fa-arrow-up" /></div>
-          <div><span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Despesas do mês</span><strong className="text-2xl font-bold text-[#f2f0ea] font-mono">{formatCurrency(totalExpense)}</strong></div>
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#f87171]/10 text-[#f87171] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-up" /></div>
+          <div className="min-w-0">
+            <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Despesas</span>
+            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{formatCurrency(totalExpense)}</strong>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl">
-          <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-clock-rotate-left text-[#e3b04b]" /> Transações recentes</h3>
+      {/* COLUNAS PRINCIPAIS: TRANSAÇÕES VS CONTA/PESSOA */}
+      <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
+        
+        {/* TRANSAÇÕES RECENTES */}
+        <div className="w-full lg:w-[60%] xl:w-[65%] bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 shadow-xl">
+          <h3 className="text-lg sm:text-xl font-bold text-[#f2f0ea] mb-5 sm:mb-6 flex items-center gap-3">
+            <i className="fa-solid fa-clock-rotate-left text-[#e3b04b]" /> Recentes
+          </h3>
           {recentTx.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-12 text-[#8fa39a]"><i className="fa-solid fa-receipt text-4xl mb-4 opacity-50" /><p>Nenhuma transação encontrada no período.</p></div>
+             <div className="flex flex-col items-center justify-center py-10 sm:py-12 text-[#8fa39a] text-sm sm:text-base text-center"><i className="fa-solid fa-receipt text-3xl sm:text-4xl mb-3 sm:mb-4 opacity-50" /><p>Nenhuma transação no período.</p></div>
           ) : (
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-2">
               {recentTx.map((tx) => (
-                <div key={tx.id} className="group p-3 rounded-2xl hover:bg-white/5 transition-colors flex items-center justify-between gap-4 border border-transparent hover:border-white/5">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className={`w-12 h-12 rounded-[14px] flex items-center justify-center text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : 'bg-white/10 text-[#8fa39a]'}`}><i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} /></div>
-                    <div className="min-w-0">
-                      <div className="font-bold text-[#f2f0ea] truncate text-[1.05rem]">{tx.description}</div>
-                      <div className="text-xs text-[#8fa39a] truncate mt-0.5">{formatDate(tx.date)} &bull; {tx.category}</div>
+                <div key={tx.id} className="group p-3 sm:p-4 rounded-[16px] sm:rounded-2xl bg-black/10 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 sm:gap-4 border border-white/[0.02] hover:border-white/10">
+                  <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : 'bg-white/10 text-[#8fa39a]'}`}>
+                      <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-[#f2f0ea] truncate text-[0.95rem] sm:text-[1.05rem] leading-tight">{tx.description}</div>
+                      <div className="text-[10px] sm:text-xs text-[#8fa39a] truncate mt-1">{formatDate(tx.date)} &bull; {tx.category}</div>
                     </div>
                   </div>
-                  <strong className={`font-mono text-lg shrink-0 ${tx.type === 'income' ? 'text-[#34d399]' : 'text-[#f2f0ea]'}`}>{tx.type === 'income' ? '+ ' : '- '}{formatCurrency(getEffectiveAmount(tx))}</strong>
+                  <strong className={`font-mono text-sm sm:text-lg shrink-0 pl-2 ${tx.type === 'income' ? 'text-[#34d399]' : 'text-[#f2f0ea]'}`}>
+                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(getEffectiveAmount(tx))}
+                  </strong>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="flex flex-col gap-8">
-          <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl">
-            <h3 className="text-[1.1rem] font-bold text-[#f2f0ea] mb-5 flex items-center gap-2"><i className="fa-solid fa-wallet text-[#8b5cf6]" /> Por conta</h3>
+        {/* SIDEBAR: CONTAS E PESSOAS */}
+        <div className="w-full lg:w-[40%] xl:w-[35%] flex flex-col gap-6 sm:gap-8">
+          
+          {/* POR CONTA */}
+          <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-6 shadow-xl">
+            <h3 className="text-base sm:text-lg font-bold text-[#f2f0ea] mb-4 sm:mb-5 flex items-center gap-2"><i className="fa-solid fa-wallet text-[#8b5cf6]" /> Por conta</h3>
             {accountsSummary.length === 0 ? (
-              <p className="text-sm text-[#8fa39a] text-center py-4">Nenhuma conta cadastrada.</p>
+              <p className="text-xs sm:text-sm text-[#8fa39a] text-center py-3">Nenhuma conta cadastrada.</p>
             ) : (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:gap-4">
                 {accountsSummary.map((acc) => (
-                  <div key={acc.id} className="flex items-center justify-between">
-                    <span className="text-[#f2f0ea] font-medium text-[0.95rem]">{acc.name}</span>
-                    <div className="text-right">
-                      <strong className="block text-[#f2f0ea] font-mono">{formatCurrency(acc.balance)}</strong>
-                      <small className={`font-bold ${acc.periodNet >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{acc.periodNet >= 0 ? '+' : ''}{formatCurrency(acc.periodNet)} no mês</small>
+                  <div key={acc.id} className="flex items-center justify-between gap-2">
+                    <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate">{acc.name}</span>
+                    <div className="text-right shrink-0">
+                      <strong className="block text-[#f2f0ea] font-mono text-[0.9rem] sm:text-base">{formatCurrency(acc.balance)}</strong>
+                      <small className={`font-bold text-[10px] sm:text-xs ${acc.periodNet >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{acc.periodNet >= 0 ? '+' : ''}{formatCurrency(acc.periodNet)} no mês</small>
                     </div>
                   </div>
                 ))}
@@ -298,18 +322,19 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl">
-            <h3 className="text-[1.1rem] font-bold text-[#f2f0ea] mb-5 flex items-center gap-2"><i className="fa-solid fa-users text-[#ec4899]" /> Por pessoa</h3>
+          {/* POR PESSOA */}
+          <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-6 shadow-xl">
+            <h3 className="text-base sm:text-lg font-bold text-[#f2f0ea] mb-4 sm:mb-5 flex items-center gap-2"><i className="fa-solid fa-users text-[#ec4899]" /> Por pessoa</h3>
             {personsSummary.length === 0 ? (
-              <p className="text-sm text-[#8fa39a] text-center py-4">Nenhuma movimentação no período.</p>
+              <p className="text-xs sm:text-sm text-[#8fa39a] text-center py-3">Sem movimentação.</p>
             ) : (
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3 sm:gap-4">
                 {personsSummary.map((p) => (
-                  <div key={p.person} className="flex items-center justify-between">
-                    <span className="text-[#f2f0ea] font-medium text-[0.95rem] truncate max-w-[120px]">{p.person}</span>
-                    <div className="flex items-center gap-3 font-mono text-sm">
-                      <span className="text-[#34d399] bg-[#34d399]/10 px-2 py-0.5 rounded">+{formatCurrency(p.income)}</span>
-                      <span className="text-[#f87171] bg-[#f87171]/10 px-2 py-0.5 rounded">-{formatCurrency(p.expense)}</span>
+                  <div key={p.person} className="flex items-center justify-between gap-2">
+                    <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate max-w-[100px] sm:max-w-[140px]">{p.person}</span>
+                    <div className="flex items-center gap-2 font-mono text-[10px] sm:text-xs shrink-0">
+                      <span className="text-[#34d399] bg-[#34d399]/10 px-1.5 sm:px-2 py-0.5 rounded">+{formatCurrency(p.income)}</span>
+                      <span className="text-[#f87171] bg-[#f87171]/10 px-1.5 sm:px-2 py-0.5 rounded">-{formatCurrency(p.expense)}</span>
                     </div>
                   </div>
                 ))}
