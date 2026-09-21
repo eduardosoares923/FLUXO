@@ -58,6 +58,20 @@ export default function Cards() {
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
 
+  // Uso atual do limite: soma das despesas da fatura em aberto (mês corrente, calculado pelo dia de fechamento de cada cartão), pra mostrar direto no card fechado, sem precisar abrir a fatura.
+  const usageByCard = useMemo(() => {
+    const map: Record<string, number> = {};
+    visible.forEach((card) => {
+      const currentMonth = getCardInvoiceMonth(new Date().toISOString().slice(0, 10), card.closeDay);
+      const used = transactions
+        .filter((tx) => tx.paymentMethod === `card_${card.id}`)
+        .filter((tx) => getCardInvoiceMonth(tx.date, card.closeDay) === currentMonth)
+        .reduce((sum, tx) => sum + (tx.type === 'expense' ? Number(tx.amount) || 0 : -(Number(tx.amount) || 0)), 0);
+      map[card.id!] = used;
+    });
+    return map;
+  }, [visible, transactions]);
+
   function openEdit(card: Card) {
     setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '' });
     setEditingId(card.id!);
@@ -147,6 +161,18 @@ export default function Cards() {
             <div className="mt-4">
               <div className="text-[10px] opacity-70 uppercase tracking-widest font-bold">Limite</div>
               <div className="text-2xl font-mono">{formatCurrency(card.limit)}</div>
+              {(() => {
+                const used = usageByCard[card.id!] || 0;
+                const pct = card.limit > 0 ? Math.min(100, Math.max(0, (used / card.limit) * 100)) : 0;
+                return (
+                  <div className="mt-2">
+                    <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-white/70'}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="text-[10px] opacity-80 mt-1">{formatCurrency(used)} de {formatCurrency(card.limit)} ({pct.toFixed(0)}%)</div>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex justify-between items-end">
