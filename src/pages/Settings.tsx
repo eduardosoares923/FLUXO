@@ -28,6 +28,7 @@ export default function Settings() {
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
   const [newCat, setNewCat] = useState('');
   const [loadingCats, setLoadingCats] = useState(true);
+  const [budgets, setBudgets] = useState<Record<string, number>>({});
 
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
@@ -41,6 +42,10 @@ export default function Settings() {
         const snap = await getDoc(doc(db, 'settings', 'categories'));
         if (snap.exists() && Array.isArray(snap.data().list)) {
           setCategories(snap.data().list);
+        }
+        const budgetsSnap = await getDoc(doc(db, 'settings', 'budgets'));
+        if (budgetsSnap.exists()) {
+          setBudgets(budgetsSnap.data() as Record<string, number>);
         }
       } catch (e) {
         console.error('Erro ao carregar categorias:', e);
@@ -84,6 +89,19 @@ export default function Settings() {
     }
   }
 
+  function handleBudgetChange(cat: string, value: string) {
+    setBudgets((prev) => ({ ...prev, [cat]: Number(value) || 0 }));
+  }
+
+  async function handleBudgetSave(cat: string) {
+    try {
+      await setDoc(doc(db, 'settings', 'budgets'), { [cat]: budgets[cat] || 0 }, { merge: true });
+      toast.success(`Meta de "${cat}" salva!`);
+    } catch (err) {
+      toast.error('Erro ao salvar meta.');
+    }
+  }
+
   function handleExportBackup() {
     try {
       const backupData = {
@@ -96,6 +114,7 @@ export default function Settings() {
         categories,
         persons,
         paidInvoices,
+        budgets,
       };
 
       const jsonStr = JSON.stringify(backupData, null, 2);
@@ -160,6 +179,10 @@ export default function Settings() {
       if (Array.isArray(parsed.categories)) {
         await setDoc(doc(db, 'settings', 'categories'), { list: parsed.categories }, { merge: true });
         setCategories(parsed.categories);
+      }
+      if (parsed.budgets && typeof parsed.budgets === 'object') {
+        await setDoc(doc(db, 'settings', 'budgets'), parsed.budgets, { merge: true });
+        setBudgets(parsed.budgets);
       }
 
       toast.success(`Backup restaurado com sucesso (${count} registros)!`);
@@ -251,6 +274,37 @@ export default function Settings() {
                 </button>
               )}
             </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
+        <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f59e0b]" />
+
+        <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/20 text-[#f59e0b] flex items-center justify-center">
+            <i className="fa-solid fa-bullseye" />
+          </div>
+          Metas de Gasto por Categoria
+        </h3>
+        <p className="text-sm text-[#8fa39a] mb-6">Defina um limite mensal por categoria. O Dashboard avisa quando o gasto do mês estiver perto ou passar da meta.</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {categories.map((cat) => (
+            <div key={cat} className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
+              <span className="flex-1 text-sm font-medium text-[#f2f0ea] truncate">{cat}</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="Sem meta"
+                value={budgets[cat] || ''}
+                onChange={(e) => handleBudgetChange(cat, e.target.value)}
+                onBlur={() => handleBudgetSave(cat)}
+                disabled={!canManage}
+                className="w-28 p-2 rounded-lg bg-black/40 border border-white/10 text-[#f2f0ea] text-right outline-none focus:border-[#f59e0b] disabled:opacity-50"
+              />
+            </div>
           ))}
         </div>
       </div>

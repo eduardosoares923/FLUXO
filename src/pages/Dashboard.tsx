@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, parseTxDate } from '../utils/format';
+import { db } from '../firebase';
 import { Transaction, Account, User } from '../types';
 
 function getEffectiveAmount(tx: Transaction) { return parseFloat(String(tx.amount)) || 0; }
@@ -83,6 +85,13 @@ export default function Dashboard() {
   const { data: subscriptions } = useCollection<any>('subscriptions');
   const { data: cards } = useCollection<any>('cards');
 
+  const [budgets, setBudgets] = useState<Record<string, number>>({});
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'budgets')).then((snap) => {
+      if (snap.exists()) setBudgets(snap.data() as Record<string, number>);
+    }).catch((e) => console.error('Erro ao carregar metas:', e));
+  }, []);
+
   const [navDate, setNavDate] = useState(() => new Date());
   const navMonth = navDate.getMonth(); const navYear = navDate.getFullYear();
   const monthLabel = navDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -117,10 +126,11 @@ export default function Dashboard() {
 
   const animatedBalance = useCountUp(currentBalance);
 
-  const { totalIncome, totalExpense, personsSummary, accountsSummary } = useMemo(() => {
+  const { totalIncome, totalExpense, personsSummary, accountsSummary, categoryTotals } = useMemo(() => {
     let income = 0; let expense = 0;
     const pMap = new Map();
     const aMap = new Map(visibleAccounts.map(a => [a.id === 'default_account' ? 'account' : `acc_${a.id}`, { ...a, periodIncome: 0, periodExpense: 0, periodNet: 0 }]));
+    const catMap: Record<string, number> = {};
 
     currentPeriodTxs.forEach((tx) => {
       const amt = getEffectiveAmount(tx); const isInc = tx.type === 'income';
@@ -133,6 +143,9 @@ export default function Dashboard() {
          if (isInc) accSum.periodIncome += amt; else accSum.periodExpense += amt;
          accSum.periodNet = accSum.periodIncome - accSum.periodExpense;
       }
+      if (!isInc && tx.category) {
+        catMap[tx.category] = (catMap[tx.category] || 0) + amt;
+      }
     });
 
     const accList = [...aMap.values()].map(acc => {
@@ -141,8 +154,13 @@ export default function Dashboard() {
       return { ...acc, balance: initial + comp };
     });
 
-    return { totalIncome: income, totalExpense: expense, personsSummary: [...pMap.values()].sort((a, b) => (b.expense + b.income) - (a.expense + a.income)), accountsSummary: accList };
+    return { totalIncome: income, totalExpense: expense, personsSummary: [...pMap.values()].sort((a, b) => (b.expense + b.income) - (a.expense + a.income)), accountsSummary: accList, categoryTotals: catMap };
   }, [currentPeriodTxs, visibleAccounts]);
+
+  const budgetedCategories = useMemo(
+    () => Object.keys(budgets).filter((cat) => (budgets[cat] || 0) > 0).map((cat) => ({ category: cat, spent: categoryTotals[cat] || 0, limit: budgets[cat] })),
+    [budgets, categoryTotals]
+  );
 
   const upcomingSubscriptions = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -266,6 +284,31 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {budgetedCategories.length > 0 && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 shadow-xl mb-6 sm:mb-8">
+          <h3 className="text-lg sm:text-xl font-bold text-[#f2f0ea] mb-5 flex items-center gap-3">
+            <i className="fa-solid fa-bullseye text-[#f59e0b]" /> Metas do mês
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {budgetedCategories.map(({ category, spent, limit }) => {
+              const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
+              const over = spent > limit;
+              return (
+                <div key={category}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-[#f2f0ea] font-medium">{category}</span>
+                    <span className={`font-mono ${over ? 'text-red-400' : 'text-[#8fa39a]'}`}>{formatCurrency(spent)} / {formatCurrency(limit)}</span>
+                  </div>
+                  <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-yellow-300' : 'bg-[#34d399]'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* COLUNAS PRINCIPAIS: TRANSAÇÕES VS CONTA/PESSOA */}
       <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
