@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: 'FLUXO - Controle Financeiro',
-        short_name: 'FLUXO',
+        name: 'Wynd - Controle Financeiro',
+        short_name: 'Wynd',
         description: 'Controle financeiro pessoal e familiar',
         theme_color: '#141d1a',
         background_color: '#141d1a',

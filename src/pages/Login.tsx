@@ -53,7 +53,7 @@ export default function Login() {
         onSubmit={handleSubmit}
       >
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-black tracking-tighter text-[#f2f0ea] mb-2 drop-shadow-md">FLUXO</h1>
+          <h1 className="text-4xl font-black tracking-tighter text-[#f2f0ea] mb-2 drop-shadow-md">Wynd</h1>
           <p className="text-[#8fa39a] text-[0.95rem]">Entre com usuário, e-mail ou CPF</p>
         </div>
 
@@ -111,7 +111,7 @@ export default function Login() {
             <span className="flex items-center justify-center gap-2">
               <i className="fa-solid fa-circle-notch fa-spin" /> Autenticando...
             </span>
-          ) : 'Entrar no Fluxo'}
+          ) : 'Entrar no Wynd'}
         </button>
       </form>
     </div>

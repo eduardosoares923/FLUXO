@@ -41,7 +41,7 @@ export function Layout() {
       {/* SIDEBAR - DESKTOP ONLY */}
       <aside className="hidden md:flex flex-col w-64 bg-[#141d1a]/80 backdrop-blur-xl border-r border-white/10 z-20">
         <div className="p-6">
-          <h1 className="text-2xl font-black tracking-tighter text-white">FLUXO</h1>
+          <h1 className="text-2xl font-black tracking-tighter text-white">Wynd</h1>
         </div>
         <nav className="flex-1 overflow-y-auto px-4 flex flex-col gap-1">
           {NAV_ITEMS.filter((item) => !item.module || hasPermission(item.module)).map((item) => (
