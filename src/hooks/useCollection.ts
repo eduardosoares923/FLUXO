@@ -3,10 +3,12 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, qu
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../firebase';
 import { generateId } from '../utils/format';
+import { useAuth } from '../context/AuthContext';
 
 export function useCollection<T = any>(collectionName: string) {
   const queryClient = useQueryClient();
   const pendingDeletes = useRef<Set<string>>(new Set());
+  const { session } = useAuth();
 
   const { data = [] } = useQuery<T[]>({
     queryKey: [collectionName],
@@ -70,8 +72,20 @@ export function useCollection<T = any>(collectionName: string) {
 
   const saveRecord = useCallback(
     async (record: Partial<T> & { id?: string, paymentMethod?: string }) => {
-      const rec = { ...record };
+      const rec: any = { ...record };
+      const isNew = !rec.id || !data.some((it: any) => String(it.id) === String(rec.id));
       if (!rec.id) rec.id = generateId();
+
+      const actor = session?.name || (session as any)?.username || 'Desconhecido';
+      const now = new Date().toISOString();
+      rec.updatedBy = actor;
+      rec.updatedByUid = session?.id || null;
+      rec.updatedAt = now;
+      if (isNew) {
+        rec.createdBy = actor;
+        rec.createdByUid = session?.id || null;
+        rec.createdAt = now;
+      }
 
       queryClient.setQueryData<T[]>([collectionName], (prev = []) => {
         const idx = prev.findIndex((it: any) => String(it.id) === String(rec.id));
@@ -96,7 +110,7 @@ export function useCollection<T = any>(collectionName: string) {
       }
       return rec as T;
     },
-    [collectionName, queryClient]
+    [collectionName, queryClient, data, session]
   );
 
   const deleteRecord = useCallback(

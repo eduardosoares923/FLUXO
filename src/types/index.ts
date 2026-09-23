@@ -26,6 +26,12 @@ export interface Transaction {
   invoiceMonth?: string;
   subscriptionId?: string;
   isSubscription?: boolean;
+  createdBy?: string;
+  createdByUid?: string | null;
+  createdAt?: string;
+  updatedBy?: string;
+  updatedByUid?: string | null;
+  updatedAt?: string;
 }
 
 export interface Account {

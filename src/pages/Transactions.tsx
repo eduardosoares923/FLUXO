@@ -517,6 +517,17 @@ export default function Transactions() {
                   <div className="flex justify-between"><span className="text-[#8fa39a]">Total:</span> <span className="text-[#f2f0ea]">{formatCurrency(detailsTx.totalPurchaseAmount)}</span></div>
                 </div>
               )}
+
+              {(detailsTx.createdBy || detailsTx.updatedBy) && (
+                <div className="mt-1 pt-3 border-t border-white/5 text-xs text-[#8fa39a] flex flex-col gap-1">
+                  {detailsTx.createdBy && (
+                    <span>Criado por <strong className="text-[#f2f0ea]">{detailsTx.createdBy}</strong>{detailsTx.createdAt ? ` em ${formatDate(detailsTx.createdAt)}` : ''}</span>
+                  )}
+                  {detailsTx.updatedBy && detailsTx.updatedAt !== detailsTx.createdAt && (
+                    <span>Editado por <strong className="text-[#f2f0ea]">{detailsTx.updatedBy}</strong>{detailsTx.updatedAt ? ` em ${formatDate(detailsTx.updatedAt)}` : ''}</span>
+                  )}
+                </div>
+              )}
             </div>
             <button className="w-full mt-6 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-colors" onClick={() => setDetailsTx(null)}>Fechar</button>
           </div>
