@@ -115,7 +115,7 @@ export function Layout() {
 
         <div className="relative p-4 border-t border-white/10">
           {profileOpen && (
-            <div className="absolute bottom-full left-4 right-4 mb-2 bg-[#1a2422] border border-white/10 rounded-xl p-2 shadow-2xl">
+            <div className="absolute bottom-full left-2 mb-2 w-56 max-w-[calc(100vw-2rem)] bg-[#1a2422] border border-white/10 rounded-xl p-2 shadow-2xl z-40">
               {visibleProfileItems.map((item) => (
                 <NavLink
                   key={item.to}

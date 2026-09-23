@@ -288,7 +288,7 @@ export default function Subscriptions() {
               <div className="text-xs text-[#8fa39a] mb-5 font-medium flex items-center gap-1.5"><i className="fa-regular fa-calendar" /> Vence dia {s.billingDay}</div>
               <div className="flex justify-between items-end border-t border-white/5 pt-4">
                 <strong className={`text-2xl font-mono ${s.status === 'pausada' ? 'text-[#8fa39a]' : 'text-white'}`}>{formatCurrency(s.amount)}</strong>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg truncate max-w-[100px]">{s.person}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg text-right leading-tight whitespace-normal max-w-[140px]">{s.person}</span>
               </div>
             </div>
           ))}
