@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, normalize } from '../utils/format';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { Account, Person, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
@@ -27,6 +28,9 @@ export default function Accounts() {
   const [personForm, setPersonForm] = useState(emptyPersonForm);
   const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
   const [showPersonForm, setShowPersonForm] = useState(false);
+
+  const [deleteAccountId, setDeleteAccountId] = useState<string | null>(null);
+  const [deletePersonId, setDeletePersonId] = useState<string | null>(null);
 
   const canEdit = hasPermission('accounts', 'edit');
   const visible = session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner));
@@ -88,7 +92,7 @@ export default function Accounts() {
                   {canEdit && (
                     <div className="flex gap-2 text-[#8fa39a] shrink-0">
                       <button onClick={() => openEdit(acc)} className="hover:text-white p-1"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => confirm('Excluir esta conta?') && deleteRecord(acc.id)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
+                      <button onClick={() => setDeleteAccountId(acc.id)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
                     </div>
                   )}
                 </div>
@@ -121,7 +125,7 @@ export default function Accounts() {
                   {canEdit && (
                     <div className="flex gap-2 text-[#8fa39a] shrink-0">
                       <button onClick={() => openEditPerson(p)} className="hover:text-white p-1"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => confirm('Excluir esta pessoa? Contas/transações já lançadas continuam com o nome como estava.') && deletePerson(p.id!)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
+                      <button onClick={() => setDeletePersonId(p.id!)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
                     </div>
                   )}
                 </div>
@@ -171,6 +175,23 @@ export default function Accounts() {
           </form>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteAccountId}
+        title="Excluir conta"
+        message="Tem certeza que deseja excluir esta conta?"
+        confirmLabel="Excluir"
+        onConfirm={() => { if (deleteAccountId) deleteRecord(deleteAccountId); setDeleteAccountId(null); }}
+        onCancel={() => setDeleteAccountId(null)}
+      />
+      <ConfirmModal
+        isOpen={!!deletePersonId}
+        title="Excluir pessoa"
+        message="Contas/transações já lançadas continuam com o nome como estava. Deseja excluir mesmo assim?"
+        confirmLabel="Excluir"
+        onConfirm={() => { if (deletePersonId) deletePerson(deletePersonId); setDeletePersonId(null); }}
+        onCancel={() => setDeletePersonId(null)}
+      />
     </div>
   );
 }

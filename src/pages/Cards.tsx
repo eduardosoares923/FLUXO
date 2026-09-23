@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, normalize } from '../utils/format';
 import { toast } from '../stores/useToastStore';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
@@ -54,6 +55,7 @@ export default function Cards() {
 
   const [invoiceCard, setInvoiceCard] = useState<Card | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState('');
+  const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
 
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
@@ -153,7 +155,7 @@ export default function Cards() {
               {canEdit && (
                 <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
                   <button onClick={() => openEdit(card)} className="hover:text-yellow-300"><i className="fa-solid fa-pen" /></button>
-                  <button onClick={() => confirm('Excluir este cartão?') && deleteRecord(card.id!)} className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
+                  <button onClick={() => setDeleteCardId(card.id!)} className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
                 </div>
               )}
             </div>
@@ -254,6 +256,15 @@ export default function Cards() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteCardId}
+        title="Excluir cartão"
+        message="Tem certeza que deseja excluir este cartão?"
+        confirmLabel="Excluir"
+        onConfirm={() => { if (deleteCardId) deleteRecord(deleteCardId); setDeleteCardId(null); }}
+        onCancel={() => setDeleteCardId(null)}
+      />
     </div>
   );
 }
