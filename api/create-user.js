@@ -7,13 +7,15 @@
 // conteúdo do JSON da chave de serviço (o mesmo tipo de credencial usada
 // no server.js do NexClaim).
 
-import admin from 'firebase-admin';
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
 
 function getAdminApp() {
-  if (admin.apps.length > 0) return admin.app();
+  if (getApps().length > 0) return getApp();
   const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  return admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+  return initializeApp({
+    credential: cert(serviceAccount),
   });
 }
 
@@ -34,8 +36,8 @@ export default async function handler(req, res) {
 
   try {
     const app = getAdminApp();
-    const auth = admin.auth(app);
-    const db = admin.firestore(app);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
     // 1. Confirma que quem está chamando está logado E é admin
     const authHeader = req.headers.authorization || '';
