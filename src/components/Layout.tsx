@@ -1,7 +1,8 @@
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { RouteLoading } from './RouteLoading';
+import { GlobalSearch } from './GlobalSearch';
 import { User } from '../types';
 
 const NAV_GROUPS = [
@@ -67,9 +68,22 @@ export function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const visibleProfileItems = PROFILE_ITEMS.filter((item) => !item.module || hasPermission(item.module));
   const visibleMobileOther = MOBILE_ALL_OTHER.filter((item) => !item.module || hasPermission(item.module));
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      if (e.key === 'Escape') setSearchOpen(false);
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="flex h-screen bg-[#0e1412] text-[#f2f0ea] overflow-hidden">
@@ -89,8 +103,17 @@ export function Layout() {
           <i className={`fa-solid ${collapsed ? 'fa-chevron-right' : 'fa-chevron-left'}`} />
         </button>
 
-        <div className="p-6 overflow-hidden">
+        <div className="p-6 overflow-hidden flex flex-col gap-3">
           <h1 className="text-2xl font-black tracking-tighter text-white whitespace-nowrap">{collapsed ? 'W' : 'Wynd'}</h1>
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex items-center gap-2 text-[#8fa39a] hover:text-white bg-white/5 hover:bg-white/10 rounded-xl px-3 py-2 text-sm transition-colors"
+            title="Buscar (Ctrl+K)"
+          >
+            <i className="fa-solid fa-magnifying-glass" />
+            {!collapsed && <span className="flex-1 text-left">Buscar...</span>}
+            {!collapsed && <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded">⌘K</kbd>}
+          </button>
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-4 flex flex-col gap-1">
@@ -184,12 +207,21 @@ export function Layout() {
         </button>
       </nav>
 
+      <GlobalSearch isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+
       {mobileMoreOpen && (
         <div className="md:hidden fixed inset-0 z-[60] flex items-end" onClick={() => setMobileMoreOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
           <div className="relative w-full bg-[#141d1a] border-t border-white/10 rounded-t-3xl p-4 pb-8" onClick={(e) => e.stopPropagation()}>
             <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-4" />
             <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => { setMobileMoreOpen(false); setSearchOpen(true); }}
+                className="flex flex-col items-center justify-center gap-2 p-3 rounded-2xl bg-white/5 text-[#c9d2cf]"
+              >
+                <i className="fa-solid fa-magnifying-glass text-xl text-[#e3b04b]" />
+                <span className="text-xs font-semibold text-center">Buscar</span>
+              </button>
               {visibleMobileOther.map((item) => (
                 <NavLink
                   key={item.to}
