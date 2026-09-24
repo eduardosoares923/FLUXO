@@ -1,6 +1,6 @@
 import React from 'react';
 
-export function PageLoading({ message = 'Carregando dados...' }) {
+export function PageLoading({ message = 'Carregando dados...' }: { message?: string }) {
   return (
     <div
       style={{
@@ -20,12 +20,15 @@ export function PageLoading({ message = 'Carregando dados...' }) {
   );
 }
 
-export function PageError({
-  title = 'Falha ao sincronizar dados',
-  error,
-  onRetry,
-}) {
-  const errorMessage = error?.message || (typeof error === 'string' ? error : 'Não foi possível carregar os registros.');
+interface PageErrorProps {
+  title?: string;
+  error?: unknown;
+  onRetry?: () => void;
+}
+
+export function PageError({ title = 'Falha ao sincronizar dados', error, onRetry }: PageErrorProps) {
+  const errorMessage =
+    (error as any)?.message || (typeof error === 'string' ? error : 'Não foi possível carregar os registros.');
 
   return (
     <div
@@ -44,9 +47,7 @@ export function PageError({
         <i className="fa-solid fa-cloud-bolt" />
       </div>
       <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: 600 }}>{title}</h3>
-      <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>
-        {errorMessage}
-      </p>
+      <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>{errorMessage}</p>
       {onRetry && (
         <button
           onClick={onRetry}
@@ -68,13 +69,21 @@ export function PageError({
   );
 }
 
+interface EmptyStateProps {
+  icon?: string;
+  title?: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
 export function EmptyState({
   icon = 'fa-inbox',
   title = 'Nenhum registro encontrado',
   description,
   actionLabel,
   onAction,
-}) {
+}: EmptyStateProps) {
   return (
     <div
       style={{
@@ -94,9 +103,7 @@ export function EmptyState({
       <div style={{ fontSize: '2.5rem', color: '#64748b', marginBottom: '0.75rem' }}>
         <i className={`fa-solid ${icon}`} />
       </div>
-      <h4 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '0.25rem', fontWeight: 600 }}>
-        {title}
-      </h4>
+      <h4 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '0.25rem', fontWeight: 600 }}>{title}</h4>
       {description && (
         <p style={{ fontSize: '0.875rem', color: '#94a3b8', maxWidth: '400px', marginBottom: '1.25rem' }}>
           {description}

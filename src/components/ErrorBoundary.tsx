@@ -1,19 +1,31 @@
 import React from 'react';
 
-export class ErrorBoundary extends React.Component {
-  constructor(props) {
+interface ErrorBoundaryProps {
+  name?: string;
+  title?: string;
+  children: React.ReactNode;
+  fallback?: React.ReactNode | ((args: { error: Error | null; resetErrorBoundary: () => void }) => React.ReactNode);
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  onReset?: () => void;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+  errorInfo: React.ErrorInfo | null;
+}
+
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null, errorInfo: null };
   }
 
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error, errorInfo) {
-    // Se o erro for um módulo que sumiu devido a um novo deploy no Vercel,
-    // atualiza a página automaticamente para puxar a versão nova,
-    // poupando o usuário de ver a tela de erro fatal.
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     if (error?.message && error.message.includes('Failed to fetch dynamically imported module')) {
       window.location.reload();
       return;
@@ -127,4 +139,5 @@ export class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
 export default ErrorBoundary;

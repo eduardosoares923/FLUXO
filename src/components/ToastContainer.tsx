@@ -1,31 +1,13 @@
 import React from 'react';
 import { useToastStore } from '../stores/useToastStore';
 
-const toastStyles = {
-  success: {
-    bg: '#064e3b',
-    border: '#059669',
-    icon: 'fa-circle-check',
-    color: '#a7f3d0',
-  },
-  error: {
-    bg: '#7f1d1d',
-    border: '#dc2626',
-    icon: 'fa-circle-xmark',
-    color: '#fecaca',
-  },
-  warning: {
-    bg: '#78350f',
-    border: '#d97706',
-    icon: 'fa-triangle-exclamation',
-    color: '#fde68a',
-  },
-  info: {
-    bg: '#1e3a8a',
-    border: '#2563eb',
-    icon: 'fa-circle-info',
-    color: '#bfdbfe',
-  },
+type ToastType = 'success' | 'error' | 'warning' | 'info';
+
+const toastStyles: Record<ToastType, { bg: string; border: string; icon: string; color: string }> = {
+  success: { bg: '#064e3b', border: '#059669', icon: 'fa-circle-check', color: '#a7f3d0' },
+  error: { bg: '#7f1d1d', border: '#dc2626', icon: 'fa-circle-xmark', color: '#fecaca' },
+  warning: { bg: '#78350f', border: '#d97706', icon: 'fa-triangle-exclamation', color: '#fde68a' },
+  info: { bg: '#1e3a8a', border: '#2563eb', icon: 'fa-circle-info', color: '#bfdbfe' },
 };
 
 export function ToastContainer() {
@@ -49,7 +31,7 @@ export function ToastContainer() {
       }}
     >
       {toasts.map((t) => {
-        const style = toastStyles[t.type] || toastStyles.info;
+        const style = toastStyles[t.type as ToastType] || toastStyles.info;
         return (
           <div
             key={t.id}
@@ -96,4 +78,5 @@ export function ToastContainer() {
     </div>
   );
 }
+
 export default ToastContainer;
