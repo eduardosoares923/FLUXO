@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, formatDate, getCardInvoiceMonth, normalize } from '../utils/format';
+import { formatCurrency, formatDate, getCardInvoiceMonth, normalize, toPersonKeys, generateId } from '../utils/format';
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { Card, Transaction, User } from '../types';
+import { Account, Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
 
@@ -41,12 +41,15 @@ interface PaidInvoice {
   monthStr: string;
   total: number;
   paidAt: string;
+  transactionId?: string;
+  deductedAccount?: string;
 }
 
 export default function Cards() {
   const { session, hasPermission, canAccessPerson } = useAuth() as { session: User; hasPermission: any; canAccessPerson: any };
   const { data: cards, loading, saveRecord, deleteRecord } = useCollection<Card>('cards');
-  const { data: transactions } = useCollection<Transaction>('transactions');
+  const { data: transactions, saveRecord: saveTx, deleteRecord: deleteTx } = useCollection<Transaction>('transactions');
+  const { data: accounts } = useCollection<Account>('accounts');
   const { data: paidInvoices, saveRecord: savePaid, deleteRecord: deletePaid } = useCollection<PaidInvoice>('paidInvoices');
 
   const [form, setForm] = useState(emptyForm);
@@ -56,6 +59,8 @@ export default function Cards() {
   const [invoiceCard, setInvoiceCard] = useState<Card | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState('');
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+  const [payFromAccount, setPayFromAccount] = useState('');
+  const [deductFromAccount, setDeductFromAccount] = useState(false);
 
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
@@ -91,6 +96,8 @@ export default function Cards() {
   function openInvoice(card: Card) {
     setInvoiceCard(card);
     setInvoiceMonth(getCardInvoiceMonth(new Date().toISOString().slice(0, 10), card.closeDay));
+    setPayFromAccount('');
+    setDeductFromAccount(false);
   }
 
   function changeInvoiceMonth(offset: number) {
@@ -117,11 +124,28 @@ export default function Cards() {
     if (!invoiceCard || !paidRecordId) return;
     try {
       if (isPaid) {
+        const existing = paidInvoices.find((p) => p.id === paidRecordId);
+        if (existing?.transactionId) {
+          await deleteTx(existing.transactionId, existing.deductedAccount);
+        }
         await deletePaid(paidRecordId);
         toast.info(`Fatura de ${formatMonthLabel(invoiceMonth)} reaberta.`);
       } else {
-        await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString() } as PaidInvoice);
-        toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga!`);
+        if (deductFromAccount) {
+          if (!payFromAccount) return toast.warning('Selecione de qual conta sai o pagamento.');
+          const txId = 'invpay_' + generateId();
+          await saveTx({
+            id: txId, type: 'invoice_payment', description: `Pagamento fatura ${invoiceCard.name} - ${formatMonthLabel(invoiceMonth)}`,
+            amount: invoiceTotal, category: 'Pagamento de Fatura', date: new Date().toISOString().slice(0, 10),
+            paymentMethod: payFromAccount, paidCardId: `card_${invoiceCard.id}`, invoiceMonth,
+            person: session.person, personKeys: toPersonKeys(session.person), userId: session.id,
+          } as Transaction);
+          await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString(), transactionId: txId, deductedAccount: payFromAccount } as PaidInvoice);
+          toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga, e ${formatCurrency(invoiceTotal)} descontado da conta!`);
+        } else {
+          await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString() } as PaidInvoice);
+          toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga!`);
+        }
       }
     } catch {
       toast.error('Erro ao atualizar status da fatura.');
@@ -246,8 +270,31 @@ export default function Cards() {
               <strong className="font-mono text-lg">{formatCurrency(invoiceTotal)}</strong>
             </div>
 
+            {!isPaid && (
+              <div className="mt-3">
+                <label className="flex items-center gap-2 text-sm text-[#f2f0ea] cursor-pointer">
+                  <input type="checkbox" checked={deductFromAccount} onChange={(e) => setDeductFromAccount(e.target.checked)} className="w-4 h-4 accent-[#e3b04b]" />
+                  Descontar de uma conta
+                </label>
+                {deductFromAccount && (
+                  <>
+                    <label className="text-xs uppercase font-bold text-[#8fa39a] mt-2 block">Pagar com qual conta?</label>
+                    <select value={payFromAccount} onChange={(e) => setPayFromAccount(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                      <option value="">Selecione a conta</option>
+                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
+                    </select>
+                  </>
+                )}
+              </div>
+            )}
+            {isPaid && (() => {
+              const rec = paidInvoices.find((p) => p.id === paidRecordId);
+              const acc = accounts.find((a) => `acc_${a.id}` === rec?.deductedAccount);
+              return acc ? <p className="text-xs text-[#8fa39a] mt-2">Descontado da conta {acc.name}.</p> : null;
+            })()}
+
             <div className="flex justify-between gap-3 mt-4">
-              <button onClick={togglePaid} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${isPaid ? 'bg-white/5 hover:bg-white/10' : 'bg-[#e3b04b] text-black hover:bg-[#f5d78a]'}`}>
+              <button onClick={togglePaid} disabled={!isPaid && deductFromAccount && !payFromAccount} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${isPaid ? 'bg-white/5 hover:bg-white/10' : 'bg-[#e3b04b] text-black hover:bg-[#f5d78a] disabled:opacity-40 disabled:cursor-not-allowed'}`}>
                 <i className={`fa-solid ${isPaid ? 'fa-rotate-left' : 'fa-check'} mr-2`} />
                 {isPaid ? 'Reabrir fatura' : 'Marcar como paga'}
               </button>

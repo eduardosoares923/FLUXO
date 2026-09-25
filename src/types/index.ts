@@ -1,4 +1,4 @@
-export type TransactionType = 'income' | 'expense' | 'transfer_out' | 'transfer_in';
+export type TransactionType = 'income' | 'expense' | 'transfer_out' | 'transfer_in' | 'invoice_payment';
 
 export interface SplitDetail {
   person: string;
@@ -21,6 +21,7 @@ export interface Transaction {
   groupId?: string;
   transferId?: string;
   transferAccountId?: string;
+  paidCardId?: string;
   installmentIndex?: number;
   totalInstallments?: number;
   installmentAmount?: number;

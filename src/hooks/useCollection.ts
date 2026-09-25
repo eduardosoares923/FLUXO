@@ -61,7 +61,7 @@ export function useCollection<T = any>(collectionName: string) {
         // transfer_in soma pro saldo da conta igual receita; transfer_out soma igual despesa.
         // Os totais de Receita/Despesa da família (Dashboard/Relatórios) tratam esses tipos à parte.
         if (tx.type === 'income' || tx.type === 'transfer_in') income += amt;
-        else if (tx.type === 'expense' || tx.type === 'transfer_out') expense += amt;
+        else if (tx.type === 'expense' || tx.type === 'transfer_out' || tx.type === 'invoice_payment') expense += amt;
       });
 
       // Salva o saldo computado na conta

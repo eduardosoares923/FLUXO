@@ -16,6 +16,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 function iconForCategory(category?: string, type?: string) {
   if (type === 'transfer_out' || type === 'transfer_in') return 'fa-right-left';
+  if (type === 'invoice_payment') return 'fa-file-invoice-dollar';
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
   return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
@@ -43,6 +44,7 @@ export default function Transactions() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [groupDeleteTx, setGroupDeleteTx] = useState<any>(null);
   const [transferDeleteTx, setTransferDeleteTx] = useState<any>(null);
+  const [invoicePaymentDeleteTx, setInvoicePaymentDeleteTx] = useState<any>(null);
   const [detailsTx, setDetailsTx] = useState<any>(null);
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -250,6 +252,7 @@ export default function Transactions() {
 
   function requestDelete(tx: any) {
     if (tx.transferId) setTransferDeleteTx(tx);
+    else if (tx.paidCardId) setInvoicePaymentDeleteTx(tx);
     else if (tx.groupId) setGroupDeleteTx(tx);
     else setDeleteId(tx.id);
   }
@@ -326,6 +329,7 @@ export default function Transactions() {
             <option value="income">Receitas</option>
             <option value="expense">Despesas</option>
             <option value="transfer">Transferências</option>
+            <option value="invoice_payment">Pagamentos de Fatura</option>
           </select>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[170px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
             <option value="all">Categorias</option>
@@ -377,7 +381,7 @@ export default function Transactions() {
                   )}
                   
                   {/* Ícone (Mobile + PC) */}
-                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : 'bg-white/10 text-[#8fa39a]'}`}>
+                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : 'bg-white/10 text-[#8fa39a]'}`}>
                     <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
                   </div>
 
@@ -403,7 +407,7 @@ export default function Transactions() {
                 {/* Valor e Ações */}
                 <div className="flex items-center justify-between md:justify-end gap-4 mt-2 md:mt-0 pl-[52px] md:pl-0 w-full md:w-auto md:flex-1">
                    <div className="flex-1 md:w-[130px] md:flex-none text-left md:text-right">
-                     <strong className={`font-mono text-lg md:text-base ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : 'text-[#f2f0ea]'}`}>
+                     <strong className={`font-mono text-lg md:text-base ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'text-[#a78bfa]' : 'text-[#f2f0ea]'}`}>
                        {tx.type === 'income' ? '+ ' : tx.type === 'transfer_out' ? '→ ' : tx.type === 'transfer_in' ? '← ' : '- '}{formatCurrency(tx.amount)}
                      </strong>
                    </div>
@@ -571,6 +575,7 @@ export default function Transactions() {
       <ConfirmModal isOpen={!!deleteId} title="Excluir" message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
       <ConfirmModal isOpen={confirmBulkDelete} title="Excluir selecionadas" message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
       <ConfirmModal isOpen={!!transferDeleteTx} title="Excluir transferência" message="Isso remove as duas pontas da transferência (origem e destino). Deseja continuar?" confirmLabel="Excluir" onConfirm={handleConfirmDeleteTransfer} onCancel={() => setTransferDeleteTx(null)} />
+      <ConfirmModal isOpen={!!invoicePaymentDeleteTx} title="Excluir pagamento de fatura" message="Isso remove só o registro financeiro. A fatura vai continuar marcada como paga em Cartões, sem o desconto correspondente. Pra desfazer certo, use 'Reabrir fatura' lá. Excluir mesmo assim?" confirmLabel="Excluir" onConfirm={() => { if (invoicePaymentDeleteTx) deleteRecord(invoicePaymentDeleteTx.id, invoicePaymentDeleteTx.paymentMethod); setInvoicePaymentDeleteTx(null); }} onCancel={() => setInvoicePaymentDeleteTx(null)} />
 
       {groupDeleteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setGroupDeleteTx(null)}>
@@ -593,10 +598,13 @@ export default function Transactions() {
             <h3 className="text-xl font-bold text-[#f2f0ea] mb-4 pb-4 border-b border-white/5">Detalhes da Transação</h3>
             <div className="flex flex-col gap-3 text-sm">
               <div className="flex justify-between"><span className="text-[#8fa39a]">Descrição:</span> <strong className="text-[#f2f0ea] text-right">{detailsTx.description}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-[#34d399]' : (detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') ? 'text-[#3b82f6]' : 'text-[#f87171]'}>{formatCurrency(detailsTx.amount)}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Tipo:</span> <span className="text-[#f2f0ea]">{detailsTx.type === 'income' ? 'Receita' : detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in' ? 'Transferência' : 'Despesa'}</span></div>
+              <div className="flex justify-between"><span className="text-[#8fa39a]">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-[#34d399]' : (detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') ? 'text-[#3b82f6]' : detailsTx.type === 'invoice_payment' ? 'text-[#a78bfa]' : 'text-[#f87171]'}>{formatCurrency(detailsTx.amount)}</strong></div>
+              <div className="flex justify-between"><span className="text-[#8fa39a]">Tipo:</span> <span className="text-[#f2f0ea]">{detailsTx.type === 'income' ? 'Receita' : detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in' ? 'Transferência' : detailsTx.type === 'invoice_payment' ? 'Pagamento de Fatura' : 'Despesa'}</span></div>
               {(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
                 <div className="flex justify-between"><span className="text-[#8fa39a]">{detailsTx.type === 'transfer_out' ? 'De → Para:' : 'De ← Para:'}</span> <span className="text-[#f2f0ea]">{accountNameFor(detailsTx.paymentMethod)} {detailsTx.type === 'transfer_out' ? '→' : '←'} {accountNameFor(detailsTx.transferAccountId)}</span></div>
+              )}
+              {detailsTx.type === 'invoice_payment' && (
+                <div className="flex justify-between"><span className="text-[#8fa39a]">Pago com:</span> <span className="text-[#f2f0ea]">{accountNameFor(detailsTx.paymentMethod)}</span></div>
               )}
               <div className="flex justify-between"><span className="text-[#8fa39a]">Data:</span> <span className="text-[#f2f0ea]">{formatDate(detailsTx.date)}</span></div>
               {!(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
