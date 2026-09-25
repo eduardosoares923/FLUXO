@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
@@ -37,6 +38,7 @@ export default function Transactions() {
   const { data: accounts } = useCollection<Account>('accounts');
   const { data: cards } = useCollection<any>('cards');
   const { data: personsList } = useCollection<{ name?: string }>('persons');
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<any>(null);
@@ -56,6 +58,14 @@ export default function Transactions() {
 
   const [paymentMode, setPaymentMode] = useState('single');
   const [installmentsCount, setInstallmentsCount] = useState(2);
+
+  useEffect(() => {
+    if (searchParams.get('new') === '1') {
+      openNew();
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
   const [installmentValueType, setInstallmentValueType] = useState('total');
   const [updateFuture, setUpdateFuture] = useState(false);
 

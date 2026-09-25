@@ -187,7 +187,7 @@ export function Layout() {
         ))}
 
         <button
-          onClick={() => navigate('/transactions')}
+          onClick={() => navigate('/transactions?new=1')}
           className="w-12 h-12 rounded-2xl bg-[#e3b04b] text-black flex items-center justify-center text-lg shadow-lg shadow-[#e3b04b]/30 -mt-5"
           title="Nova transação"
         >
