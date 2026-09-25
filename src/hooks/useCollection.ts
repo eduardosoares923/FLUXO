@@ -58,8 +58,10 @@ export function useCollection<T = any>(collectionName: string) {
       snap.forEach(d => {
         const tx = d.data();
         const amt = Number(tx.amount) || 0;
-        if (tx.type === 'income') income += amt;
-        else expense += amt;
+        // transfer_in soma pro saldo da conta igual receita; transfer_out soma igual despesa.
+        // Os totais de Receita/Despesa da família (Dashboard/Relatórios) tratam esses tipos à parte.
+        if (tx.type === 'income' || tx.type === 'transfer_in') income += amt;
+        else if (tx.type === 'expense' || tx.type === 'transfer_out') expense += amt;
       });
 
       // Salva o saldo computado na conta

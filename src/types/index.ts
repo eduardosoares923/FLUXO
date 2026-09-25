@@ -1,4 +1,4 @@
-export type TransactionType = 'income' | 'expense';
+export type TransactionType = 'income' | 'expense' | 'transfer_out' | 'transfer_in';
 
 export interface SplitDetail {
   person: string;
@@ -19,6 +19,8 @@ export interface Transaction {
   splitDetails?: SplitDetail[];
   userId?: string;
   groupId?: string;
+  transferId?: string;
+  transferAccountId?: string;
   installmentIndex?: number;
   totalInstallments?: number;
   installmentAmount?: number;

@@ -15,6 +15,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 function iconForCategory(category?: string, type?: string) {
+  if (type === 'transfer_out' || type === 'transfer_in') return 'fa-right-left';
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
   return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
@@ -41,6 +42,7 @@ export default function Transactions() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [groupDeleteTx, setGroupDeleteTx] = useState<any>(null);
+  const [transferDeleteTx, setTransferDeleteTx] = useState<any>(null);
   const [detailsTx, setDetailsTx] = useState<any>(null);
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -68,7 +70,7 @@ export default function Transactions() {
   const availableCategories = useMemo(() => [...new Set(transactions.map((tx) => tx.category).filter(Boolean))].sort(), [transactions]);
 
   const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: '' },
+    defaultValues: { description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: '', fromAccount: '', toAccount: '' },
   });
 
   const watchedAmount = watch('amount');
@@ -77,7 +79,7 @@ export default function Transactions() {
   const visible = useMemo(() => 
     [...transactions]
       .filter((tx) => canAccessPerson(tx.person, tx))
-      .filter((tx) => typeFilter === 'all' || tx.type === typeFilter)
+      .filter((tx) => typeFilter === 'all' || (typeFilter === 'transfer' ? (tx.type === 'transfer_out' || tx.type === 'transfer_in') : tx.type === typeFilter))
       .filter((tx) => categoryFilter === 'all' || tx.category === categoryFilter)
       .filter((tx) => !search || tx.description?.toLowerCase().includes(search.toLowerCase()) || tx.category?.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
@@ -89,15 +91,18 @@ export default function Transactions() {
   }
 
   function openNew() {
-    reset({ description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: session?.person || '' });
+    reset({ description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: session?.person || '', fromAccount: '', toAccount: '' });
     resetSplitAndInstallments(); setEditingTx(null); setEditingId(null); setShowForm(true);
   }
 
   function openEdit(tx: any) {
+    const isTransfer = tx.type === 'transfer_out' || tx.type === 'transfer_in';
     reset({
       description: tx.description || '', amount: tx.installmentAmount ?? tx.amount ?? '',
-      type: tx.type || 'expense', category: tx.category || '', date: tx.date || new Date().toISOString().slice(0, 10),
+      type: isTransfer ? 'transfer' : (tx.type || 'expense'), category: tx.category || '', date: tx.date || new Date().toISOString().slice(0, 10),
       paymentMethod: tx.paymentMethod || 'account', person: tx.person || session?.person || '',
+      fromAccount: isTransfer ? (tx.type === 'transfer_out' ? tx.paymentMethod : tx.transferAccountId) : '',
+      toAccount: isTransfer ? (tx.type === 'transfer_out' ? tx.transferAccountId : tx.paymentMethod) : '',
     });
     setIsSplit(Boolean(tx.isSplit));
     if (tx.isSplit && Array.isArray(tx.splitDetails)) {
@@ -129,6 +134,12 @@ export default function Transactions() {
     setSplitItems(updated);
   }
 
+  function accountNameFor(pm?: string) {
+    if (!pm?.startsWith('acc_')) return 'Conta';
+    const acc = accounts.find((a) => `acc_${a.id}` === pm);
+    return acc ? acc.name : 'Conta';
+  }
+
   function computeInvoiceMonth(dateStr: string, pm: string) {
     if (!pm?.startsWith('card_')) return undefined;
     const cardId = pm.replace('card_', '');
@@ -138,6 +149,42 @@ export default function Transactions() {
 
   async function onSubmit(data: any) {
     try {
+      if (data.type === 'transfer') {
+        const amt = Number(data.amount) || 0;
+        if (!data.fromAccount || !data.toAccount) return toast.warning('Selecione as duas contas da transferência.');
+        if (data.fromAccount === data.toAccount) return toast.warning('Escolha contas diferentes para a transferência.');
+        if (amt <= 0) return toast.warning('Informe um valor de transferência maior que zero.');
+        const finalPerson = data.person?.trim() || session?.person;
+
+        if (editingId && editingTx?.transferId) {
+          // Edita as duas pontas já existentes, mantendo as contas originais (não é permitido trocar de conta numa edição).
+          const sibling = transactions.find((t: any) => t.transferId === editingTx.transferId && t.id !== editingId);
+          const updates = [
+            saveRecord({ ...editingTx, id: editingId, description: data.description.trim(), amount: amt, date: data.date, person: finalPerson, personKeys: toPersonKeys(finalPerson) } as Transaction),
+          ];
+          if (sibling) updates.push(saveRecord({ ...sibling, description: data.description.trim(), amount: amt, date: data.date, person: finalPerson, personKeys: toPersonKeys(finalPerson) } as Transaction));
+          await Promise.all(updates);
+          toast.success('Transferência atualizada!');
+        } else {
+          const transferId = 'transfer_' + generateId();
+          await Promise.all([
+            saveRecord({
+              transferId, type: 'transfer_out', description: data.description.trim() || 'Transferência entre contas',
+              amount: amt, category: 'Transferência', date: data.date, paymentMethod: data.fromAccount,
+              transferAccountId: data.toAccount, person: finalPerson, personKeys: toPersonKeys(finalPerson), userId: session?.id,
+            } as Transaction),
+            saveRecord({
+              transferId, type: 'transfer_in', description: data.description.trim() || 'Transferência entre contas',
+              amount: amt, category: 'Transferência', date: data.date, paymentMethod: data.toAccount,
+              transferAccountId: data.fromAccount, person: finalPerson, personKeys: toPersonKeys(finalPerson), userId: session?.id,
+            } as Transaction),
+          ]);
+          toast.success('Transferência registrada!');
+        }
+        setShowForm(false);
+        return;
+      }
+
       let finalPerson = data.person?.trim() || session?.person;
       let finalSplitDetails = null;
 
@@ -201,7 +248,23 @@ export default function Transactions() {
     } catch (err) { toast.error('Erro ao salvar transação.'); }
   }
 
-  function requestDelete(tx: any) { if (tx.groupId) setGroupDeleteTx(tx); else setDeleteId(tx.id); }
+  function requestDelete(tx: any) {
+    if (tx.transferId) setTransferDeleteTx(tx);
+    else if (tx.groupId) setGroupDeleteTx(tx);
+    else setDeleteId(tx.id);
+  }
+
+  async function handleConfirmDeleteTransfer() {
+    if (!transferDeleteTx) return;
+    const sibling = transactions.find((t: any) => t.transferId === transferDeleteTx.transferId && t.id !== transferDeleteTx.id);
+    try {
+      await Promise.all([
+        deleteRecord(transferDeleteTx.id, transferDeleteTx.paymentMethod),
+        ...(sibling ? [deleteRecord(sibling.id, sibling.paymentMethod)] : []),
+      ]);
+      toast.success('Transferência excluída!');
+    } catch { toast.error('Erro ao excluir transferência.'); } finally { setTransferDeleteTx(null); }
+  }
 
   async function handleConfirmDelete() {
     if (!deleteId) return;
@@ -262,6 +325,7 @@ export default function Transactions() {
             <option value="all">Tipos</option>
             <option value="income">Receitas</option>
             <option value="expense">Despesas</option>
+            <option value="transfer">Transferências</option>
           </select>
           <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[170px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
             <option value="all">Categorias</option>
@@ -313,7 +377,7 @@ export default function Transactions() {
                   )}
                   
                   {/* Ícone (Mobile + PC) */}
-                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : 'bg-white/10 text-[#8fa39a]'}`}>
+                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : 'bg-white/10 text-[#8fa39a]'}`}>
                     <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
                   </div>
 
@@ -339,8 +403,8 @@ export default function Transactions() {
                 {/* Valor e Ações */}
                 <div className="flex items-center justify-between md:justify-end gap-4 mt-2 md:mt-0 pl-[52px] md:pl-0 w-full md:w-auto md:flex-1">
                    <div className="flex-1 md:w-[130px] md:flex-none text-left md:text-right">
-                     <strong className={`font-mono text-lg md:text-base ${tx.type === 'income' ? 'text-[#34d399]' : 'text-[#f2f0ea]'}`}>
-                       {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
+                     <strong className={`font-mono text-lg md:text-base ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : 'text-[#f2f0ea]'}`}>
+                       {tx.type === 'income' ? '+ ' : tx.type === 'transfer_out' ? '→ ' : tx.type === 'transfer_in' ? '← ' : '- '}{formatCurrency(tx.amount)}
                      </strong>
                    </div>
                    <div className="flex items-center gap-1 md:w-[100px] justify-end shrink-0">
@@ -376,7 +440,7 @@ export default function Transactions() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase font-bold text-[#8fa39a]">Tipo</label>
                 <select {...register('type')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
-                  <option value="expense">Despesa (-)</option><option value="income">Receita (+)</option>
+                  <option value="expense">Despesa (-)</option><option value="income">Receita (+)</option><option value="transfer">Transferência entre contas</option>
                 </select>
               </div>
               <div className="flex flex-col gap-1.5">
@@ -395,19 +459,40 @@ export default function Transactions() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase font-bold text-[#8fa39a]">Categoria</label>
-                <input {...register('category')} list="tx-categories" placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
-                <datalist id="tx-categories">{availableCategories.map((c) => (<option key={c} value={c} />))}</datalist>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase font-bold text-[#8fa39a]">Conta / Cartão</label>
-                <select {...register('paymentMethod')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
-                  <option value="account">Principal</option>
-                  <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
-                  <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
-                </select>
-              </div>
+              {watchedType !== 'transfer' && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs uppercase font-bold text-[#8fa39a]">Categoria</label>
+                  <input {...register('category')} list="tx-categories" placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+                  <datalist id="tx-categories">{availableCategories.map((c) => (<option key={c} value={c} />))}</datalist>
+                </div>
+              )}
+              {watchedType === 'transfer' ? (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-bold text-[#8fa39a]">De (origem)</label>
+                    <select {...register('fromAccount')} disabled={!!editingId} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-50">
+                      <option value="">Selecione</option>
+                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-bold text-[#8fa39a]">Para (destino)</label>
+                    <select {...register('toAccount')} disabled={!!editingId} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-50">
+                      <option value="">Selecione</option>
+                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs uppercase font-bold text-[#8fa39a]">Conta / Cartão</label>
+                  <select {...register('paymentMethod')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                    <option value="account">Principal</option>
+                    <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
+                    <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* SEÇÃO PARCELAMENTO */}
@@ -434,7 +519,8 @@ export default function Transactions() {
               </div>
             )}
 
-            {/* SEÇÃO RATEIO */}
+            {/* SEÇÃO RATEIO (não se aplica a transferência entre contas) */}
+            {watchedType !== 'transfer' && (
             <div className="mt-2 p-4 bg-white/[0.03] rounded-2xl border border-white/5">
               <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-[#f2f0ea]">
                 <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="w-4 h-4 accent-[#e3b04b]" />
@@ -467,6 +553,7 @@ export default function Transactions() {
                 </div>
               )}
             </div>
+            )}
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
               <button type="button" onClick={() => setShowForm(false)} className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-colors">Cancelar</button>
@@ -483,6 +570,7 @@ export default function Transactions() {
       
       <ConfirmModal isOpen={!!deleteId} title="Excluir" message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
       <ConfirmModal isOpen={confirmBulkDelete} title="Excluir selecionadas" message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
+      <ConfirmModal isOpen={!!transferDeleteTx} title="Excluir transferência" message="Isso remove as duas pontas da transferência (origem e destino). Deseja continuar?" confirmLabel="Excluir" onConfirm={handleConfirmDeleteTransfer} onCancel={() => setTransferDeleteTx(null)} />
 
       {groupDeleteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setGroupDeleteTx(null)}>
@@ -505,10 +593,15 @@ export default function Transactions() {
             <h3 className="text-xl font-bold text-[#f2f0ea] mb-4 pb-4 border-b border-white/5">Detalhes da Transação</h3>
             <div className="flex flex-col gap-3 text-sm">
               <div className="flex justify-between"><span className="text-[#8fa39a]">Descrição:</span> <strong className="text-[#f2f0ea] text-right">{detailsTx.description}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-[#34d399]' : 'text-[#f87171]'}>{formatCurrency(detailsTx.amount)}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Tipo:</span> <span className="text-[#f2f0ea]">{detailsTx.type === 'income' ? 'Receita' : 'Despesa'}</span></div>
+              <div className="flex justify-between"><span className="text-[#8fa39a]">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-[#34d399]' : (detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') ? 'text-[#3b82f6]' : 'text-[#f87171]'}>{formatCurrency(detailsTx.amount)}</strong></div>
+              <div className="flex justify-between"><span className="text-[#8fa39a]">Tipo:</span> <span className="text-[#f2f0ea]">{detailsTx.type === 'income' ? 'Receita' : detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in' ? 'Transferência' : 'Despesa'}</span></div>
+              {(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
+                <div className="flex justify-between"><span className="text-[#8fa39a]">{detailsTx.type === 'transfer_out' ? 'De → Para:' : 'De ← Para:'}</span> <span className="text-[#f2f0ea]">{accountNameFor(detailsTx.paymentMethod)} {detailsTx.type === 'transfer_out' ? '→' : '←'} {accountNameFor(detailsTx.transferAccountId)}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-[#8fa39a]">Data:</span> <span className="text-[#f2f0ea]">{formatDate(detailsTx.date)}</span></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Categoria:</span> <span className="text-[#f2f0ea] bg-white/5 px-2 py-0.5 rounded">{detailsTx.category || '-'}</span></div>
+              {!(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
+                <div className="flex justify-between"><span className="text-[#8fa39a]">Categoria:</span> <span className="text-[#f2f0ea] bg-white/5 px-2 py-0.5 rounded">{detailsTx.category || '-'}</span></div>
+              )}
               <div className="flex justify-between"><span className="text-[#8fa39a]">Pessoa:</span> <span className="text-[#f2f0ea]">{detailsTx.person}</span></div>
               
               {detailsTx.totalInstallments && (

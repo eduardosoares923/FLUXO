@@ -16,6 +16,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 };
 
 function iconForCategory(category?: string, type?: string) {
+  if (type === 'transfer_out' || type === 'transfer_in') return 'fa-right-left';
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
   return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
@@ -116,7 +117,8 @@ export default function Dashboard() {
       visibleTx.forEach(tx => {
         if (visibleAccounts.length === 0 || fallbackAccs.has(tx.paymentMethod)) {
           const amt = getEffectiveAmount(tx);
-          if (tx.type === 'income') fallbackIncome += amt; else fallbackExpense += amt;
+          if (tx.type === 'income' || tx.type === 'transfer_in') fallbackIncome += amt;
+          else if (tx.type === 'expense' || tx.type === 'transfer_out') fallbackExpense += amt;
         }
       });
       sum += (fallbackIncome - fallbackExpense);
@@ -133,18 +135,26 @@ export default function Dashboard() {
     const catMap: Record<string, number> = {};
 
     currentPeriodTxs.forEach((tx) => {
-      const amt = getEffectiveAmount(tx); const isInc = tx.type === 'income';
-      if (isInc) income += amt; else expense += amt;
-      const pLabel = tx.person || 'Sem pessoa';
-      if (!pMap.has(pLabel)) pMap.set(pLabel, { person: pLabel, income: 0, expense: 0 });
-      if (isInc) pMap.get(pLabel).income += amt; else pMap.get(pLabel).expense += amt;
+      const amt = getEffectiveAmount(tx);
+      const isTransfer = tx.type === 'transfer_out' || tx.type === 'transfer_in';
+      const isInc = tx.type === 'income' || tx.type === 'transfer_in';
+
+      // Transferência entre contas não é receita nem despesa da família, só muda de bolso.
+      if (!isTransfer) {
+        if (isInc) income += amt; else expense += amt;
+        const pLabel = tx.person || 'Sem pessoa';
+        if (!pMap.has(pLabel)) pMap.set(pLabel, { person: pLabel, income: 0, expense: 0 });
+        if (isInc) pMap.get(pLabel).income += amt; else pMap.get(pLabel).expense += amt;
+        if (!isInc && tx.category) {
+          catMap[tx.category] = (catMap[tx.category] || 0) + amt;
+        }
+      }
+
+      // O saldo de cada conta continua contando as duas pernas da transferência normalmente.
       if (aMap.has(tx.paymentMethod)) {
          const accSum = aMap.get(tx.paymentMethod);
          if (isInc) accSum.periodIncome += amt; else accSum.periodExpense += amt;
          accSum.periodNet = accSum.periodIncome - accSum.periodExpense;
-      }
-      if (!isInc && tx.category) {
-        catMap[tx.category] = (catMap[tx.category] || 0) + amt;
       }
     });
 
@@ -180,6 +190,7 @@ export default function Dashboard() {
     visibleTx.forEach((tx) => {
       const d = parseTxDate(tx.date); if (!d) return;
       const key = dayKey(d); if (!byKey.has(key)) return;
+      if (tx.type === 'transfer_out' || tx.type === 'transfer_in') return;
       byKey.get(key)!.net += tx.type === 'income' ? getEffectiveAmount(tx) : -getEffectiveAmount(tx);
     });
     let running = 0; return buckets.map((b) => { running += b.net; return { ...b, cumulative: running }; });
@@ -325,7 +336,7 @@ export default function Dashboard() {
               {recentTx.map((tx) => (
                 <div key={tx.id} className="group p-3 sm:p-4 rounded-[16px] sm:rounded-2xl bg-black/10 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 sm:gap-4 border border-white/[0.02] hover:border-white/10">
                   <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : 'bg-white/10 text-[#8fa39a]'}`}>
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : 'bg-white/10 text-[#8fa39a]'}`}>
                       <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -333,8 +344,8 @@ export default function Dashboard() {
                       <div className="text-[10px] sm:text-xs text-[#8fa39a] truncate mt-1">{formatDate(tx.date)} &bull; {tx.category}</div>
                     </div>
                   </div>
-                  <strong className={`font-mono text-sm sm:text-lg shrink-0 pl-2 ${tx.type === 'income' ? 'text-[#34d399]' : 'text-[#f2f0ea]'}`}>
-                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(getEffectiveAmount(tx))}
+                  <strong className={`font-mono text-sm sm:text-lg shrink-0 pl-2 ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : 'text-[#f2f0ea]'}`}>
+                    {tx.type === 'income' ? '+' : tx.type === 'transfer_out' ? '→' : tx.type === 'transfer_in' ? '←' : '-'}{formatCurrency(getEffectiveAmount(tx))}
                   </strong>
                 </div>
               ))}

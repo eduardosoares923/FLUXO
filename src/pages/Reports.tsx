@@ -49,9 +49,10 @@ export default function Reports() {
       if (!d) return;
       const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       if (!buckets[k]) return;
+      if (tx.type === 'transfer_out' || tx.type === 'transfer_in') return;
       const amt = Number(tx.amount) || 0;
       if (tx.type === 'income') buckets[k].income += amt;
-      else buckets[k].expense += amt;
+      else if (tx.type === 'expense') buckets[k].expense += amt;
     });
     return keys.map((k) => {
       const [y, m] = k.split('-');
@@ -156,7 +157,7 @@ export default function Reports() {
     const headers = ['Data', 'Descricao', 'Categoria', 'Pessoa', 'Tipo', 'Valor', 'Metodo'];
     const rows = currentTxs.map((tx) => [
       tx.date, `"${(tx.description || '').replace(/"/g, '""')}"`, `"${(tx.category || '').replace(/"/g, '""')}"`, `"${(tx.person || '').replace(/"/g, '""')}"`,
-      tx.type === 'income' ? 'Receita' : 'Despesa', Number(tx.amount).toFixed(2).replace('.', ','), tx.paymentMethod || 'Conta',
+      tx.type === 'income' ? 'Receita' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'Transferência' : 'Despesa', Number(tx.amount).toFixed(2).replace('.', ','), tx.paymentMethod || 'Conta',
     ]);
     const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
