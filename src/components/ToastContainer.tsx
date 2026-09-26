@@ -55,23 +55,43 @@ export function ToastContainer() {
               <i className={`fa-solid ${style.icon}`} style={{ color: style.color, fontSize: '1.1rem' }} />
               <span style={{ lineHeight: 1.4 }}>{t.message}</span>
             </div>
-            <button
-              onClick={() => removeToast(t.id)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#94a3b8',
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '0.9rem',
-              }}
-              title="Fechar"
-            >
-              <i className="fa-solid fa-xmark" />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {t.action && (
+                <button
+                  onClick={() => { t.action!.onClick(); removeToast(t.id); }}
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${style.color}`,
+                    color: style.color,
+                    cursor: 'pointer',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {t.action.label}
+                </button>
+              )}
+              <button
+                onClick={() => removeToast(t.id)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.9rem',
+                }}
+                title="Fechar"
+              >
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
           </div>
         );
       })}

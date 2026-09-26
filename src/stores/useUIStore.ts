@@ -11,6 +11,7 @@ interface UIStore {
   selectedPeriod: string; setSelectedPeriod: (p: string) => void;
   selectedPerson: string; setSelectedPerson: (p: string) => void;
   searchTerm: string; setSearchTerm: (t: string) => void;
+  privacyMode: boolean; togglePrivacyMode: () => void;
   resetFilters: () => void;
 }
 
@@ -21,9 +22,10 @@ export const useUIStore = create<UIStore>()(persist((set) => ({
   selectedPeriod: getCurrentMonth(), setSelectedPeriod: (period) => set({ selectedPeriod: period }),
   selectedPerson: 'all', setSelectedPerson: (person) => set({ selectedPerson: person }),
   searchTerm: '', setSearchTerm: (term) => set({ searchTerm: term }),
+  privacyMode: false, togglePrivacyMode: () => set((state) => ({ privacyMode: !state.privacyMode })),
   resetFilters: () => set({ selectedPeriod: getCurrentMonth(), selectedPerson: 'all', searchTerm: '' }),
 }), {
-  name: 'fluxo_ui_preferences', partialize: (state) => ({ theme: state.theme, selectedPeriod: state.selectedPeriod }),
+  name: 'fluxo_ui_preferences', partialize: (state) => ({ theme: state.theme, selectedPeriod: state.selectedPeriod, privacyMode: state.privacyMode }),
   onRehydrateStorage: () => (state) => { if (state?.theme) document.documentElement.setAttribute('data-theme', state.theme); },
 }));
 

@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, normalize } from '../utils/format';
+import { formatCurrency, maskCurrency, normalize } from '../utils/format';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { useUIStore } from '../stores/useUIStore';
 import { Account, Person, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
@@ -18,6 +19,7 @@ export default function Accounts() {
   const { session, hasPermission, canAccessPerson } = useAuth() as { session: User; hasPermission: any; canAccessPerson: any };
   const { data: accounts, loading, saveRecord, deleteRecord } = useCollection<Account>('accounts');
   const { data: persons, loading: loadingPersons, saveRecord: savePerson, deleteRecord: deletePerson } = useCollection<Person>('persons');
+  const { privacyMode, togglePrivacyMode } = useUIStore();
 
   const [tab, setTab] = useState<'contas' | 'pessoas'>('contas');
 
@@ -68,6 +70,11 @@ export default function Accounts() {
           <button onClick={() => setTab('contas')} className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${tab === 'contas' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}>Contas</button>
           <button onClick={() => setTab('pessoas')} className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${tab === 'pessoas' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}>Pessoas</button>
         </div>
+        {tab === 'contas' && (
+          <button onClick={togglePrivacyMode} className="text-[#8fa39a] hover:text-white p-2" title={privacyMode ? 'Mostrar saldos' : 'Esconder saldos'}>
+            <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
+          </button>
+        )}
         {canEdit && tab === 'contas' && (
           <button onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform"><i className="fa-solid fa-plus mr-2" />Nova Conta</button>
         )}
@@ -98,7 +105,7 @@ export default function Accounts() {
                 </div>
 
                 <div className="mt-6 flex justify-between items-end">
-                  <strong className="text-2xl font-mono text-[#f2f0ea]">{formatCurrency(displayBalance(acc))}</strong>
+                  <strong className="text-2xl font-mono text-[#f2f0ea]">{maskCurrency(displayBalance(acc), privacyMode)}</strong>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg truncate max-w-[100px]">{acc.owner || 'Geral'}</span>
                 </div>
               </div>

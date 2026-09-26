@@ -2,8 +2,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, formatDate, parseTxDate } from '../utils/format';
+import { formatCurrency, formatDate, parseTxDate, maskCurrency } from '../utils/format';
 import { db } from '../firebase';
+import { useUIStore } from '../stores/useUIStore';
+import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
 function getEffectiveAmount(tx: Transaction) { return parseFloat(String(tx.amount)) || 0; }
@@ -86,6 +88,7 @@ export default function Dashboard() {
   const { data: accounts, loading: loadingAcc } = useCollection<any>('accounts');
   const { data: subscriptions } = useCollection<any>('subscriptions');
   const { data: cards } = useCollection<any>('cards');
+  const { privacyMode, togglePrivacyMode } = useUIStore();
 
   const [budgets, setBudgets] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -98,6 +101,29 @@ export default function Dashboard() {
   const navMonth = navDate.getMonth(); const navYear = navDate.getFullYear();
   const monthLabel = navDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const isCurrentMonth = navMonth === new Date().getMonth() && navYear === new Date().getFullYear();
+
+  async function handleCopySummary() {
+    const linhas = [
+      `📊 Resumo financeiro — ${monthLabel}`,
+      '',
+      `💰 Saldo atual: ${formatCurrency(currentBalance)}`,
+      `📈 Receitas: ${formatCurrency(totalIncome)}`,
+      `📉 Despesas: ${formatCurrency(totalExpense)}`,
+    ];
+    if (personsSummary.length > 0) {
+      linhas.push('', '👤 Por pessoa:');
+      personsSummary.forEach((p) => {
+        linhas.push(`- ${p.person}: +${formatCurrency(p.income)} / -${formatCurrency(p.expense)}`);
+      });
+    }
+    const texto = linhas.join('\n');
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success('Resumo copiado! Já pode colar no WhatsApp.');
+    } catch {
+      toast.error('Não foi possível copiar o resumo.');
+    }
+  }
 
   function goPrevMonth() { setNavDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1)); }
   function goNextMonth() { setNavDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)); }
@@ -222,6 +248,10 @@ export default function Dashboard() {
         <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] truncate w-full sm:w-auto">
           Olá, {session.name.split(' ')[0]}
         </h2>
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        <button onClick={handleCopySummary} className="flex items-center gap-2 px-3 sm:px-4 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold text-xs sm:text-sm transition-colors shrink-0" title="Copiar resumo do mês pro WhatsApp">
+          <i className="fa-brands fa-whatsapp text-[#34d399]" /> <span className="hidden sm:inline">Copiar resumo</span>
+        </button>
         <div className="flex items-center justify-between w-full sm:w-auto gap-2 bg-white/[0.03] border border-white/[0.08] p-1.5 sm:p-2 rounded-2xl shadow-lg">
           <button onClick={goPrevMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors shrink-0">
             <i className="fa-solid fa-chevron-left" />
@@ -237,6 +267,7 @@ export default function Dashboard() {
               Hoje
             </button>
           )}
+        </div>
         </div>
       </div>
 
@@ -265,13 +296,16 @@ export default function Dashboard() {
         <div className="flex flex-col justify-center relative z-10 w-full">
           <span className="text-[#8fa39a] font-semibold tracking-widest uppercase text-xs sm:text-sm mb-2 flex items-center gap-2">
             <i className="fa-solid fa-wallet" /> Saldo atual
+            <button onClick={togglePrivacyMode} className="text-[#8fa39a] hover:text-white ml-1" title={privacyMode ? 'Mostrar valores' : 'Esconder valores'}>
+              <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
+            </button>
           </span>
           <strong className="text-[2rem] sm:text-5xl md:text-6xl font-black text-[#f2f0ea] font-mono tracking-tighter mb-4 drop-shadow-md break-all leading-none">
-            {formatCurrency(animatedBalance)}
+            {maskCurrency(animatedBalance, privacyMode)}
           </strong>
           <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-bold w-fit ${netLast14 >= 0 ? 'bg-[#34d399]/20 text-[#34d399]' : 'bg-[#f87171]/20 text-[#f87171]'}`}>
             <i className={`fa-solid ${netLast14 >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`} />
-            {formatCurrency(Math.abs(netLast14))} em 14d
+            {maskCurrency(Math.abs(netLast14), privacyMode)} em 14d
           </span>
         </div>
         <div className="w-full md:w-[280px] h-[80px] sm:h-[100px] relative z-10 mt-2 md:mt-0 opacity-90 shrink-0">
@@ -286,7 +320,7 @@ export default function Dashboard() {
           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#34d399]/10 text-[#34d399] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-down" /></div>
           <div className="min-w-0">
             <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Receitas</span>
-            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{formatCurrency(totalIncome)}</strong>
+            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{maskCurrency(totalIncome, privacyMode)}</strong>
           </div>
         </div>
         <div className="bg-white/[0.03] border border-white/[0.08] rounded-[20px] sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 relative overflow-hidden">
@@ -294,7 +328,7 @@ export default function Dashboard() {
           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#f87171]/10 text-[#f87171] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-up" /></div>
           <div className="min-w-0">
             <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Despesas</span>
-            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{formatCurrency(totalExpense)}</strong>
+            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{maskCurrency(totalExpense, privacyMode)}</strong>
           </div>
         </div>
       </div>
@@ -370,8 +404,8 @@ export default function Dashboard() {
                   <div key={acc.id} className="flex items-center justify-between gap-2">
                     <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate">{acc.name}</span>
                     <div className="text-right shrink-0">
-                      <strong className="block text-[#f2f0ea] font-mono text-[0.9rem] sm:text-base">{formatCurrency(acc.balance)}</strong>
-                      <small className={`font-bold text-[10px] sm:text-xs ${acc.periodNet >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{acc.periodNet >= 0 ? '+' : ''}{formatCurrency(acc.periodNet)} no mês</small>
+                      <strong className="block text-[#f2f0ea] font-mono text-[0.9rem] sm:text-base">{maskCurrency(acc.balance, privacyMode)}</strong>
+                      <small className={`font-bold text-[10px] sm:text-xs ${acc.periodNet >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{acc.periodNet >= 0 ? '+' : ''}{maskCurrency(acc.periodNet, privacyMode)} no mês</small>
                     </div>
                   </div>
                 ))}
@@ -390,8 +424,8 @@ export default function Dashboard() {
                   <div key={p.person} className="flex items-center justify-between gap-2">
                     <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate max-w-[100px] sm:max-w-[140px]">{p.person}</span>
                     <div className="flex items-center gap-2 font-mono text-[10px] sm:text-xs shrink-0">
-                      <span className="text-[#34d399] bg-[#34d399]/10 px-1.5 sm:px-2 py-0.5 rounded">+{formatCurrency(p.income)}</span>
-                      <span className="text-[#f87171] bg-[#f87171]/10 px-1.5 sm:px-2 py-0.5 rounded">-{formatCurrency(p.expense)}</span>
+                      <span className="text-[#34d399] bg-[#34d399]/10 px-1.5 sm:px-2 py-0.5 rounded">+{maskCurrency(p.income, privacyMode)}</span>
+                      <span className="text-[#f87171] bg-[#f87171]/10 px-1.5 sm:px-2 py-0.5 rounded">-{maskCurrency(p.expense, privacyMode)}</span>
                     </div>
                   </div>
                 ))}

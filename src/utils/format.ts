@@ -6,6 +6,10 @@ export function formatCurrency(value: number | string | null | undefined): strin
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(num);
 }
 
+export function maskCurrency(value: number | string | null | undefined, hidden: boolean): string {
+  return hidden ? 'R$ ••••••' : formatCurrency(value);
+}
+
 export function parseTxDate(dateVal: Date | number | string | null | undefined): Date | null {
   if (!dateVal) return null;
   try {

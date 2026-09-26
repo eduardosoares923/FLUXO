@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
@@ -51,6 +51,8 @@ export default function Transactions() {
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const pendingDeleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -97,12 +99,13 @@ export default function Transactions() {
 
   const visible = useMemo(() => 
     [...transactions]
+      .filter((tx) => !pendingDeleteIds.has(tx.id as string))
       .filter((tx) => canAccessPerson(tx.person, tx))
       .filter((tx) => typeFilter === 'all' || (typeFilter === 'transfer' ? (tx.type === 'transfer_out' || tx.type === 'transfer_in') : tx.type === typeFilter))
       .filter((tx) => categoryFilter === 'all' || tx.category === categoryFilter)
       .filter((tx) => !search || tx.description?.toLowerCase().includes(search.toLowerCase()) || tx.category?.toLowerCase().includes(search.toLowerCase()))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [transactions, canAccessPerson, typeFilter, categoryFilter, search]
+    [transactions, pendingDeleteIds, canAccessPerson, typeFilter, categoryFilter, search]
   );
 
   function resetSplitAndInstallments() {
@@ -132,6 +135,19 @@ export default function Transactions() {
     
     setPaymentMode('single'); setUpdateFuture(false);
     setEditingTx(tx); setEditingId(tx.id); setShowForm(true);
+  }
+
+  function handleDuplicate(tx: any) {
+    reset({
+      description: tx.description || '', amount: tx.installmentAmount ?? tx.amount ?? '',
+      type: tx.type === 'income' ? 'income' : 'expense', category: tx.category || '',
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: tx.paymentMethod || 'account', person: tx.person || session?.person || '',
+      fromAccount: '', toAccount: '',
+    });
+    resetSplitAndInstallments();
+    setEditingTx(null); setEditingId(null); setShowForm(true);
+    toast.info('Transação duplicada. Confira os dados e salve.');
   }
 
   function handleSplitCheck(pName: string, checked: boolean) {
@@ -286,10 +302,31 @@ export default function Transactions() {
     } catch { toast.error('Erro ao excluir transferência.'); } finally { setTransferDeleteTx(null); }
   }
 
+  function scheduleDelete(id: string, paymentMethod: string | undefined, message: string) {
+    setPendingDeleteIds((prev) => new Set(prev).add(id));
+    const timer = setTimeout(async () => {
+      pendingDeleteTimers.current.delete(id);
+      try {
+        await deleteRecord(id, paymentMethod);
+      } catch {
+        toast.error('Erro ao excluir.');
+      } finally {
+        setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+      }
+    }, 5000);
+    pendingDeleteTimers.current.set(id, timer);
+    toast.action(message, 'Desfazer', () => {
+      const t = pendingDeleteTimers.current.get(id);
+      if (t) { clearTimeout(t); pendingDeleteTimers.current.delete(id); }
+      setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+    });
+  }
+
   async function handleConfirmDelete() {
     if (!deleteId) return;
-    try { await deleteRecord(deleteId); toast.success('Transação excluída!'); } 
-    catch { toast.error('Erro ao excluir.'); } finally { setDeleteId(null); }
+    const tx = transactions.find((t: any) => t.id === deleteId);
+    scheduleDelete(deleteId, tx?.paymentMethod, 'Transação excluída.');
+    setDeleteId(null);
   }
 
   async function handleDeleteJustThis() {
@@ -314,8 +351,28 @@ export default function Transactions() {
   }
 
   async function handleConfirmBulkDelete() {
-    try { await deleteRecords([...selectedIds]); toast.success(`${selectedIds.size} transações excluídas!`); setSelectedIds(new Set()); } 
-    catch { toast.error('Erro ao excluir em lote.'); } finally { setConfirmBulkDelete(false); }
+    const ids = [...selectedIds];
+    const count = ids.length;
+    ids.forEach((id) => {
+      const tx = transactions.find((t: any) => t.id === id);
+      setPendingDeleteIds((prev) => new Set(prev).add(id));
+      const timer = setTimeout(async () => {
+        pendingDeleteTimers.current.delete(id);
+        try { await deleteRecord(id, tx?.paymentMethod); }
+        catch { /* erro individual não interrompe as demais */ }
+        finally { setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; }); }
+      }, 5000);
+      pendingDeleteTimers.current.set(id, timer);
+    });
+    toast.action(`${count} transações excluídas.`, 'Desfazer', () => {
+      ids.forEach((id) => {
+        const t = pendingDeleteTimers.current.get(id);
+        if (t) { clearTimeout(t); pendingDeleteTimers.current.delete(id); }
+      });
+      setPendingDeleteIds((prev) => { const next = new Set(prev); ids.forEach((id) => next.delete(id)); return next; });
+    });
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
   }
 
     if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
@@ -432,6 +489,9 @@ export default function Transactions() {
                      <button onClick={() => setDetailsTx(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center"><i className="fa-solid fa-eye" /></button>
                      {canEdit && (
                        <>
+                         {!tx.transferId && !tx.paidCardId && (
+                           <button onClick={() => handleDuplicate(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#e3b04b]/20 hover:text-[#e3b04b] transition-colors flex items-center justify-center" title="Duplicar transação"><i className="fa-solid fa-copy" /></button>
+                         )}
                          <button onClick={() => openEdit(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] transition-colors flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
                          <button onClick={() => requestDelete(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
                        </>
