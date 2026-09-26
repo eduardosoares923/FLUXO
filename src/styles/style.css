@@ -581,3 +581,24 @@ select.form-control option {
     text-shadow: none !important;
   }
 }
+
+/* Autopreenchimento do navegador (login, senha salva, etc): o Chrome/Edge forçam um fundo
+   branco com texto preto que nenhuma cor de fundo normal consegue sobrescrever, só esse
+   truque de "empurrar" a cor de fundo pra dentro via box-shadow com transição gigante. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f2f0ea !important;
+  -webkit-box-shadow: 0 0 0px 1000px #141d1a inset !important;
+  box-shadow: 0 0 0px 1000px #141d1a inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+[data-theme="light"] input:-webkit-autofill,
+[data-theme="light"] input:-webkit-autofill:hover,
+[data-theme="light"] input:-webkit-autofill:focus,
+[data-theme="light"] input:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a !important;
+  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+}
