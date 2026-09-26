@@ -76,7 +76,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
               key={tx.id}
               onClick={() => {
                 onClose();
-                navigate('/transactions');
+                navigate(`/transactions?detail=${tx.id}`);
               }}
               className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/5 text-left border-b border-white/5 last:border-0"
             >

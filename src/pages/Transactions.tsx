@@ -63,9 +63,16 @@ export default function Transactions() {
     if (searchParams.get('new') === '1') {
       openNew();
       setSearchParams({}, { replace: true });
+      return;
+    }
+    const detailId = searchParams.get('detail');
+    if (detailId && transactions.length > 0) {
+      const found = transactions.find((t: any) => t.id === detailId);
+      if (found) setDetailsTx(found);
+      setSearchParams({}, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, transactions]);
   const [installmentValueType, setInstallmentValueType] = useState('total');
   const [updateFuture, setUpdateFuture] = useState(false);
 
