@@ -5,6 +5,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth } from '../utils/format';
 import { toast } from '../stores/useToastStore';
 import { EmptyState } from '../components/StateFeedback';
+import { CustomSelect } from '../components/CustomSelect';
 import { Account, User, Transaction } from '../types';
 
 export default function Import() {
@@ -237,7 +238,7 @@ export default function Import() {
             <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
               <div>
                 <label className="block text-xs uppercase font-bold text-[#8fa39a] mb-1.5">Destino</label>
-                <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full sm:w-[220px] p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                <CustomSelect value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="w-full sm:w-[220px]">
                   <optgroup label="Contas Correntes">
                     <option value="account">Conta Principal</option>
                     {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>Conta: {a.name}</option>))}
@@ -247,7 +248,7 @@ export default function Import() {
                       {cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>Cartão: {c.name}</option>))}
                     </optgroup>
                   )}
-                </select>
+                </CustomSelect>
               </div>
               <div>
                 <label className="block text-xs uppercase font-bold text-[#8fa39a] mb-1.5">Pessoa</label>

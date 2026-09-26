@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, parseTxDate, maskCurrency, getCardInvoiceMo
 import { db } from '../firebase';
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
+import { CustomSelect } from '../components/CustomSelect';
 import { Transaction, Account, User } from '../types';
 
 function getEffectiveAmount(tx: Transaction) { return parseFloat(String(tx.amount)) || 0; }
@@ -274,10 +275,10 @@ export default function Dashboard() {
         </h2>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
         {personOptions.length > 0 && (
-          <select value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="px-3 h-10 rounded-xl border border-white/10 bg-white/5 text-[#f2f0ea] text-xs sm:text-sm font-bold outline-none focus:border-[#e3b04b]" title="Filtrar painel por pessoa">
+          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="w-auto shrink-0" title="Filtrar painel por pessoa">
             <option value="all">Todos</option>
             {personOptions.map((name) => (<option key={name} value={name}>{name}</option>))}
-          </select>
+          </CustomSelect>
         )}
         <button onClick={handleCopySummary} className="flex items-center gap-2 px-3 sm:px-4 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold text-xs sm:text-sm transition-colors shrink-0" title="Copiar resumo do mês pro WhatsApp">
           <i className="fa-brands fa-whatsapp text-[#34d399]" /> <span className="hidden sm:inline">Copiar resumo</span>

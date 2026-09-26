@@ -5,6 +5,7 @@ import { useCollection } from '../hooks/useCollection';
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../components/CustomSelect';
 import { PageLoading } from '../components/StateFeedback';
 import { db } from '../firebase';
 import { User } from '../types';
@@ -293,10 +294,10 @@ export default function Settings() {
               {cat}
               {canManage && (
                 <>
-                  <select value={categoryStyles[cat]?.icon || ''} onChange={(e) => handleCategoryStyleChange(cat, 'icon', e.target.value)} className="bg-black/40 border border-white/10 rounded-lg text-xs p-1 text-[#f2f0ea] outline-none">
+                  <CustomSelect value={categoryStyles[cat]?.icon || ''} onChange={(e) => handleCategoryStyleChange(cat, 'icon', e.target.value)} size="sm" className="w-28">
                     <option value="" disabled>Ícone</option>
                     {ICON_OPTIONS.map((ic) => (<option key={ic} value={ic}>{ic.replace('fa-', '')}</option>))}
-                  </select>
+                  </CustomSelect>
                   <input type="color" value={categoryStyles[cat]?.color || '#e3b04b'} onChange={(e) => handleCategoryStyleChange(cat, 'color', e.target.value)} className="w-6 h-6 rounded-md cursor-pointer bg-transparent border border-white/20" title="Cor da categoria" />
                   <button type="button" onClick={() => handleRemoveCategory(cat)} className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none" title="Remover categoria">
                     <i className="fa-solid fa-xmark" />

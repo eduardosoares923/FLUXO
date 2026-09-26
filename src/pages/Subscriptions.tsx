@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, getCardInvoiceMonth, toPersonKeys } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../components/CustomSelect';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
@@ -34,7 +35,7 @@ export default function Subscriptions() {
     return list.length > 0 ? list : ['Eduardo', 'Mãe', 'Rodrigo'];
   }, [personsList]);
 
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, watch, control, formState: { errors, isSubmitting } } = useForm({
     defaultValues: { name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: '' },
   });
 
@@ -279,12 +280,12 @@ export default function Subscriptions() {
           <input type="text" placeholder="Buscar assinatura..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none" />
         </div>
         <div className="flex gap-3">
-          <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="flex-1 w-full md:w-[150px] px-3 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none">
+          <CustomSelect value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
             <option value="all">Cobrança</option><option value="account">Contas</option><option value="card">Cartões</option>
-          </select>
-          <select value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px] px-3 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none">
+          </CustomSelect>
+          <CustomSelect value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
             <option value="all">Pessoas</option>{availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-          </select>
+          </CustomSelect>
         </div>
       </div>
 
@@ -344,11 +345,13 @@ export default function Subscriptions() {
               );
             })()}
 
-            <select {...register('paymentMethod')} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]">
-              <option value="account">Conta Padrão</option>
-              <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
-              <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
-            </select>
+            <Controller name="paymentMethod" control={control} render={({ field }) => (
+              <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
+                <option value="account">Conta Padrão</option>
+                <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
+                <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
+              </CustomSelect>
+            )} />
 
             {/* SEÇÃO RATEIO ENXUTA */}
             <div className="mt-2 p-4 bg-white/5 rounded-2xl">

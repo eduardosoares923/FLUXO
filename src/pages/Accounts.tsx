@@ -4,6 +4,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, maskCurrency, normalize } from '../utils/format';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useUIStore } from '../stores/useUIStore';
+import { CustomSelect } from '../components/CustomSelect';
 import { Account, Person, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
@@ -152,12 +153,12 @@ export default function Accounts() {
             <input placeholder="Nome (Ex: Conta Corrente)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
             <input placeholder="Banco (Opcional)" value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
             <input type="number" step="0.01" placeholder="Saldo Inicial" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
-            <select value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b] text-white">
+            <CustomSelect value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })}>
               <option value="">Geral (sem dono específico)</option>
               {personOptions.map((name) => (
                 <option key={name} value={name}>{name}</option>
               ))}
-            </select>
+            </CustomSelect>
             {personOptions.length === 0 && (
               <p className="text-xs text-[#8fa39a] -mt-2">Nenhuma pessoa cadastrada ainda. Cadastre na aba "Pessoas" pra poder escolher aqui.</p>
             )}

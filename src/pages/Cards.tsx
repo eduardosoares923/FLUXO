@@ -4,6 +4,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, normalize, toPersonKeys, generateId } from '../utils/format';
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../components/CustomSelect';
 import { Account, Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
@@ -302,10 +303,10 @@ export default function Cards() {
                 {deductFromAccount && (
                   <>
                     <label className="text-xs uppercase font-bold text-[#8fa39a] mt-2 block">Pagar com qual conta?</label>
-                    <select value={payFromAccount} onChange={(e) => setPayFromAccount(e.target.value)} className="w-full mt-1 p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                    <CustomSelect value={payFromAccount} onChange={(e) => setPayFromAccount(e.target.value)} className="mt-1">
                       <option value="">Selecione a conta</option>
                       {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
-                    </select>
+                    </CustomSelect>
                   </>
                 )}
               </div>

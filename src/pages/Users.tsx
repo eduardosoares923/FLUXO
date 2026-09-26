@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useAuth, upsertUserLookup } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { auth } from '../firebase';
 import { toPersonKeys } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { CustomSelect } from '../components/CustomSelect';
 import { toast } from '../stores/useToastStore';
 import { User } from '../types';
 
@@ -34,6 +35,7 @@ export default function Users() {
     handleSubmit,
     reset,
     watch,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<UserFormValues>({
     defaultValues: {
@@ -262,11 +264,13 @@ export default function Users() {
 
               <div>
                 <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Cargo</label>
-                <select className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('role')}>
-                  <option value="usuario">Usuário Normal</option>
-                  <option value="gerente">Gerente</option>
-                  <option value="admin">Administrador</option>
-                </select>
+                <Controller name="role" control={control} render={({ field }) => (
+                  <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
+                    <option value="usuario">Usuário Normal</option>
+                    <option value="gerente">Gerente</option>
+                    <option value="admin">Administrador</option>
+                  </CustomSelect>
+                )} />
               </div>
 
               <div className="sm:col-span-2">

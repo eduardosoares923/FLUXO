@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
+import { CustomSelect } from '../components/CustomSelect';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys, generateId } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
@@ -109,7 +110,7 @@ export default function Transactions() {
   const availableCategories = useMemo(() => [...new Set(transactions.map((tx) => tx.category).filter(Boolean))].sort(), [transactions]);
   const allTags = useMemo(() => [...new Set(transactions.flatMap((tx: any) => Array.isArray(tx.tags) ? tx.tags : []))].sort(), [transactions]);
 
-  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, control, formState: { errors, isSubmitting } } = useForm({
     defaultValues: { description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: '', fromAccount: '', toAccount: '' },
   });
 
@@ -548,22 +549,22 @@ export default function Transactions() {
           <input type="text" placeholder="Buscar por descrição ou categoria..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-colors" />
         </div>
         <div className="flex gap-3">
-          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
+          <CustomSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px]">
             <option value="all">Tipos</option>
             <option value="income">Receitas</option>
             <option value="expense">Despesas</option>
             <option value="transfer">Transferências</option>
             <option value="invoice_payment">Pagamentos de Fatura</option>
-          </select>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[170px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
+          </CustomSelect>
+          <CustomSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[170px]">
             <option value="all">Categorias</option>
             {availableCategories.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </select>
+          </CustomSelect>
           {allTags.length > 0 && (
-            <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
+            <CustomSelect value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px]">
               <option value="all">Tags</option>
               {allTags.map((t) => (<option key={t} value={t}>#{t}</option>))}
-            </select>
+            </CustomSelect>
           )}
         </div>
       </div>
@@ -693,9 +694,11 @@ export default function Transactions() {
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase font-bold text-[#8fa39a]">Tipo</label>
-                <select {...register('type')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
-                  <option value="expense">Despesa (-)</option><option value="income">Receita (+)</option><option value="transfer">Transferência entre contas</option>
-                </select>
+                <Controller name="type" control={control} render={({ field }) => (
+                  <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
+                    <option value="expense">Despesa (-)</option><option value="income">Receita (+)</option><option value="transfer">Transferência entre contas</option>
+                  </CustomSelect>
+                )} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase font-bold text-[#8fa39a]">Data {paymentMode === 'installments' ? '(1ª)' : ''}</label>
@@ -724,27 +727,33 @@ export default function Transactions() {
                 <>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs uppercase font-bold text-[#8fa39a]">De (origem)</label>
-                    <select {...register('fromAccount')} disabled={!!editingId} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-50">
-                      <option value="">Selecione</option>
-                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
-                    </select>
+                    <Controller name="fromAccount" control={control} render={({ field }) => (
+                      <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} disabled={!!editingId}>
+                        <option value="">Selecione</option>
+                        {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
+                      </CustomSelect>
+                    )} />
                   </div>
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs uppercase font-bold text-[#8fa39a]">Para (destino)</label>
-                    <select {...register('toAccount')} disabled={!!editingId} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-50">
-                      <option value="">Selecione</option>
-                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
-                    </select>
+                    <Controller name="toAccount" control={control} render={({ field }) => (
+                      <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} disabled={!!editingId}>
+                        <option value="">Selecione</option>
+                        {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
+                      </CustomSelect>
+                    )} />
                   </div>
                 </>
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs uppercase font-bold text-[#8fa39a]">Conta / Cartão</label>
-                  <select {...register('paymentMethod')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
-                    <option value="account">Principal</option>
-                    <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
-                    <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
-                  </select>
+                  <Controller name="paymentMethod" control={control} render={({ field }) => (
+                    <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
+                      <option value="account">Principal</option>
+                      <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
+                      <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
+                    </CustomSelect>
+                  )} />
                 </div>
               )}
             </div>
@@ -764,9 +773,9 @@ export default function Transactions() {
                     </div>
                     <div className="flex-[2]">
                       <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Valor informado</label>
-                      <select value={installmentValueType} onChange={(e) => setInstallmentValueType(e.target.value)} className="w-full p-2.5 rounded-lg border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                      <CustomSelect value={installmentValueType} onChange={(e) => setInstallmentValueType(e.target.value)}>
                         <option value="total">Total da compra</option><option value="per">Valor da parcela</option>
-                      </select>
+                      </CustomSelect>
                     </div>
                   </div>
                 )}
@@ -784,9 +793,9 @@ export default function Transactions() {
                 <div className="mt-4 animate-in slide-in-from-top-2">
                   <div className="mb-3">
                     <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Quem pagou</label>
-                    <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className="w-full p-2.5 rounded-lg border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                    <CustomSelect value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
                       {availablePersons.map((pName) => (<option key={pName} value={pName}>{pName}</option>))}
-                    </select>
+                    </CustomSelect>
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs text-[#8fa39a]">Marque quem participa:</span>

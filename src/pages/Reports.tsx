@@ -3,10 +3,22 @@ import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, parseTxDate } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
+import { CustomSelect } from '../components/CustomSelect';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
 const ReportsCharts = lazy(() => import('../components/ReportsCharts'));
+
+function shiftMonth(monthStr: string, delta: number) {
+  const [y, m] = monthStr.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(monthStr: string) {
+  const [y, m] = monthStr.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+}
 
 export default function Reports() {
   const { session, canAccessPerson } = useAuth() as { session: User; canAccessPerson: (p?: string, tx?: any) => boolean };
@@ -301,11 +313,15 @@ export default function Reports() {
         <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Relatórios</h2>
         <p className="hidden print:block text-sm text-[#8fa39a]">{selectedMonth} &bull; {selectedPerson === 'todos' ? 'Todos (Consolidado)' : selectedPerson}</p>
         <div className="no-print flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="flex-1 md:flex-none p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
-          <select value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+          <div className="flex items-center gap-1 bg-black/20 border border-white/10 rounded-xl p-1">
+            <button onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8fa39a] hover:text-white hover:bg-white/10 transition-colors"><i className="fa-solid fa-chevron-left" /></button>
+            <span className="px-2 text-sm font-bold text-[#f2f0ea] capitalize whitespace-nowrap">{monthLabel(selectedMonth)}</span>
+            <button onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8fa39a] hover:text-white hover:bg-white/10 transition-colors"><i className="fa-solid fa-chevron-right" /></button>
+          </div>
+          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none">
             <option value="todos">Todos (Consolidado)</option>
             {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-          </select>
+          </CustomSelect>
           <button onClick={handleExportCSV} className="w-11 h-11 flex items-center justify-center rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors" title="Exportar para Excel"><i className="fa-solid fa-file-excel" /></button>
           <button onClick={() => window.print()} className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors" title="Imprimir / PDF"><i className="fa-solid fa-print" /></button>
         </div>
