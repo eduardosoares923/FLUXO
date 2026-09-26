@@ -1,9 +1,11 @@
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCollection } from '../hooks/useCollection';
+import { formatDate } from '../utils/format';
 import { RouteLoading } from './RouteLoading';
 import { GlobalSearch } from './GlobalSearch';
-import { User } from '../types';
+import { User, Transaction } from '../types';
 
 const NAV_GROUPS = [
   {
@@ -69,6 +71,15 @@ export function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const { data: activityTx } = useCollection<Transaction>('transactions');
+
+  const recentActivity = useMemo(() =>
+    [...activityTx]
+      .filter((t: any) => t.updatedAt)
+      .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 8),
+    [activityTx]);
 
   const visibleProfileItems = PROFILE_ITEMS.filter((item) => !item.module || hasPermission(item.module));
   const visibleMobileOther = MOBILE_ALL_OTHER.filter((item) => !item.module || hasPermission(item.module));
@@ -114,6 +125,17 @@ export function Layout() {
             {!collapsed && <span className="flex-1 text-left">Buscar...</span>}
             {!collapsed && <kbd className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded">⌘K</kbd>}
           </button>
+          <div className="relative">
+            <button
+              onClick={() => setActivityOpen(true)}
+              className="flex items-center gap-2 text-[#8fa39a] hover:text-white bg-white/5 hover:bg-white/10 rounded-xl px-3 py-2 text-sm transition-colors w-full"
+              title="Atividades recentes"
+            >
+              <i className="fa-solid fa-bell" />
+              {!collapsed && <span className="flex-1 text-left">Atividades</span>}
+              {recentActivity.length > 0 && <span className="w-2 h-2 rounded-full bg-[#e3b04b]" />}
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-4 flex flex-col gap-1">
@@ -209,6 +231,25 @@ export function Layout() {
 
       <GlobalSearch isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
 
+      {activityOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70" onClick={() => setActivityOpen(false)}>
+          <div className="bg-[#141d1a] border border-white/10 rounded-3xl w-full max-w-md max-h-[80vh] overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3 px-2">
+              <h3 className="text-lg font-bold text-[#f2f0ea] flex items-center gap-2"><i className="fa-solid fa-bell text-[#e3b04b]" /> Atividades recentes</h3>
+              <button onClick={() => setActivityOpen(false)} className="w-8 h-8 rounded-lg hover:bg-white/10 text-[#8fa39a] flex items-center justify-center"><i className="fa-solid fa-xmark" /></button>
+            </div>
+            {recentActivity.length === 0 ? (
+              <p className="text-sm text-[#8fa39a] p-4 text-center">Nenhuma atividade recente.</p>
+            ) : recentActivity.map((tx: any) => (
+              <div key={tx.id} className="p-3 rounded-xl hover:bg-white/5 text-sm">
+                <div className="text-[#f2f0ea] font-semibold truncate">{tx.updatedBy || tx.createdBy || 'Alguém'} {tx.createdAt === tx.updatedAt ? 'criou' : 'editou'} "{tx.description}"</div>
+                <div className="text-xs text-[#8fa39a] mt-0.5">{formatDate(tx.updatedAt?.slice(0, 10))}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {mobileMoreOpen && (
         <div className="md:hidden fixed inset-0 z-[60] flex items-end" onClick={() => setMobileMoreOpen(false)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -221,6 +262,13 @@ export function Layout() {
               >
                 <i className="fa-solid fa-magnifying-glass text-xl text-[#e3b04b]" />
                 <span className="text-xs font-semibold text-center">Buscar</span>
+              </button>
+              <button
+                onClick={() => { setMobileMoreOpen(false); setActivityOpen(true); }}
+                className="flex flex-col items-center justify-center gap-2 p-3 rounded-2xl bg-white/5 text-[#c9d2cf] relative"
+              >
+                <i className="fa-solid fa-bell text-xl text-[#e3b04b]" />
+                <span className="text-xs font-semibold text-center">Atividades</span>
               </button>
               {visibleMobileOther.map((item) => (
                 <NavLink

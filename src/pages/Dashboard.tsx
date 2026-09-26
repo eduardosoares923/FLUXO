@@ -93,10 +93,14 @@ export default function Dashboard() {
   const { privacyMode, togglePrivacyMode, selectedPerson, setSelectedPerson } = useUIStore();
 
   const [budgets, setBudgets] = useState<Record<string, number>>({});
+  const [categoryStyles, setCategoryStyles] = useState<Record<string, { icon: string; color: string }>>({});
   useEffect(() => {
     getDoc(doc(db, 'settings', 'budgets')).then((snap) => {
       if (snap.exists()) setBudgets(snap.data() as Record<string, number>);
     }).catch((e) => console.error('Erro ao carregar metas:', e));
+    getDoc(doc(db, 'settings', 'categoryStyles')).then((snap) => {
+      if (snap.exists()) setCategoryStyles(snap.data() as Record<string, { icon: string; color: string }>);
+    }).catch((e) => console.error('Erro ao carregar estilos de categoria:', e));
   }, []);
 
   const [navDate, setNavDate] = useState(() => new Date());
@@ -418,8 +422,8 @@ export default function Dashboard() {
               {recentTx.map((tx) => (
                 <div key={tx.id} className="group p-3 sm:p-4 rounded-[16px] sm:rounded-2xl bg-black/10 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 sm:gap-4 border border-white/[0.02] hover:border-white/10">
                   <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : 'bg-white/10 text-[#8fa39a]'}`}>
-                      <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : categoryStyles[tx.category] ? '' : 'bg-white/10 text-[#8fa39a]'}`} style={tx.type === 'expense' && categoryStyles[tx.category] ? { backgroundColor: `${categoryStyles[tx.category].color}26`, color: categoryStyles[tx.category].color } : undefined}>
+                      <i className={`fa-solid ${tx.type === 'expense' && categoryStyles[tx.category]?.icon ? categoryStyles[tx.category].icon : iconForCategory(tx.category, tx.type)}`} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="font-bold text-[#f2f0ea] truncate text-[0.95rem] sm:text-[1.05rem] leading-tight">{tx.description}</div>

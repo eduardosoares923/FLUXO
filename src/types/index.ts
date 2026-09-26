@@ -23,6 +23,7 @@ export interface Transaction {
   transferId?: string;
   transferAccountId?: string;
   paidCardId?: string;
+  tags?: string[];
   installmentIndex?: number;
   totalInstallments?: number;
   installmentAmount?: number;

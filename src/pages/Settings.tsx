@@ -14,6 +14,13 @@ const DEFAULT_CATEGORIES = [
   'Lazer', 'Salário', 'Investimentos', 'Assinaturas', 'Outros',
 ];
 
+const ICON_OPTIONS = [
+  'fa-bag-shopping', 'fa-house', 'fa-car', 'fa-bus', 'fa-heart-pulse', 'fa-graduation-cap',
+  'fa-gamepad', 'fa-film', 'fa-plane', 'fa-utensils', 'fa-mug-hot', 'fa-dumbbell',
+  'fa-gift', 'fa-paw', 'fa-baby', 'fa-shirt', 'fa-wrench', 'fa-bolt',
+  'fa-mobile-screen', 'fa-money-bill-wave', 'fa-piggy-bank', 'fa-chart-line', 'fa-rotate', 'fa-tag',
+];
+
 export default function Settings() {
   const { session, hasPermission } = useAuth() as { session: User; hasPermission: (r: string, a?: string) => boolean };
   const { theme, toggleTheme } = useUIStore();
@@ -26,6 +33,7 @@ export default function Settings() {
   const { data: paidInvoices, saveRecord: savePaidInvoice } = useCollection('paidInvoices');
 
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
+  const [categoryStyles, setCategoryStyles] = useState<Record<string, { icon: string; color: string }>>({});
   const [newCat, setNewCat] = useState('');
   const [loadingCats, setLoadingCats] = useState(true);
   const [budgets, setBudgets] = useState<Record<string, number>>({});
@@ -46,6 +54,10 @@ export default function Settings() {
         const budgetsSnap = await getDoc(doc(db, 'settings', 'budgets'));
         if (budgetsSnap.exists()) {
           setBudgets(budgetsSnap.data() as Record<string, number>);
+        }
+        const stylesSnap = await getDoc(doc(db, 'settings', 'categoryStyles'));
+        if (stylesSnap.exists()) {
+          setCategoryStyles(stylesSnap.data() as Record<string, { icon: string; color: string }>);
         }
       } catch (e) {
         console.error('Erro ao carregar categorias:', e);
@@ -86,6 +98,16 @@ export default function Settings() {
       toast.info(`Categoria "${catToRemove}" removida.`);
     } catch (err) {
       toast.error('Erro ao atualizar categorias.');
+    }
+  }
+
+  async function handleCategoryStyleChange(cat: string, field: 'icon' | 'color', value: string) {
+    const updated = { ...categoryStyles, [cat]: { icon: categoryStyles[cat]?.icon || ICON_OPTIONS[0], color: categoryStyles[cat]?.color || '#e3b04b', [field]: value } };
+    setCategoryStyles(updated);
+    try {
+      await setDoc(doc(db, 'settings', 'categoryStyles'), updated, { merge: true });
+    } catch {
+      toast.error('Erro ao salvar estilo da categoria.');
     }
   }
 
@@ -266,12 +288,20 @@ export default function Settings() {
 
         <div className="flex flex-wrap gap-2.5">
           {categories.map((cat) => (
-            <span key={cat} className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-xl text-sm font-medium text-[#f2f0ea]">
+            <span key={cat} className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-sm font-medium text-[#f2f0ea]">
+              <i className={`fa-solid ${categoryStyles[cat]?.icon || 'fa-tag'}`} style={{ color: categoryStyles[cat]?.color || '#8fa39a' }} />
               {cat}
               {canManage && (
-                <button type="button" onClick={() => handleRemoveCategory(cat)} className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none" title="Remover categoria">
-                  <i className="fa-solid fa-xmark" />
-                </button>
+                <>
+                  <select value={categoryStyles[cat]?.icon || ''} onChange={(e) => handleCategoryStyleChange(cat, 'icon', e.target.value)} className="bg-black/40 border border-white/10 rounded-lg text-xs p-1 outline-none">
+                    <option value="" disabled>Ícone</option>
+                    {ICON_OPTIONS.map((ic) => (<option key={ic} value={ic}>{ic.replace('fa-', '')}</option>))}
+                  </select>
+                  <input type="color" value={categoryStyles[cat]?.color || '#e3b04b'} onChange={(e) => handleCategoryStyleChange(cat, 'color', e.target.value)} className="w-6 h-6 rounded cursor-pointer bg-transparent border-0" title="Cor da categoria" />
+                  <button type="button" onClick={() => handleRemoveCategory(cat)} className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none" title="Remover categoria">
+                    <i className="fa-solid fa-xmark" />
+                  </button>
+                </>
               )}
             </span>
           ))}

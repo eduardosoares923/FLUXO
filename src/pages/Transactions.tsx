@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
@@ -58,8 +60,20 @@ export default function Transactions() {
   const pendingDeleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [calDate, setCalDate] = useState(() => new Date());
+  const [dayFilter, setDayFilter] = useState<string | null>(null);
+  const [categoryStyles, setCategoryStyles] = useState<Record<string, { icon: string; color: string }>>({});
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'categoryStyles')).then((snap) => {
+      if (snap.exists()) setCategoryStyles(snap.data() as Record<string, { icon: string; color: string }>);
+    }).catch((e) => console.error('Erro ao carregar estilos de categoria:', e));
+  }, []);
   const [typeFilter, setTypeFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState('all');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
   const [paymentMode, setPaymentMode] = useState('single');
   const [installmentsCount, setInstallmentsCount] = useState(2);
@@ -93,24 +107,76 @@ export default function Transactions() {
   }, [personsList]);
 
   const availableCategories = useMemo(() => [...new Set(transactions.map((tx) => tx.category).filter(Boolean))].sort(), [transactions]);
+  const allTags = useMemo(() => [...new Set(transactions.flatMap((tx: any) => Array.isArray(tx.tags) ? tx.tags : []))].sort(), [transactions]);
 
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm({
+  const { register, handleSubmit, reset, watch, setValue, formState: { errors, isSubmitting } } = useForm({
     defaultValues: { description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: '', fromAccount: '', toAccount: '' },
   });
 
   const watchedAmount = watch('amount');
   const watchedType = watch('type');
+  const watchedDescription = watch('description');
 
-  const visible = useMemo(() => 
+  const smartSuggestion = useMemo(() => {
+    const desc = (watchedDescription || '').trim().toLowerCase();
+    if (desc.length < 3 || watchedType === 'transfer') return null;
+    const match = [...transactions]
+      .filter((t: any) => t.id !== editingId && t.type === watchedType && (t.description || '').trim().toLowerCase() === desc)
+      .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    return match || null;
+  }, [watchedDescription, watchedType, transactions, editingId]);
+
+  function applySuggestion() {
+    if (!smartSuggestion) return;
+    if (smartSuggestion.category) setValue('category', smartSuggestion.category);
+    setValue('amount', String(smartSuggestion.amount));
+    setValue('paymentMethod', smartSuggestion.paymentMethod);
+  }
+
+  const filteredBase = useMemo(() =>
     [...transactions]
       .filter((tx) => !pendingDeleteIds.has(tx.id as string))
       .filter((tx) => canAccessPerson(tx.person, tx))
       .filter((tx) => typeFilter === 'all' || (typeFilter === 'transfer' ? (tx.type === 'transfer_out' || tx.type === 'transfer_in') : tx.type === typeFilter))
       .filter((tx) => categoryFilter === 'all' || tx.category === categoryFilter)
-      .filter((tx) => !search || tx.description?.toLowerCase().includes(search.toLowerCase()) || tx.category?.toLowerCase().includes(search.toLowerCase()))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
-    [transactions, pendingDeleteIds, canAccessPerson, typeFilter, categoryFilter, search]
+      .filter((tx: any) => tagFilter === 'all' || (Array.isArray(tx.tags) && tx.tags.includes(tagFilter)))
+      .filter((tx) => !search || tx.description?.toLowerCase().includes(search.toLowerCase()) || tx.category?.toLowerCase().includes(search.toLowerCase())),
+    [transactions, pendingDeleteIds, canAccessPerson, typeFilter, categoryFilter, tagFilter, search]
   );
+
+  const visible = useMemo(() =>
+    filteredBase
+      .filter((tx) => !dayFilter || tx.date === dayFilter)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [filteredBase, dayFilter]
+  );
+
+  const calendarDays = useMemo(() => {
+    const year = calDate.getFullYear();
+    const month = calDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const startWeekday = firstDay.getDay();
+    const byDay = new Map<string, { income: number; expense: number }>();
+    filteredBase.forEach((tx) => {
+      const d = new Date(tx.date + 'T00:00:00');
+      if (d.getFullYear() !== year || d.getMonth() !== month) return;
+      const key = tx.date;
+      if (!byDay.has(key)) byDay.set(key, { income: 0, expense: 0 });
+      const b = byDay.get(key)!;
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income' || tx.type === 'transfer_in') b.income += amt;
+      else if (tx.type === 'expense' || tx.type === 'transfer_out' || tx.type === 'invoice_payment') b.expense += amt;
+    });
+    const cells: ({ day: number; dateStr: string; income: number; expense: number } | null)[] = [];
+    for (let i = 0; i < startWeekday; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const b = byDay.get(dateStr) || { income: 0, expense: 0 };
+      cells.push({ day: d, dateStr, income: b.income, expense: b.expense });
+    }
+    return cells;
+  }, [filteredBase, calDate]);
 
   function resetSplitAndInstallments() {
     setIsSplit(false); setSplitItems({}); setPaidBy(session?.person || ''); setPaymentMode('single'); setInstallmentsCount(2); setInstallmentValueType('total'); setUpdateFuture(false);
@@ -118,7 +184,7 @@ export default function Transactions() {
 
   function openNew() {
     reset({ description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: session?.person || '', fromAccount: '', toAccount: '' });
-    resetSplitAndInstallments(); setEditingTx(null); setEditingId(null); setShowForm(true);
+    resetSplitAndInstallments(); setTags([]); setTagInput(''); setEditingTx(null); setEditingId(null); setShowForm(true);
   }
 
   function openEdit(tx: any) {
@@ -137,6 +203,7 @@ export default function Transactions() {
       setSplitItems(items);
     } else setSplitItems({});
     setPaidBy(tx.paidBy || session?.person || '');
+    setTags(Array.isArray(tx.tags) ? tx.tags : []); setTagInput('');
 
     setPaymentMode('single'); setUpdateFuture(false);
     setEditingTx(tx); setEditingId(tx.id); setShowForm(true);
@@ -159,6 +226,16 @@ export default function Transactions() {
     setSplitItems((prev) => { const copy = { ...prev }; if (checked) copy[pName] = copy[pName] || ''; else delete copy[pName]; return copy; });
   }
 
+  function addTag() {
+    const t = tagInput.trim();
+    if (!t || tags.includes(t)) { setTagInput(''); return; }
+    setTags((prev) => [...prev, t]);
+    setTagInput('');
+  }
+  function removeTag(t: string) {
+    setTags((prev) => prev.filter((x) => x !== t));
+  }
+
   function handleSplitValueChange(pName: string, val: string) {
     setSplitItems((prev) => ({ ...prev, [pName]: val }));
   }
@@ -175,9 +252,15 @@ export default function Transactions() {
   }
 
   function accountNameFor(pm?: string) {
-    if (!pm?.startsWith('acc_')) return 'Conta';
-    const acc = accounts.find((a) => `acc_${a.id}` === pm);
-    return acc ? acc.name : 'Conta';
+    if (pm?.startsWith('acc_')) {
+      const acc = accounts.find((a) => `acc_${a.id}` === pm);
+      return acc ? acc.name : 'Conta';
+    }
+    if (pm?.startsWith('card_')) {
+      const c = cards.find((c: any) => `card_${c.id}` === pm);
+      return c ? c.name : 'Cartão';
+    }
+    return 'Principal';
   }
 
   function computeInvoiceMonth(dateStr: string, pm: string) {
@@ -259,7 +342,7 @@ export default function Transactions() {
             amount: instAmt, installmentAmount: instAmt, totalPurchaseAmount: totalAmt, category: data.category?.trim() || '',
             paymentMethod: data.paymentMethod, person: finalPerson, personKeys: toPersonKeys(finalPerson), date: instDate,
             invoiceMonth: computeInvoiceMonth(instDate, data.paymentMethod), installmentIndex: i + 1, totalInstallments: installmentsCount,
-            isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, userId: session?.id,
+            isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags, userId: session?.id,
           } as Transaction));
         }
         await Promise.all(saves);
@@ -268,7 +351,7 @@ export default function Transactions() {
         const record: any = {
           id: editingId || undefined, description: data.description.trim(), amount: Number(data.amount), type: data.type,
           category: data.category?.trim() || '', date: data.date, paymentMethod: data.paymentMethod, person: finalPerson,
-          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, userId: session?.id,
+          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags, userId: session?.id,
           invoiceMonth: computeInvoiceMonth(data.date, data.paymentMethod),
         };
         await saveRecord(record);
@@ -410,12 +493,53 @@ export default function Transactions() {
       {/* HEADER E AÇÃO PRINCIPAL */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
         <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Livro Caixa</h2>
-        {canEdit && (
-          <button className="w-full sm:w-auto px-5 py-3.5 sm:py-3 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-extrabold text-[0.95rem] shadow-[0_4px_14px_rgba(227,176,75,0.25)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2" onClick={openNew}>
-            <i className="fa-solid fa-plus" /> Nova Transação
-          </button>
-        )}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex bg-white/5 rounded-xl p-1 shrink-0">
+            <button onClick={() => setViewMode('list')} className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'list' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}><i className="fa-solid fa-list mr-1.5" />Lista</button>
+            <button onClick={() => setViewMode('calendar')} className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'calendar' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}><i className="fa-solid fa-calendar-days mr-1.5" />Calendário</button>
+          </div>
+          {canEdit && (
+            <button className="flex-1 sm:flex-none px-5 py-3.5 sm:py-3 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-extrabold text-[0.95rem] shadow-[0_4px_14px_rgba(227,176,75,0.25)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2" onClick={openNew}>
+              <i className="fa-solid fa-plus" /> Nova Transação
+            </button>
+          )}
+        </div>
       </div>
+
+      {dayFilter && (
+        <div className="flex items-center gap-2 mb-4 bg-[#e3b04b]/10 text-[#e3b04b] px-4 py-2.5 rounded-xl text-sm font-bold w-fit">
+          <i className="fa-solid fa-calendar-day" /> Filtrado por {formatDate(dayFilter)}
+          <button onClick={() => setDayFilter(null)} className="hover:text-white"><i className="fa-solid fa-xmark" /></button>
+        </div>
+      )}
+
+      {viewMode === 'calendar' && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-4 sm:p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white flex items-center justify-center"><i className="fa-solid fa-chevron-left" /></button>
+            <strong className="text-[#f2f0ea] capitalize">{calDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white flex items-center justify-center"><i className="fa-solid fa-chevron-right" /></button>
+          </div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
+            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold text-[#8fa39a] uppercase">{d}</div>))}
+          </div>
+          <div className="grid grid-cols-7 gap-1 sm:gap-2">
+            {calendarDays.map((cell, i) => cell === null ? (
+              <div key={`empty-${i}`} />
+            ) : (
+              <button
+                key={cell.dateStr}
+                onClick={() => setDayFilter(cell.dateStr === dayFilter ? null : cell.dateStr)}
+                className={`aspect-square rounded-lg sm:rounded-xl p-1 sm:p-2 flex flex-col items-center justify-start text-left transition-colors ${dayFilter === cell.dateStr ? 'bg-[#e3b04b]/20 ring-2 ring-[#e3b04b]' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}
+              >
+                <span className="text-xs sm:text-sm font-bold text-[#f2f0ea]">{cell.day}</span>
+                {cell.expense > 0 && <span className="text-[8px] sm:text-[10px] font-mono text-[#f87171] leading-tight mt-auto">-{formatCurrency(cell.expense).replace('R$', '')}</span>}
+                {cell.income > 0 && <span className="text-[8px] sm:text-[10px] font-mono text-[#34d399] leading-tight">+{formatCurrency(cell.income).replace('R$', '')}</span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* FILTROS RESPONSIVOS */}
       <div className="bg-white/[0.02] border border-white/[0.08] p-4 sm:p-5 rounded-2xl shadow-lg flex flex-col md:flex-row gap-3 mb-6">
@@ -435,6 +559,12 @@ export default function Transactions() {
             <option value="all">Categorias</option>
             {availableCategories.map((c) => (<option key={c} value={c}>{c}</option>))}
           </select>
+          {allTags.length > 0 && (
+            <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px] px-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none appearance-none">
+              <option value="all">Tags</option>
+              {allTags.map((t) => (<option key={t} value={t}>#{t}</option>))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -454,7 +584,7 @@ export default function Transactions() {
       )}
 
       {/* LISTA DE TRANSAÇÕES (Substituindo a antiga Tabela HTML) */}
-      {visible.length === 0 ? (
+      {viewMode === 'calendar' && !dayFilter ? null : visible.length === 0 ? (
         <EmptyState icon="fa-receipt" title="Nenhuma transação encontrada" description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
       ) : (
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
@@ -486,8 +616,8 @@ export default function Transactions() {
                   )}
                   
                   {/* Ícone (Mobile + PC) */}
-                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : 'bg-white/10 text-[#8fa39a]'}`}>
-                    <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : categoryStyles[tx.category] ? '' : 'bg-white/10 text-[#8fa39a]'}`} style={tx.type === 'expense' && categoryStyles[tx.category] ? { backgroundColor: `${categoryStyles[tx.category].color}26`, color: categoryStyles[tx.category].color } : undefined}>
+                    <i className={`fa-solid ${tx.type === 'expense' && categoryStyles[tx.category]?.icon ? categoryStyles[tx.category].icon : iconForCategory(tx.category, tx.type)}`} />
                   </div>
 
                   {/* Descrição e Infos (Cresce) */}
@@ -497,6 +627,11 @@ export default function Transactions() {
                        {tx.groupId && <i className="fa-solid fa-layer-group text-xs text-[#e3b04b]" />}
                      </div>
                      <div className="text-xs text-[#8fa39a] mt-0.5">{formatDate(tx.date)} &bull; {tx.category} &bull; {tx.person}</div>
+                     {Array.isArray(tx.tags) && tx.tags.length > 0 && (
+                       <div className="flex flex-wrap gap-1 mt-1">
+                         {tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full">#{t}</span>))}
+                       </div>
+                     )}
                   </div>
 
                   {/* Colunas Exclusivas PC */}
@@ -504,6 +639,7 @@ export default function Transactions() {
                   <div className="hidden md:flex flex-1 min-w-[200px] items-center gap-2 text-[#f2f0ea] font-medium text-[0.95rem] truncate">
                      <span className="truncate">{tx.description}</span>
                      {tx.groupId && <i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" title="Parcelamento" />}
+                     {Array.isArray(tx.tags) && tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full shrink-0">#{t}</span>))}
                   </div>
                   <div className="hidden md:block w-[140px] text-sm text-[#8fa39a] truncate"><span className="bg-white/5 px-2 py-1 rounded-md">{tx.category}</span></div>
                   <div className="hidden md:block w-[100px] text-sm text-[#8fa39a] truncate">{tx.person}</div>
@@ -546,6 +682,12 @@ export default function Transactions() {
               <label className="text-xs uppercase font-bold text-[#8fa39a]">Descrição</label>
               <input {...register('description')} placeholder="Ex: Supermercado" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
               {errors.description && <span className="text-red-400 text-xs mt-1">{(errors.description as any).message}</span>}
+              {smartSuggestion && (
+                <button type="button" onClick={applySuggestion} className="mt-1 text-left text-xs bg-[#e3b04b]/10 text-[#e3b04b] hover:bg-[#e3b04b]/20 rounded-lg px-3 py-2 transition-colors">
+                  <i className="fa-solid fa-lightbulb mr-1.5" />
+                  Última vez: {smartSuggestion.category || 'sem categoria'} &bull; {formatCurrency(smartSuggestion.amount)} &bull; {accountNameFor(smartSuggestion.paymentMethod)}. Usar esses dados?
+                </button>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -671,6 +813,31 @@ export default function Transactions() {
                 </div>
               )}
             </div>
+            )}
+
+            {watchedType !== 'transfer' && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase font-bold text-[#8fa39a]">Tags</label>
+                <div className="flex gap-2">
+                  <input
+                    value={tagInput}
+                    onChange={(e) => setTagInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } }}
+                    placeholder="Ex: viagem (Enter pra adicionar)"
+                    className="flex-1 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none"
+                  />
+                  <button type="button" onClick={addTag} className="px-4 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold">Add</button>
+                </div>
+                {tags.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {tags.map((t) => (
+                      <span key={t} className="flex items-center gap-1.5 bg-[#8b5cf6]/15 text-[#8b5cf6] text-xs font-bold px-2.5 py-1 rounded-full">
+                        #{t} <button type="button" onClick={() => removeTag(t)} className="hover:text-white"><i className="fa-solid fa-xmark" /></button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
