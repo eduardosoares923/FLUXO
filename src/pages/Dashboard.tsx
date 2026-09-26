@@ -88,7 +88,8 @@ export default function Dashboard() {
   const { data: accounts, loading: loadingAcc } = useCollection<any>('accounts');
   const { data: subscriptions } = useCollection<any>('subscriptions');
   const { data: cards } = useCollection<any>('cards');
-  const { privacyMode, togglePrivacyMode } = useUIStore();
+  const { data: personsList } = useCollection<{ id?: string; name?: string }>('persons');
+  const { privacyMode, togglePrivacyMode, selectedPerson, setSelectedPerson } = useUIStore();
 
   const [budgets, setBudgets] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -130,8 +131,14 @@ export default function Dashboard() {
   function goToday() { setNavDate(new Date()); }
 
   const visibleAccounts = useMemo(() => (session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner))), [accounts, session, canAccessPerson]);
-  const visibleTx = useMemo(() => transactions.filter((tx) => canAccessPerson(tx.person, tx)), [transactions, canAccessPerson]);
+  const visibleTx = useMemo(() =>
+    transactions
+      .filter((tx) => canAccessPerson(tx.person, tx))
+      .filter((tx) => selectedPerson === 'all' || tx.person === selectedPerson),
+    [transactions, canAccessPerson, selectedPerson]);
   const currentPeriodTxs = useMemo(() => visibleTx.filter((tx) => { const d = parseTxDate(tx.date); return d && d.getMonth() === navMonth && d.getFullYear() === navYear; }), [visibleTx, navMonth, navYear]);
+
+  const personOptions = useMemo(() => (personsList || []).map((p) => p.name).filter((n): n is string => Boolean(n) && canAccessPerson(n)), [personsList, canAccessPerson]);
 
   const currentBalance = useMemo(() => {
     let sum = 0; let fallbackIncome = 0; let fallbackExpense = 0; const fallbackAccs = new Set();
@@ -249,6 +256,12 @@ export default function Dashboard() {
           Olá, {session.name.split(' ')[0]}
         </h2>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+        {personOptions.length > 0 && (
+          <select value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="px-3 h-10 rounded-xl border border-white/10 bg-white/5 text-[#f2f0ea] text-xs sm:text-sm font-bold outline-none focus:border-[#e3b04b]" title="Filtrar painel por pessoa">
+            <option value="all">Todos</option>
+            {personOptions.map((name) => (<option key={name} value={name}>{name}</option>))}
+          </select>
+        )}
         <button onClick={handleCopySummary} className="flex items-center gap-2 px-3 sm:px-4 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold text-xs sm:text-sm transition-colors shrink-0" title="Copiar resumo do mês pro WhatsApp">
           <i className="fa-brands fa-whatsapp text-[#34d399]" /> <span className="hidden sm:inline">Copiar resumo</span>
         </button>
