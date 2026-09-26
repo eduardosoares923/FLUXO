@@ -18,6 +18,8 @@ export default function Reports() {
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedPerson, setSelectedPerson] = useState('todos');
+  const [simAmount, setSimAmount] = useState('');
+  const [simInstallments, setSimInstallments] = useState(1);
 
   const prevMonthStr = useMemo(() => {
     const [y, m] = selectedMonth.split('-').map(Number);
@@ -219,6 +221,54 @@ export default function Reports() {
     return months;
   }, [accessibleTx]);
 
+  const purchaseSimulation = useMemo(() => {
+    const amt = parseFloat(simAmount) || 0;
+    if (amt <= 0) return null;
+    const n = Math.max(1, Math.min(24, simInstallments));
+    const perInstallment = Math.round((amt / n) * 100) / 100;
+    return installmentProjection.map((m, idx) => ({
+      ...m,
+      comAcompra: m.total + (idx < n ? perInstallment : 0),
+    }));
+  }, [simAmount, simInstallments, installmentProjection]);
+
+  // Evolução de Patrimônio: reconstrói o saldo acumulado de meses anteriores subtraindo, do patrimônio de hoje,
+  // o fluxo líquido (receita - despesa - pagamento de fatura) de cada mês seguinte. Matemática exata, não uma estimativa.
+  const equityHistory = useMemo(() => {
+    const now = new Date();
+    const netByMonth: Record<string, number> = {};
+    const keys: string[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      keys.push(k);
+      netByMonth[k] = 0;
+    }
+    accessibleTx.forEach((tx) => {
+      const d = parseTxDate(tx.date);
+      if (!d) return;
+      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!(k in netByMonth)) return;
+      if (tx.type === 'transfer_out' || tx.type === 'transfer_in') return; // zero-soma, não muda o patrimônio total
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income') netByMonth[k] += amt;
+      else if (tx.type === 'expense' || tx.type === 'invoice_payment') netByMonth[k] -= amt;
+    });
+
+    const currentEquity = metrics.equity;
+    let running = currentEquity;
+    const points: { key: string; value: number }[] = [];
+    for (let i = keys.length - 1; i >= 0; i--) {
+      points.unshift({ key: keys[i], value: running });
+      running -= netByMonth[keys[i]];
+    }
+    return points.map((p) => {
+      const [y, m] = p.key.split('-');
+      const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'short' });
+      return { month: label, Patrimônio: Math.round(p.value * 100) / 100 };
+    });
+  }, [accessibleTx, metrics.equity]);
+
   function handleExportCSV() {
     if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
     const headers = ['Data', 'Descricao', 'Categoria', 'Pessoa', 'Tipo', 'Valor', 'Metodo'];
@@ -297,7 +347,7 @@ export default function Reports() {
           <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${metrics.commitment > 70 ? 'bg-red-500/20 text-red-500' : metrics.commitment < 50 ? 'bg-emerald-500/20 text-emerald-500' : 'bg-blue-500/20 text-blue-500'}`}>
             <i className={`fa-solid ${metrics.commitment > 70 ? 'fa-triangle-exclamation' : metrics.commitment < 50 ? 'fa-piggy-bank' : 'fa-chart-line'}`} />
           </div>
-          <div>
+          <div className="flex-1">
             <strong className={`block text-lg mb-0.5 ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
               {metrics.commitment > 70 ? 'Atenção: Alto Comprometimento de Renda' : metrics.commitment < 50 ? 'Excelente Gestão Financeira' : 'Orçamento sob Controle'}
             </strong>
@@ -305,17 +355,14 @@ export default function Reports() {
               {metrics.commitment > 70 ? `Você comprometeu ${metrics.commitment.toFixed(0)}% da sua receita neste mês. Considere rever despesas.` : metrics.commitment < 50 ? `Você economizou ${formatCurrency(metrics.economy)} este mês. Ótimo momento para aportar.` : `Seus gastos representam ${metrics.commitment.toFixed(0)}% da receita. Sua saúde financeira segue equilibrada.`}
             </p>
           </div>
+          <div className="text-center shrink-0 pl-4 border-l border-white/10" title="Indicador simplificado baseado só no % de comprometimento de renda do mês — não é uma métrica financeira precisa.">
+            <div className={`text-3xl font-black font-mono ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
+              {Math.max(0, Math.min(100, Math.round(100 - metrics.commitment)))}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-[#8fa39a] font-bold">Nota do mês</div>
+          </div>
         </div>
       )}
-
-      <Suspense fallback={<div className="h-40 flex items-center justify-center text-[#8fa39a] text-sm"><i className="fa-solid fa-spinner fa-spin mr-2" /> Carregando gráficos...</div>}>
-        <ReportsCharts
-          categoryStats={categoryStats}
-          personStats={personStats}
-          selectedPerson={selectedPerson}
-          last6MonthsTrend={last6MonthsTrend}
-        />
-      </Suspense>
 
       {settlements.length > 0 && (
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
@@ -353,16 +400,37 @@ export default function Reports() {
       {installmentProjection.some((m) => m.total > 0) && (
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
           <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-calendar-days text-[#e3b04b]" /> Projeção de Parcelas (6 meses)</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            {installmentProjection.map((m) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+            {(purchaseSimulation || installmentProjection).map((m) => (
               <div key={m.key} className="bg-white/[0.03] rounded-xl p-3 text-center">
                 <div className="text-[10px] uppercase tracking-wider text-[#8fa39a] font-bold mb-1 capitalize">{m.label}</div>
                 <div className="font-mono text-sm text-[#f2f0ea]">{formatCurrency(m.total)}</div>
+                {purchaseSimulation && (m as any).comAcompra !== m.total && (
+                  <div className="font-mono text-xs text-[#e3b04b] mt-0.5">→ {formatCurrency((m as any).comAcompra)}</div>
+                )}
               </div>
             ))}
           </div>
+
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-xs text-[#8fa39a] mb-3 flex items-center gap-2"><i className="fa-solid fa-circle-question" /> Simulador "Posso comprar?": compara o que você já tem parcelado com o que ficaria se somar essa compra. Não considera sua receita, é só uma comparação de comprometimento.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input type="number" step="0.01" placeholder="Valor da compra" value={simAmount} onChange={(e) => setSimAmount(e.target.value)} className="flex-1 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+              <input type="number" min="1" max="24" placeholder="Em quantas vezes" value={simInstallments} onChange={(e) => setSimInstallments(parseInt(e.target.value) || 1)} className="w-full sm:w-40 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+            </div>
+          </div>
         </div>
       )}
+
+      <Suspense fallback={<div className="h-40 flex items-center justify-center text-[#8fa39a] text-sm"><i className="fa-solid fa-spinner fa-spin mr-2" /> Carregando gráficos...</div>}>
+        <ReportsCharts
+          categoryStats={categoryStats}
+          personStats={personStats}
+          selectedPerson={selectedPerson}
+          last6MonthsTrend={last6MonthsTrend}
+          equityHistory={equityHistory}
+        />
+      </Suspense>
 
       {currentTxs.length === 0 && (
         <EmptyState icon="fa-chart-simple" title="Sem dados para este período" description="Selecione outro mês ou lance transações para visualizar as análises financeiras." />

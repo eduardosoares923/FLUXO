@@ -6,17 +6,20 @@ const PIE_COLORS = ['#e3b04b', '#3b82f6', '#8b5cf6', '#10b981', '#f87171', '#06b
 
 interface Stat { name: string; value: number; pct: number; }
 interface TrendPoint { month: string; Receitas: number; Despesas: number; }
+interface EquityPoint { month: string; Patrimônio: number; }
 
 export default function ReportsCharts({
   categoryStats,
   personStats,
   selectedPerson,
   last6MonthsTrend,
+  equityHistory,
 }: {
   categoryStats: Stat[];
   personStats: Stat[];
   selectedPerson: string;
   last6MonthsTrend: TrendPoint[];
+  equityHistory: EquityPoint[];
 }) {
   return (
     <>
@@ -80,6 +83,21 @@ export default function ReportsCharts({
               <Legend />
               <Line type="monotone" dataKey="Receitas" stroke="#34d399" strokeWidth={2.5} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="Despesas" stroke="#f87171" strokeWidth={2.5} dot={{ r: 3 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl mb-8">
+        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-arrow-trend-up text-[#34d399]" /> Evolução de Patrimônio</h3>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            <LineChart data={equityHistory}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+              <XAxis dataKey="month" stroke="#8fa39a" fontSize={12} />
+              <YAxis stroke="#8fa39a" fontSize={12} tickFormatter={(v) => formatCurrency(v).replace('R$', '')} width={70} />
+              <Tooltip formatter={(v: number) => formatCurrency(v)} contentStyle={{ background: '#141d1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
+              <Line type="monotone" dataKey="Patrimônio" stroke="#34d399" strokeWidth={2.5} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
