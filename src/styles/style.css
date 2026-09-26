@@ -6,6 +6,7 @@
 
 :root {
   /* Colors - Dark Theme (Default) */
+  color-scheme: dark;
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
   --text-primary: #f8fafc;
@@ -30,12 +31,48 @@
 }
 
 [data-theme="light"] {
+  color-scheme: light;
   --bg-primary: #f1f5f9;
   --bg-secondary: #ffffff;
   --text-primary: #0f172a;
   --text-secondary: #475569;
   --glass-bg: rgba(255, 255, 255, 0.7);
   --glass-border: rgba(0, 0, 0, 0.1);
+}
+
+/* Remove o contorno padrão do navegador ao clicar (ficava um retângulo cinza/branco feio
+   em botões sobre o fundo escuro), mas mantém um contorno visível ao navegar por teclado
+   (acessibilidade) via :focus-visible. */
+button:focus,
+a:focus,
+[role="button"]:focus,
+select:focus,
+input:focus {
+  outline: none;
+}
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Scrollbar customizada pro tema escuro (a scrollbar padrão do navegador aparecia clara) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
 }
 
 * {
@@ -56,6 +93,10 @@ a {
   color: var(--accent-primary);
   text-decoration: none;
   transition: var(--transition);
+}
+
+input, select, textarea {
+  color: inherit;
 }
 
 a:hover {
@@ -509,4 +550,34 @@ select.form-control option {
 [data-theme="light"] select.form-control option {
   background-color: #ffffff !important;
   color: #0f172a !important;
+}
+
+/* Impressão (Relatórios etc): o navegador já oferece "Salvar como PDF" no diálogo de
+   impressão, então não precisamos de uma lib extra — só precisamos que o layout saia
+   decente: sem a navegação do app, ocupando a largura da folha, com contraste de papel. */
+@media print {
+  aside, nav, .no-print {
+    display: none !important;
+  }
+  main {
+    overflow: visible !important;
+    padding: 0 !important;
+    height: auto !important;
+    width: 100% !important;
+  }
+  html, body, .flex.h-screen {
+    height: auto !important;
+    overflow: visible !important;
+  }
+  /* O app usa cores fixas em muitos componentes (fundo escuro, texto claro) que seria
+     arriscado sobrescrever um por um; inverter o esquema de cor no papel preserva o
+     contraste original (fundo passa a claro, texto a escuro) sem tocar nos componentes. */
+  .flex.h-screen {
+    filter: invert(1) hue-rotate(180deg);
+    background: #ffffff !important;
+  }
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
 }

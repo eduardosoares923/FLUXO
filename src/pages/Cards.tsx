@@ -184,16 +184,19 @@ export default function Cards() {
           <div
             key={card.id}
             onClick={() => openInvoice(card)}
-            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
+            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative overflow-hidden ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
           >
+            <div className="absolute inset-0 bg-gradient-to-br from-white/15 via-transparent to-black/20 pointer-events-none" />
             {card.id === bestCardTodayId && (
-              <span className="absolute -top-2.5 left-4 bg-[#34d399] text-black text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full flex items-center gap-1">
+              <span className="absolute -top-2.5 left-4 bg-[#34d399] text-black text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full flex items-center gap-1 z-10">
                 <i className="fa-solid fa-star" /> Melhor pra comprar hoje
               </span>
             )}
-            <div className="flex justify-between items-start">
-              <div className="w-12 h-8 bg-yellow-100/40 rounded flex items-center justify-center">
-                <div className="w-8 h-5 border border-yellow-800/30 rounded-sm" />
+            <div className="flex justify-between items-start relative z-10">
+              <div className="w-11 h-8 rounded-md bg-gradient-to-br from-yellow-200/90 to-yellow-500/70 shadow-inner flex items-center justify-center gap-[2px] p-1">
+                <div className="w-full h-full border border-yellow-900/40 rounded-sm grid grid-cols-3 gap-[1px] p-[2px]">
+                  {Array.from({ length: 6 }).map((_, i) => (<div key={i} className="bg-yellow-900/20 rounded-[1px]" />))}
+                </div>
               </div>
               {canEdit && (
                 <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
@@ -203,7 +206,7 @@ export default function Cards() {
               )}
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 relative z-10">
               <div className="text-[10px] opacity-70 uppercase tracking-widest font-bold">Limite</div>
               <div className="text-2xl font-mono">{formatCurrency(card.limit)}</div>
               {(() => {
@@ -220,10 +223,11 @@ export default function Cards() {
               })()}
             </div>
 
-            <div className="flex justify-between items-end">
+            <div className="flex justify-between items-end relative z-10">
               <div className="text-lg font-bold tracking-wide uppercase truncate mr-2">{card.name}</div>
-              <div className="text-xs text-right opacity-90 leading-tight shrink-0">
-                F: {card.closeDay} <br />V: {card.dueDay}
+              <div className="text-[10px] text-right opacity-90 leading-tight shrink-0">
+                <div>Fecha dia {card.closeDay}</div>
+                <div>Vence dia {card.dueDay}</div>
               </div>
             </div>
           </div>

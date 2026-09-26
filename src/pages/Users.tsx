@@ -182,9 +182,9 @@ export default function Users() {
           onAction={openNew}
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="flex flex-wrap gap-5">
           {users.map((u) => (
-            <div key={u.id} className="group bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4 transition-all hover:bg-white/[0.05] hover:-translate-y-1 hover:shadow-xl">
+            <div key={u.id} className="group bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4 transition-all hover:bg-white/[0.05] hover:-translate-y-1 hover:shadow-xl w-full sm:w-[340px]">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl overflow-hidden shrink-0">
                   {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : <i className="fa-solid fa-user text-[#8fa39a]" />}

@@ -148,7 +148,7 @@ export default function Reports() {
 
     return {
       currentTxs: curTxs,
-      metrics: { income: curIncome, expense: curExpense, cardsTotal: curCards, economy: curIncome - totalCurExpense, commitment: curIncome > 0 ? (totalCurExpense / curIncome) * 100 : 0, equity },
+      metrics: { income: curIncome, expense: curExpense, cardsTotal: curCards, economy: curIncome - totalCurExpense, commitment: curIncome > 0 ? (totalCurExpense / curIncome) * 100 : (totalCurExpense > 0 ? 100 : 0), equity },
       prevMetrics: { income: prevIncome, expense: prevExpense + prevCards, economy: prevIncome - (prevExpense + prevCards) },
       categoryStats: catArr, personStats: pArr
     };
@@ -299,7 +299,8 @@ export default function Reports() {
     <div className="animate-in fade-in duration-500 max-w-[1000px] mx-auto pb-12">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4 bg-white/[0.02] border border-white/[0.08] p-4 sm:p-6 rounded-3xl shadow-lg">
         <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Relatórios</h2>
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+        <p className="hidden print:block text-sm text-[#8fa39a]">{selectedMonth} &bull; {selectedPerson === 'todos' ? 'Todos (Consolidado)' : selectedPerson}</p>
+        <div className="no-print flex flex-wrap items-center gap-3 w-full md:w-auto">
           <input type="month" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="flex-1 md:flex-none p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
           <select value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
             <option value="todos">Todos (Consolidado)</option>
