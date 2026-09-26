@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, formatDate, parseTxDate, maskCurrency } from '../utils/format';
+import { formatCurrency, formatDate, parseTxDate, maskCurrency, getCardInvoiceMonth } from '../utils/format';
 import { db } from '../firebase';
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
@@ -88,6 +88,7 @@ export default function Dashboard() {
   const { data: accounts, loading: loadingAcc } = useCollection<any>('accounts');
   const { data: subscriptions } = useCollection<any>('subscriptions');
   const { data: cards } = useCollection<any>('cards');
+  const { data: paidInvoices } = useCollection<any>('paidInvoices');
   const { data: personsList } = useCollection<{ id?: string; name?: string }>('persons');
   const { privacyMode, togglePrivacyMode, selectedPerson, setSelectedPerson } = useUIStore();
 
@@ -216,6 +217,18 @@ export default function Dashboard() {
     }).filter((s) => s.diffDays >= 0 && s.diffDays <= 5).sort((a, b) => a.diffDays - b.diffDays);
   }, [subscriptions, canAccessPerson]);
 
+  const upcomingInvoices = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return (cards || []).filter((c) => canAccessPerson(c.owner)).map((c) => {
+      const due = nextBillingDate(c.dueDay, today);
+      const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const dayBeforeDue = new Date(due); dayBeforeDue.setDate(dayBeforeDue.getDate() - 1);
+      const monthStr = getCardInvoiceMonth(dayBeforeDue.toISOString().slice(0, 10), c.closeDay);
+      const isPaid = (paidInvoices || []).some((p) => p.id === `inv_${c.id}_${monthStr}`);
+      return { ...c, diffDays, isPaid };
+    }).filter((c) => !c.isPaid && c.diffDays >= 0 && c.diffDays <= 5).sort((a, b) => a.diffDays - b.diffDays);
+  }, [cards, paidInvoices, canAccessPerson]);
+
   const last14Days = useMemo(() => {
     const now = new Date(); const buckets = [];
     for (let i = 13; i >= 0; i--) {
@@ -296,6 +309,25 @@ export default function Dashboard() {
                 <strong className="text-yellow-500 block mb-0.5 sm:mb-1 text-sm sm:text-base truncate">"{s.name}"</strong>
                 <p className="text-xs sm:text-sm text-yellow-200/80 leading-snug">
                   Cobrança de {formatCurrency(s.amount)} para {s.diffDays === 0 ? 'hoje' : s.diffDays === 1 ? 'amanhã' : `em ${s.diffDays} dias`} ({cardNameFor(s.paymentMethod)}).
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ALERTAS DE FATURA */}
+      {upcomingInvoices.length > 0 && (
+        <div className="mb-6 sm:mb-8 flex flex-col gap-3">
+          {upcomingInvoices.map((c) => (
+            <div key={c.id} className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-3 sm:p-4 flex items-start sm:items-center gap-3 sm:gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-lg sm:text-xl shrink-0">
+                <i className="fa-solid fa-credit-card" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <strong className="text-orange-400 block mb-0.5 sm:mb-1 text-sm sm:text-base truncate">Fatura "{c.name}"</strong>
+                <p className="text-xs sm:text-sm text-orange-200/80 leading-snug">
+                  Vence {c.diffDays === 0 ? 'hoje' : c.diffDays === 1 ? 'amanhã' : `em ${c.diffDays} dias`} e ainda não foi marcada como paga.
                 </p>
               </div>
             </div>

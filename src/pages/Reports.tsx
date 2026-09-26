@@ -152,6 +152,73 @@ export default function Reports() {
     };
   }, [accessibleTx, selectedMonth, prevMonthStr, selectedPerson, accounts, session, canAccessPerson]);
 
+  // Acerto do Mês: soma as despesas divididas do mês e calcula, por par de pessoas, quem deve quanto a quem.
+  const settlements = useMemo(() => {
+    const debts = new Map<string, Map<string, number>>();
+    const add = (from: string, to: string, amt: number) => {
+      if (!debts.has(from)) debts.set(from, new Map());
+      const m = debts.get(from)!;
+      m.set(to, (m.get(to) || 0) + amt);
+    };
+
+    accessibleTx.forEach((tx) => {
+      const d = parseTxDate(tx.date);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (key !== selectedMonth) return;
+      if (!tx.isSplit || !Array.isArray(tx.splitDetails) || !tx.paidBy) return;
+      tx.splitDetails.forEach((s) => {
+        if (s.person === tx.paidBy) return; // quem pagou não deve a si mesmo
+        add(s.person, tx.paidBy as string, Number(s.amount) || 0);
+      });
+    });
+
+    const seen = new Set<string>();
+    const result: { from: string; to: string; amount: number }[] = [];
+    debts.forEach((_, personA) => {
+      debts.get(personA)!.forEach((_amt, personB) => {
+        const pairKey = [personA, personB].sort().join('__');
+        if (seen.has(pairKey)) return;
+        seen.add(pairKey);
+        const aOwesB = debts.get(personA)?.get(personB) || 0;
+        const bOwesA = debts.get(personB)?.get(personA) || 0;
+        const net = aOwesB - bOwesA;
+        if (Math.abs(net) < 0.01) return;
+        if (net > 0) result.push({ from: personA, to: personB, amount: net });
+        else result.push({ from: personB, to: personA, amount: -net });
+      });
+    });
+    return result.sort((a, b) => b.amount - a.amount);
+  }, [accessibleTx, selectedMonth]);
+
+  const topExpenses = useMemo(() =>
+    [...currentTxs]
+      .filter((tx) => tx.type === 'expense')
+      .sort((a, b) => Number(b.amount) - Number(a.amount))
+      .slice(0, 5),
+    [currentTxs]);
+
+  // Projeção de parcelas: soma, por mês futuro, as parcelas já agendadas (o parcelamento já cria todas as transações futuras de uma vez).
+  const installmentProjection = useMemo(() => {
+    const now = new Date();
+    const months: { key: string; label: string; total: number }[] = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      months.push({ key, label: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), total: 0 });
+    }
+    const byKey = new Map(months.map((m) => [m.key, m]));
+    accessibleTx.forEach((tx) => {
+      if (!tx.groupId || !tx.totalInstallments) return;
+      const d = parseTxDate(tx.date);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const m = byKey.get(key);
+      if (m) m.total += Number(tx.installmentAmount ?? tx.amount) || 0;
+    });
+    return months;
+  }, [accessibleTx]);
+
   function handleExportCSV() {
     if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
     const headers = ['Data', 'Descricao', 'Categoria', 'Pessoa', 'Tipo', 'Valor', 'Metodo'];
@@ -209,7 +276,12 @@ export default function Reports() {
           <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f87171]" />
           <span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Despesas Totais</span>
           <strong className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] font-mono block mb-2">{formatCurrency(currentTotalExpense)}</strong>
-          <span className="text-xs text-[#8fa39a]">Contas: {formatCurrency(metrics.expense)} &bull; Cartões: {formatCurrency(metrics.cardsTotal)}</span>
+          <span className="text-xs text-[#8fa39a] block mb-2">Contas: {formatCurrency(metrics.expense)} &bull; Cartões: {formatCurrency(metrics.cardsTotal)}</span>
+          {prevMetrics.expense > 0 && (
+            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md ${expenseDiff <= 0 ? 'bg-[#34d399]/10 text-[#34d399]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
+              <i className={`fa-solid ${expenseDiff <= 0 ? 'fa-arrow-trend-down' : 'fa-arrow-trend-up'}`} /> {Math.abs(expenseDiff).toFixed(1)}% vs anterior
+            </span>
+          )}
         </div>
 
         <div className="bg-gradient-to-br from-[#1a2320] to-[#141d1a] border border-white/[0.08] rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -244,6 +316,53 @@ export default function Reports() {
           last6MonthsTrend={last6MonthsTrend}
         />
       </Suspense>
+
+      {settlements.length > 0 && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
+          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-handshake text-[#e3b04b]" /> Acerto do Mês</h3>
+          <div className="flex flex-col gap-2">
+            {settlements.map((s, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03]">
+                <span className="text-sm text-[#f2f0ea]"><strong>{s.from}</strong> deve <strong>{formatCurrency(s.amount)}</strong> para <strong>{s.to}</strong></span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {topExpenses.length > 0 && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
+          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-ranking-star text-[#e3b04b]" /> Top 5 Maiores Gastos do Mês</h3>
+          <div className="flex flex-col gap-2">
+            {topExpenses.map((tx, i) => (
+              <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03]">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="w-6 h-6 rounded-full bg-[#e3b04b]/15 text-[#e3b04b] text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold text-[#f2f0ea] truncate">{tx.description}</div>
+                    <div className="text-xs text-[#8fa39a]">{tx.category} &bull; {tx.person}</div>
+                  </div>
+                </div>
+                <strong className="font-mono text-[#f2f0ea] shrink-0 pl-2">{formatCurrency(tx.amount)}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {installmentProjection.some((m) => m.total > 0) && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
+          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-calendar-days text-[#e3b04b]" /> Projeção de Parcelas (6 meses)</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            {installmentProjection.map((m) => (
+              <div key={m.key} className="bg-white/[0.03] rounded-xl p-3 text-center">
+                <div className="text-[10px] uppercase tracking-wider text-[#8fa39a] font-bold mb-1 capitalize">{m.label}</div>
+                <div className="font-mono text-sm text-[#f2f0ea]">{formatCurrency(m.total)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {currentTxs.length === 0 && (
         <EmptyState icon="fa-chart-simple" title="Sem dados para este período" description="Selecione outro mês ou lance transações para visualizar as análises financeiras." />

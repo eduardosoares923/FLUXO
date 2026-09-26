@@ -39,6 +39,7 @@ export default function Subscriptions() {
   });
 
   const watchedAmount = watch('amount');
+  const [originalAmount, setOriginalAmount] = useState<number | null>(null);
 
   async function syncSubscriptionWithTransaction(sub: any, isCancel = false) {
     const now = new Date();
@@ -126,7 +127,7 @@ export default function Subscriptions() {
 
   function openNew() {
     reset({ name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: session?.person || '' });
-    setIsSplit(false); setSplitItems({}); setEditingId(null); setShowForm(true);
+    setIsSplit(false); setSplitItems({}); setOriginalAmount(null); setEditingId(null); setShowForm(true);
   }
 
   function openEdit(s: any) {
@@ -139,6 +140,7 @@ export default function Subscriptions() {
     } else {
       setSplitItems({});
     }
+    setOriginalAmount(Number(s.amount) || null);
     setEditingId(s.id); setShowForm(true);
   }
 
@@ -329,6 +331,18 @@ export default function Subscriptions() {
               <input type="number" step="0.01" placeholder="Valor Mensal" {...register('amount')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
               <input type="number" min="1" max="31" placeholder="Dia do Vencimento" {...register('billingDay')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
             </div>
+            {originalAmount !== null && (() => {
+              const novo = parseFloat(watchedAmount as string) || 0;
+              const diff = novo - originalAmount;
+              if (Math.abs(diff) < 0.01) return null;
+              const pct = originalAmount > 0 ? (diff / originalAmount) * 100 : 0;
+              return (
+                <p className={`text-xs -mt-2 font-bold ${diff > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  <i className={`fa-solid ${diff > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} mr-1`} />
+                  {diff > 0 ? 'Subiu' : 'Baixou'} {formatCurrency(Math.abs(diff))} ({Math.abs(pct).toFixed(0)}%) desde o valor anterior ({formatCurrency(originalAmount)})
+                </p>
+              );
+            })()}
 
             <select {...register('paymentMethod')} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]">
               <option value="account">Conta Padrão</option>

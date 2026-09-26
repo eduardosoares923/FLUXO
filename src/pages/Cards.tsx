@@ -65,6 +65,20 @@ export default function Cards() {
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
 
+  // Melhor cartão pra comprar hoje: o que fechou a fatura mais recentemente (maior nº de dias até o próximo fechamento),
+  // já que uma compra hoje só vai cair na fatura seguinte, sobrando mais prazo até o vencimento.
+  const bestCardTodayId = useMemo(() => {
+    if (visible.length <= 1) return null;
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    let best: any = null; let bestDays = -1;
+    visible.forEach((card) => {
+      let daysUntilClose = card.closeDay - today.getDate();
+      if (daysUntilClose < 0) daysUntilClose += new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      if (daysUntilClose > bestDays) { bestDays = daysUntilClose; best = card; }
+    });
+    return best?.id || null;
+  }, [visible]);
+
   // Uso atual do limite: soma das despesas da fatura em aberto (mês corrente, calculado pelo dia de fechamento de cada cartão), pra mostrar direto no card fechado, sem precisar abrir a fatura.
   const usageByCard = useMemo(() => {
     const map: Record<string, number> = {};
@@ -170,8 +184,13 @@ export default function Cards() {
           <div
             key={card.id}
             onClick={() => openInvoice(card)}
-            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer`}
+            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white shadow-xl flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
           >
+            {card.id === bestCardTodayId && (
+              <span className="absolute -top-2.5 left-4 bg-[#34d399] text-black text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full flex items-center gap-1">
+                <i className="fa-solid fa-star" /> Melhor pra comprar hoje
+              </span>
+            )}
             <div className="flex justify-between items-start">
               <div className="w-12 h-8 bg-yellow-100/40 rounded flex items-center justify-center">
                 <div className="w-8 h-5 border border-yellow-800/30 rounded-sm" />

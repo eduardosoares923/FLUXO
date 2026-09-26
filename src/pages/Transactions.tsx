@@ -51,6 +51,9 @@ export default function Transactions() {
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [bulkPerson, setBulkPerson] = useState('');
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const pendingDeleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
@@ -80,6 +83,7 @@ export default function Transactions() {
 
   const [isSplit, setIsSplit] = useState(false);
   const [splitItems, setSplitItems] = useState<Record<string, string>>({});
+  const [paidBy, setPaidBy] = useState('');
 
   const canEdit = hasPermission('transactions', 'edit');
 
@@ -109,7 +113,7 @@ export default function Transactions() {
   );
 
   function resetSplitAndInstallments() {
-    setIsSplit(false); setSplitItems({}); setPaymentMode('single'); setInstallmentsCount(2); setInstallmentValueType('total'); setUpdateFuture(false);
+    setIsSplit(false); setSplitItems({}); setPaidBy(session?.person || ''); setPaymentMode('single'); setInstallmentsCount(2); setInstallmentValueType('total'); setUpdateFuture(false);
   }
 
   function openNew() {
@@ -132,7 +136,8 @@ export default function Transactions() {
       tx.splitDetails.forEach((d: any) => { items[d.person] = String(d.amount); });
       setSplitItems(items);
     } else setSplitItems({});
-    
+    setPaidBy(tx.paidBy || session?.person || '');
+
     setPaymentMode('single'); setUpdateFuture(false);
     setEditingTx(tx); setEditingId(tx.id); setShowForm(true);
   }
@@ -222,6 +227,7 @@ export default function Transactions() {
 
       let finalPerson = data.person?.trim() || session?.person;
       let finalSplitDetails = null;
+      let finalPaidBy: string | null = null;
 
       if (isSplit) {
         const keys = Object.keys(splitItems);
@@ -236,6 +242,7 @@ export default function Transactions() {
         if (paymentMode === 'single' && Math.abs(sum - totalAmt) > 0.05) return toast.error(`A soma (${formatCurrency(sum)}) deve ser igual ao total (${formatCurrency(totalAmt)}).`);
         finalPerson = details.map((d) => d.person).join(', ');
         finalSplitDetails = details;
+        finalPaidBy = paidBy || session?.person || null;
       }
 
       if (paymentMode === 'installments' && installmentsCount >= 2 && !editingId) {
@@ -252,7 +259,7 @@ export default function Transactions() {
             amount: instAmt, installmentAmount: instAmt, totalPurchaseAmount: totalAmt, category: data.category?.trim() || '',
             paymentMethod: data.paymentMethod, person: finalPerson, personKeys: toPersonKeys(finalPerson), date: instDate,
             invoiceMonth: computeInvoiceMonth(instDate, data.paymentMethod), installmentIndex: i + 1, totalInstallments: installmentsCount,
-            isSplit, splitDetails: finalSplitDetails, userId: session?.id,
+            isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, userId: session?.id,
           } as Transaction));
         }
         await Promise.all(saves);
@@ -261,7 +268,7 @@ export default function Transactions() {
         const record: any = {
           id: editingId || undefined, description: data.description.trim(), amount: Number(data.amount), type: data.type,
           category: data.category?.trim() || '', date: data.date, paymentMethod: data.paymentMethod, person: finalPerson,
-          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, userId: session?.id,
+          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, userId: session?.id,
           invoiceMonth: computeInvoiceMonth(data.date, data.paymentMethod),
         };
         await saveRecord(record);
@@ -350,6 +357,25 @@ export default function Transactions() {
     setSelectedIds((prev) => (prev.size === visible.length ? new Set() : new Set(visible.map((tx) => tx.id as string))));
   }
 
+  async function handleBulkEdit() {
+    if (!bulkCategory.trim() && !bulkPerson.trim()) return toast.warning('Preencha categoria e/ou pessoa pra aplicar.');
+    const ids = [...selectedIds];
+    try {
+      await Promise.all(ids.map((id) => {
+        const tx = transactions.find((t: any) => t.id === id);
+        if (!tx) return Promise.resolve();
+        const updated: any = { ...tx, id };
+        if (bulkCategory.trim()) updated.category = bulkCategory.trim();
+        if (bulkPerson.trim()) { updated.person = bulkPerson.trim(); updated.personKeys = toPersonKeys(bulkPerson.trim()); }
+        return saveRecord(updated as Transaction);
+      }));
+      toast.success(`${ids.length} transação(ões) atualizada(s)!`);
+      setSelectedIds(new Set()); setBulkCategory(''); setBulkPerson(''); setBulkEditOpen(false);
+    } catch {
+      toast.error('Erro ao editar em massa.');
+    }
+  }
+
   async function handleConfirmBulkDelete() {
     const ids = [...selectedIds];
     const count = ids.length;
@@ -416,9 +442,14 @@ export default function Transactions() {
       {selectedIds.size > 0 && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
           <span className="text-red-400 font-bold">{selectedIds.size} selecionada(s)</span>
-          <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-semibold flex items-center justify-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
-            <i className="fa-solid fa-trash" /> Excluir selecionadas
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#3b82f6]/20 text-[#3b82f6] hover:bg-[#3b82f6]/30 transition-colors font-semibold flex items-center justify-center gap-2" onClick={() => setBulkEditOpen(true)}>
+              <i className="fa-solid fa-pen" /> Editar selecionadas
+            </button>
+            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-semibold flex items-center justify-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
+              <i className="fa-solid fa-trash" /> Excluir selecionadas
+            </button>
+          </div>
         </div>
       )}
 
@@ -609,6 +640,12 @@ export default function Transactions() {
               </label>
               {isSplit ? (
                 <div className="mt-4 animate-in slide-in-from-top-2">
+                  <div className="mb-3">
+                    <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Quem pagou</label>
+                    <select value={paidBy} onChange={(e) => setPaidBy(e.target.value)} className="w-full p-2.5 rounded-lg border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none">
+                      {availablePersons.map((pName) => (<option key={pName} value={pName}>{pName}</option>))}
+                    </select>
+                  </div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs text-[#8fa39a]">Marque quem participa:</span>
                     <button type="button" onClick={splitEqually} className="text-xs font-bold text-[#e3b04b] bg-[#e3b04b]/10 px-2 py-1 rounded hover:bg-[#e3b04b]/20"><i className="fa-solid fa-calculator" /> Dividir igual</button>
@@ -651,6 +688,27 @@ export default function Transactions() {
       
       <ConfirmModal isOpen={!!deleteId} title="Excluir" message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
       <ConfirmModal isOpen={confirmBulkDelete} title="Excluir selecionadas" message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
+
+      {bulkEditOpen && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setBulkEditOpen(false)}>
+          <div className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold mb-1">Editar {selectedIds.size} transação(ões)</h3>
+            <p className="text-xs text-[#8fa39a] -mt-2">Deixe em branco o que não quiser alterar.</p>
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova categoria</label>
+              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} list="tx-categories" placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova pessoa</label>
+              <input value={bulkPerson} onChange={(e) => setBulkPerson(e.target.value)} placeholder="Ex: Marcos" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+            </div>
+            <div className="flex gap-3 mt-2">
+              <button onClick={() => setBulkEditOpen(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
+              <button onClick={handleBulkEdit} className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors">Aplicar</button>
+            </div>
+          </div>
+        </div>
+      )}
       <ConfirmModal isOpen={!!transferDeleteTx} title="Excluir transferência" message="Isso remove as duas pontas da transferência (origem e destino). Deseja continuar?" confirmLabel="Excluir" onConfirm={handleConfirmDeleteTransfer} onCancel={() => setTransferDeleteTx(null)} />
       <ConfirmModal isOpen={!!invoicePaymentDeleteTx} title="Excluir pagamento de fatura" message="Isso remove só o registro financeiro. A fatura vai continuar marcada como paga em Cartões, sem o desconto correspondente. Pra desfazer certo, use 'Reabrir fatura' lá. Excluir mesmo assim?" confirmLabel="Excluir" onConfirm={() => { if (invoicePaymentDeleteTx) deleteRecord(invoicePaymentDeleteTx.id, invoicePaymentDeleteTx.paymentMethod); setInvoicePaymentDeleteTx(null); }} onCancel={() => setInvoicePaymentDeleteTx(null)} />
 

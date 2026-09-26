@@ -17,6 +17,7 @@ export interface Transaction {
   personKeys?: string[];
   isSplit?: boolean;
   splitDetails?: SplitDetail[];
+  paidBy?: string;
   userId?: string;
   groupId?: string;
   transferId?: string;
