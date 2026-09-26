@@ -77,6 +77,22 @@ export default function Subscriptions() {
     await saveTx(txRecord as Transaction);
   }
 
+  async function handleLaunchMonth() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const activeSubs = visible.filter((s) => s.status !== 'pausada');
+    if (activeSubs.length === 0) return toast.info('Nenhuma assinatura ativa pra lançar.');
+    let created = 0; let alreadyLaunched = 0;
+    for (const s of activeSubs) {
+      const already = transactions.some((t) => t.subscriptionId === s.id && t.date?.startsWith(`${currentYear}-${currentMonth}`));
+      await syncSubscriptionWithTransaction(s);
+      if (already) alreadyLaunched++; else created++;
+    }
+    if (created === 0) toast.info(`Todas as ${alreadyLaunched} assinatura(s) já estavam lançadas este mês.`);
+    else toast.success(`${created} assinatura(s) lançada(s) este mês!${alreadyLaunched > 0 ? ` (${alreadyLaunched} já estavam, sem duplicar)` : ''}`);
+  }
+
   const visible = useMemo(() => {
     return subs
       .filter((s) => session?.role === 'admin' || canAccessPerson(s.person))
@@ -227,9 +243,14 @@ export default function Subscriptions() {
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Assinaturas</h2>
         {canEdit && (
-          <button onClick={openNew} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2">
-            <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nova Assinatura</span>
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleLaunchMonth} className="bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-2" title="Lançar todas as assinaturas ativas do mês de uma vez">
+              <i className="fa-solid fa-bolt" /> <span className="hidden sm:inline">Lançar mês</span>
+            </button>
+            <button onClick={openNew} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2">
+              <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nova Assinatura</span>
+            </button>
+          </div>
         )}
       </div>
 
