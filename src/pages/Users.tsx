@@ -164,7 +164,7 @@ export default function Users() {
   if (collectionError) return <PageError error={collectionError} title="Erro ao carregar usuários" />;
 
   return (
-    <div className="animate-in fade-in duration-500">
+    <div className="animate-in fade-in duration-500 max-w-4xl">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-[1.6rem] font-bold text-[#f2f0ea]">Equipe e Usuários</h2>
         <button 
