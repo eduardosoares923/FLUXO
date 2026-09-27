@@ -221,7 +221,7 @@ export default function Settings() {
   if (loadingCats) return <PageLoading message="Carregando configurações..." />;
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[850px] mx-auto pb-12">
+    <div className="animate-in fade-in duration-500 max-w-[850px] mx-auto p-4 sm:p-6 pb-12">
       <div className="mb-8">
         <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Configurações do Sistema</h2>
       </div>

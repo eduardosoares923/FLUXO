@@ -308,7 +308,7 @@ export default function Reports() {
   const incomeDiff = prevMetrics.income > 0 ? ((metrics.income - prevMetrics.income) / prevMetrics.income) * 100 : 0;
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[1000px] mx-auto pb-12">
+    <div className="animate-in fade-in duration-500 max-w-[1000px] mx-auto p-4 sm:p-6 pb-12">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4 bg-white/[0.02] border border-white/[0.08] p-4 sm:p-6 rounded-3xl shadow-lg">
         <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Relatórios</h2>
         <p className="hidden print:block text-sm text-[#8fa39a]">{selectedMonth} &bull; {selectedPerson === 'todos' ? 'Todos (Consolidado)' : selectedPerson}</p>
