@@ -56,12 +56,14 @@ button {
   cursor: pointer;
 }
 
-/* Impede o cursor de texto/seleção ao clicar em títulos, rótulos e botões — eles não são
-   conteúdo de texto pra copiar, e sem isso o navegador tratava cliques neles como seleção
-   de texto (aquela barrinha de cursor piscando no meio da palavra). */
-button, label, h1, h2, h3, .no-select {
+/* Impede o cursor de texto (I-beam) e a seleção ao passar o mouse ou clicar em títulos,
+   rótulos e botões — eles não são conteúdo pra copiar. Cobre também .uppercase porque é
+   a classe que os rótulos/títulos do app já usam (ex: "SALDO ATUAL"), sem afetar textos
+   de conteúdo real (valores, descrições) que o usuário pode querer selecionar. */
+button, label, h1, h2, h3, .uppercase, .no-select {
   -webkit-user-select: none;
   user-select: none;
+  cursor: default;
 }
 
 /* Remove o contorno padrão do navegador ao clicar (ficava um retângulo cinza/branco feio
