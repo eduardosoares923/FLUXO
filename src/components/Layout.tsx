@@ -139,13 +139,16 @@ export function Layout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden px-4 flex flex-col gap-1">
-          {NAV_GROUPS.map((group) => {
+          {NAV_GROUPS.map((group, groupIndex) => {
             const items = group.items.filter((item) => !item.module || hasPermission(item.module));
             if (items.length === 0) return null;
             return (
               <div key={group.label} className="mb-2">
                 {!collapsed && (
                   <div className="text-[10px] uppercase tracking-widest text-[#5c6b66] px-4 mt-3 mb-1">{group.label}</div>
+                )}
+                {collapsed && groupIndex > 0 && (
+                  <div className="mx-3 my-2 border-t border-white/[0.06]" />
                 )}
                 {items.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.to === '/'} className={({ isActive }) => navLinkClass(isActive)} title={collapsed ? item.label : undefined}>

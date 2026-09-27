@@ -40,6 +40,30 @@
   --glass-border: rgba(0, 0, 0, 0.1);
 }
 
+/* O projeto desliga o preflight do Tailwind (corePlugins.preflight: false) pra não
+   quebrar telas antigas que dependem do estilo nativo do navegador. Isso significa que
+   qualquer <button> sem estilo explícito de borda mantém a borda 3D nativa do sistema
+   por baixo — era esse o contorno cinza/branco feio, não o outline de foco. As classes
+   .btn/.btn-primary/.form-control legadas já definem sua própria borda/fundo, então não
+   são afetadas (uma classe sempre vence um seletor de elemento puro em especificidade). */
+button {
+  border: none;
+  background: none;
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* Impede o cursor de texto/seleção ao clicar em títulos, rótulos e botões — eles não são
+   conteúdo de texto pra copiar, e sem isso o navegador tratava cliques neles como seleção
+   de texto (aquela barrinha de cursor piscando no meio da palavra). */
+button, label, h1, h2, h3, .no-select {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 /* Remove o contorno padrão do navegador ao clicar (ficava um retângulo cinza/branco feio
    em botões sobre o fundo escuro), mas mantém um contorno visível ao navegar por teclado
    (acessibilidade) via :focus-visible. */
