@@ -185,7 +185,7 @@ export default function Cards() {
           <div
             key={card.id}
             onClick={() => openInvoice(card)}
-            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative overflow-hidden ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
+            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
             style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 24px rgba(0,0,0,0.35)' }}
           >
             {card.id === bestCardTodayId && (
