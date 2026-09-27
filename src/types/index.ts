@@ -69,6 +69,7 @@ export interface Card {
   dueDay: number;
   owner?: string;
   ownerKey?: string;
+  color?: string;
 }
 
 export interface Person {

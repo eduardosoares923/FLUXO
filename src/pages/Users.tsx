@@ -164,7 +164,7 @@ export default function Users() {
   if (collectionError) return <PageError error={collectionError} title="Erro ao carregar usuários" />;
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-4xl">
+    <div className="animate-in fade-in duration-500">
       <div className="flex items-center justify-between mb-8">
         <h2 className="text-[1.6rem] font-bold text-[#f2f0ea]">Equipe e Usuários</h2>
         <button 
@@ -184,49 +184,41 @@ export default function Users() {
           onAction={openNew}
         />
       ) : (
-        <div className="flex flex-wrap gap-5">
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl overflow-hidden">
+          <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_120px_96px] gap-4 px-5 py-3 border-b border-white/[0.06] text-[11px] uppercase tracking-wider font-bold text-[#5c6b66]">
+            <span>Usuário</span><span>E-mail</span><span>Pessoa</span><span>Acesso</span><span className="text-right">Ações</span>
+          </div>
           {users.map((u) => (
-            <div key={u.id} className="group bg-white/[0.03] border border-white/[0.08] rounded-2xl p-5 flex flex-col gap-4 transition-all hover:bg-white/[0.05] hover:-translate-y-1 hover:shadow-xl w-full sm:w-[340px]">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xl overflow-hidden shrink-0">
-                  {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : <i className="fa-solid fa-user text-[#8fa39a]" />}
+            <div key={u.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_120px_96px] gap-x-4 gap-y-2 items-center px-5 py-4 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-[#e3b04b]/15 text-[#e3b04b] flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
+                  {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : (u.name || '?').slice(0, 2).toUpperCase()}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-[#f2f0ea] text-lg truncate">{u.name}</h3>
-                  <div className="text-[0.8rem] text-[#8fa39a] truncate">@{u.username}</div>
-                </div>
-                
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => openEdit(u)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center">
-                    <i className="fa-solid fa-pen text-[0.8rem]" />
-                  </button>
-                  {u.id !== session?.id && (
-                    <button onClick={() => setDeleteId(u.id || null)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center">
-                      <i className="fa-solid fa-trash text-[0.8rem]" />
-                    </button>
-                  )}
+                <div className="min-w-0">
+                  <div className="font-bold text-[#f2f0ea] truncate">{u.name}</div>
+                  <div className="text-xs text-[#8fa39a] truncate">@{u.username}</div>
                 </div>
               </div>
-
-              <div className="bg-black/20 rounded-xl p-3 flex flex-col gap-2 text-[0.8rem]">
-                <div className="flex justify-between items-center">
-                  <span className="text-[#8fa39a]">Email</span>
-                  <span className="text-[#f2f0ea] truncate max-w-[150px]" title={u.email}>{u.email}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[#8fa39a]">Pessoa Física</span>
-                  <span className="text-[#f2f0ea] font-medium">{u.person || u.name}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                  <span className="text-[#8fa39a]">Nível de Acesso</span>
-                  <span className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] ${
-                    u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : 
-                    u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 
-                    'bg-white/10 text-[#8fa39a]'
-                  }`}>
-                    {u.role}
-                  </span>
-                </div>
+              <div className="hidden md:block text-sm text-[#c9d2cf] truncate" title={u.email}>{u.email || '-'}</div>
+              <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.person || u.name}</div>
+              <div className="hidden md:block">
+                <span className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
+              </div>
+              <div className="flex justify-end gap-1">
+                <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário">
+                  <i className="fa-solid fa-pen text-[0.8rem]" />
+                </button>
+                {u.id !== session?.id && (
+                  <button onClick={() => setDeleteId(u.id || null)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center" aria-label="Excluir usuário">
+                    <i className="fa-solid fa-trash text-[0.8rem]" />
+                  </button>
+                )}
+              </div>
+              <div className="md:hidden col-span-2 flex flex-wrap items-center gap-2 text-xs text-[#8fa39a]">
+                <span className="truncate">{u.email || 'sem e-mail'}</span>
+                <span>&bull;</span>
+                <span>{u.person || u.name}</span>
+                <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
               </div>
             </div>
           ))}

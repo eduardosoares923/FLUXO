@@ -7,7 +7,19 @@ import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
 import { Account, Card, Transaction, User } from '../types';
 
-const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '' };
+const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '', color: '' };
+
+// Paleta de cores que o usuário pode escolher pro cartão (feita no app, sem seletor nativo).
+const CARD_COLORS = ['#820ad1', '#ff7a00', '#0057d9', '#cc0000', '#0f9d58', '#e3b04b', '#ec4899', '#0891b2', '#475569', '#1f2937'];
+
+// Escurece uma cor hex em uma porcentagem, pra montar o gradiente "realista" a partir de uma cor só.
+function shadeHex(hex: string, percent: number) {
+  const h = hex.replace('#', '');
+  const num = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+  const f = (v: number) => Math.max(0, Math.min(255, Math.round(v * (1 + percent / 100))));
+  const r = f((num >> 16) & 255), g = f((num >> 8) & 255), b = f(num & 255);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
 
 const BRAND_STYLES = [
   { match: /amazon/i, bg: 'bg-gradient-to-br from-gray-900 to-[#ff9900]' },
@@ -95,7 +107,7 @@ export default function Cards() {
   }, [visible, transactions]);
 
   function openEdit(card: Card) {
-    setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '' });
+    setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '', color: card.color || '' });
     setEditingId(card.id!);
     setShowForm(true);
   }
@@ -104,7 +116,7 @@ export default function Cards() {
     e.preventDefault();
     if (!form.name.trim()) return;
     const owner = form.owner.trim() || session.person;
-    await saveRecord({ id: editingId || undefined, name: form.name.trim(), limit: parseFloat(form.limit) || 0, closeDay: parseInt(form.closeDay) || 28, dueDay: parseInt(form.dueDay) || 10, owner, ownerKey: normalize(owner) } as Card);
+    await saveRecord({ id: editingId || undefined, name: form.name.trim(), limit: parseFloat(form.limit) || 0, closeDay: parseInt(form.closeDay) || 28, dueDay: parseInt(form.dueDay) || 10, owner, ownerKey: normalize(owner), color: form.color || '' } as Card);
     setShowForm(false);
   }
 
@@ -185,8 +197,8 @@ export default function Cards() {
           <div
             key={card.id}
             onClick={() => openInvoice(card)}
-            className={`${getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
-            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 24px rgba(0,0,0,0.35)' }}
+            className={`${card.color ? '' : getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
+            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 24px rgba(0,0,0,0.35)', ...(card.color ? { background: `linear-gradient(135deg, ${card.color} 0%, ${shadeHex(card.color, -45)} 100%)` } : {}) }}
           >
             {card.id === bestCardTodayId && (
               <span className="absolute -top-2.5 left-4 bg-[#10b981] text-[#042c53] text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full flex items-center gap-1 z-10">
@@ -243,6 +255,15 @@ export default function Cards() {
             <div className="flex gap-4">
               <input type="number" placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({ ...form, closeDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
               <input type="number" placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+            </div>
+            <div>
+              <label className="text-xs uppercase font-bold text-[#8fa39a] block mb-2">Cor do cartão</label>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setForm({ ...form, color: '' })} title="Automática (pelo nome do banco)" className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-[#8fa39a] bg-white/5 ${!form.color ? 'border-[#e3b04b]' : 'border-transparent'}`}>Auto</button>
+                {CARD_COLORS.map((c) => (
+                  <button key={c} type="button" onClick={() => setForm({ ...form, color: c })} title={c} className={`w-9 h-9 rounded-full border-2 ${form.color === c ? 'border-white scale-110' : 'border-transparent'} transition-transform`} style={{ background: `linear-gradient(135deg, ${c}, ${shadeHex(c, -45)})` }} />
+                ))}
+              </div>
             </div>
             <div className="flex gap-3 mt-4">
               <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
