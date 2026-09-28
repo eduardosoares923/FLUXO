@@ -75,7 +75,8 @@ export function useCollection<T = any>(collectionName: string) {
   const saveRecord = useCallback(
     async (record: Partial<T> & { id?: string, paymentMethod?: string }) => {
       const rec: any = { ...record };
-      const isNew = !rec.id || !data.some((it: any) => String(it.id) === String(rec.id));
+      const previous: any = rec.id ? data.find((it: any) => String(it.id) === String(rec.id)) : undefined;
+      const isNew = !previous;
       if (!rec.id) rec.id = generateId();
 
       const actor = session?.name || (session as any)?.username || 'Desconhecido';
@@ -103,8 +104,13 @@ export function useCollection<T = any>(collectionName: string) {
         await setDoc(doc(db, collectionName, String(rec.id)), rec, { merge: true });
         
         // Gatilho da Otimização 1
-        if (collectionName === 'transactions' && rec.paymentMethod) {
-          await syncAccountBalance(rec.paymentMethod);
+        if (collectionName === 'transactions') {
+          // Se a transação mudou de conta numa edição, a conta antiga também precisa ser recalculada,
+          // senão o saldo dela continua contando uma transação que já não é mais dela.
+          const accountsToSync = new Set<string>();
+          if (rec.paymentMethod) accountsToSync.add(rec.paymentMethod);
+          if (previous?.paymentMethod) accountsToSync.add(previous.paymentMethod);
+          for (const pm of accountsToSync) await syncAccountBalance(pm);
         }
       } catch (e) {
         console.error(`Erro ao salvar em ${collectionName}:`, e);
@@ -118,6 +124,9 @@ export function useCollection<T = any>(collectionName: string) {
   const deleteRecord = useCallback(
     async (id: string | number, paymentMethodToSync?: string) => {
       const strId = String(id);
+      // Quem chama nem sempre informa a conta (parcela avulsa, assinatura). Sem ela o saldo ficava
+      // desatualizado, então busca a conta da própria transação antes de apagar.
+      const pmToSync = paymentMethodToSync || (data.find((it: any) => String(it.id) === strId) as any)?.paymentMethod;
       pendingDeletes.current.add(strId);
 
       queryClient.setQueryData<T[]>([collectionName], (prev = []) =>
@@ -128,8 +137,8 @@ export function useCollection<T = any>(collectionName: string) {
         await deleteDoc(doc(db, collectionName, strId));
         
         // Gatilho da Otimização 1
-        if (collectionName === 'transactions' && paymentMethodToSync) {
-          await syncAccountBalance(paymentMethodToSync);
+        if (collectionName === 'transactions' && pmToSync) {
+          await syncAccountBalance(pmToSync);
         }
       } catch (e) {
         console.error(`Erro ao excluir em ${collectionName}:`, e);
@@ -138,13 +147,16 @@ export function useCollection<T = any>(collectionName: string) {
         setTimeout(() => pendingDeletes.current.delete(strId), 3000);
       }
     },
-    [collectionName, queryClient]
+    [collectionName, queryClient, data]
   );
 
   const deleteRecords = useCallback(
     async (ids: (string | number)[]) => {
       const strIds = ids.map(String);
       const idSet = new Set(strIds);
+      const accountsToSync = new Set<string>(
+        data.filter((it: any) => idSet.has(String(it.id))).map((it: any) => it.paymentMethod).filter(Boolean)
+      );
       strIds.forEach((id) => pendingDeletes.current.add(id));
 
       queryClient.setQueryData<T[]>([collectionName], (prev = []) =>
@@ -165,13 +177,16 @@ export function useCollection<T = any>(collectionName: string) {
             return batch.commit();
           })
         );
-        // Nota: Como o delete em lote exclui várias transações (ex: parcelamentos), 
-        // a sincronização será disparada na recarga da tela por segurança.
+        // O saldo das contas envolvidas não se recalcula sozinho ao recarregar a tela,
+        // então recalcula aqui, uma vez por conta afetada.
+        if (collectionName === 'transactions') {
+          for (const pm of accountsToSync) await syncAccountBalance(pm);
+        }
       } finally {
         setTimeout(() => strIds.forEach((id) => pendingDeletes.current.delete(id)), 3000);
       }
     },
-    [collectionName, queryClient]
+    [collectionName, queryClient, data]
   );
 
   return { data, loading, error, saveRecord, deleteRecord, deleteRecords };
