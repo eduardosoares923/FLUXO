@@ -10,7 +10,8 @@
 //
 // Usa a mesma variável de ambiente FIREBASE_SERVICE_ACCOUNT do create-user.ts.
 
-import { initializeApp, getApps, getApp, cert, App } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import type { App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -34,7 +35,16 @@ function getBearerToken(req: ApiRequest): string {
 
 function getAdminApp(): App {
   if (getApps().length > 0) return getApp();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT as string);
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) {
+    throw new Error('A variável FIREBASE_SERVICE_ACCOUNT não está configurada na Vercel (Settings > Environment Variables).');
+  }
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(raw);
+  } catch {
+    throw new Error('A variável FIREBASE_SERVICE_ACCOUNT existe mas não é um JSON válido. Cole o conteúdo inteiro do arquivo da chave de serviço.');
+  }
   return initializeApp({ credential: cert(serviceAccount) });
 }
 
