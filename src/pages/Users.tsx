@@ -35,6 +35,8 @@ export default function Users() {
   const [orphans, setOrphans] = useState<OrphanLogin[]>([]);
   const [orphanBusy, setOrphanBusy] = useState<string | null>(null);
   const [deleteOrphan, setDeleteOrphan] = useState<OrphanLogin | null>(null);
+  const [orphanError, setOrphanError] = useState('');
+  const [checkingOrphans, setCheckingOrphans] = useState(false);
 
   const callManageUsers = useCallback(async (action: string, uid?: string) => {
     const idToken = await auth.currentUser?.getIdToken();
@@ -43,17 +45,28 @@ export default function Users() {
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
       body: JSON.stringify({ action, uid }),
     });
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result.error || 'Erro no servidor');
+    // Se a função do servidor não estiver publicada, a Vercel devolve a página do app (HTML)
+    // em vez de JSON. Antes isso passava batido e a lista aparecia vazia sem aviso.
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      throw new Error(`A função /api/manage-users não respondeu (status ${response.status}). Verifique se o deploy da pasta api terminou na Vercel.`);
+    }
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Erro no servidor (status ${response.status})`);
     return result;
   }, []);
 
   const loadOrphans = useCallback(async () => {
+    setCheckingOrphans(true);
+    setOrphanError('');
     try {
       const result = await callManageUsers('list-orphans');
       setOrphans(result.orphans || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Erro ao listar logins sem cadastro:', err);
+      setOrphanError(err.message || 'Erro ao consultar os logins do Firebase.');
+    } finally {
+      setCheckingOrphans(false);
     }
   }, [callManageUsers]);
 
@@ -284,6 +297,24 @@ export default function Users() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {session?.role === 'admin' && (
+        <div className="mt-6 flex flex-wrap items-center gap-3 text-xs">
+          <button onClick={loadOrphans} disabled={checkingOrphans} className="px-3 h-9 rounded-lg bg-white/5 text-[#8fa39a] font-bold hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50">
+            <i className={`fa-solid fa-rotate mr-1.5 ${checkingOrphans ? 'fa-spin' : ''}`} />
+            {checkingOrphans ? 'Verificando...' : 'Verificar logins do Firebase'}
+          </button>
+          {!checkingOrphans && !orphanError && orphans.length === 0 && (
+            <span className="text-[#34d399]"><i className="fa-solid fa-check mr-1" />Todos os logins do Firebase têm cadastro no sistema.</span>
+          )}
+        </div>
+      )}
+
+      {session?.role === 'admin' && orphanError && (
+        <div className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300">
+          <i className="fa-solid fa-circle-exclamation mr-2" />{orphanError}
         </div>
       )}
 
