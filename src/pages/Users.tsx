@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { useAuth, upsertUserLookup } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
@@ -23,12 +23,72 @@ interface UserFormValues {
 
 export default function Users() {
   const { session, hasPermission } = useAuth() as { session: User; hasPermission: (mod: string) => boolean };
-  const { data: users, loading, error: collectionError, saveRecord, deleteRecord } = useCollection<User>('users');
+  const { data: users, loading, error: collectionError, saveRecord } = useCollection<User>('users');
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Logins que existem no Firebase Authentication mas não têm cadastro no sistema
+  interface OrphanLogin { uid: string; email: string; name: string; createdAt: string | null; lastSignIn: string | null; }
+  const [orphans, setOrphans] = useState<OrphanLogin[]>([]);
+  const [orphanBusy, setOrphanBusy] = useState<string | null>(null);
+  const [deleteOrphan, setDeleteOrphan] = useState<OrphanLogin | null>(null);
+
+  const callManageUsers = useCallback(async (action: string, uid?: string) => {
+    const idToken = await auth.currentUser?.getIdToken();
+    const response = await fetch('/api/manage-users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+      body: JSON.stringify({ action, uid }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Erro no servidor');
+    return result;
+  }, []);
+
+  const loadOrphans = useCallback(async () => {
+    try {
+      const result = await callManageUsers('list-orphans');
+      setOrphans(result.orphans || []);
+    } catch (err) {
+      console.error('Erro ao listar logins sem cadastro:', err);
+    }
+  }, [callManageUsers]);
+
+  useEffect(() => {
+    if (session?.role === 'admin') loadOrphans();
+  }, [session?.role, loadOrphans]);
+
+  async function handleLinkOrphan(o: OrphanLogin) {
+    setOrphanBusy(o.uid);
+    try {
+      await callManageUsers('link', o.uid);
+      toast.success(`${o.email || o.name} agora faz parte do sistema, como Usuário Normal.`);
+      await loadOrphans();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao vincular login.');
+    } finally {
+      setOrphanBusy(null);
+    }
+  }
+
+  async function handleConfirmDeleteOrphan() {
+    if (!deleteOrphan) return;
+    const o = deleteOrphan;
+    setDeleteOrphan(null);
+    setOrphanBusy(o.uid);
+    try {
+      await callManageUsers('delete', o.uid);
+      toast.success('Login excluído do Firebase.');
+      await loadOrphans();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir login.');
+    } finally {
+      setOrphanBusy(null);
+    }
+  }
 
   const {
     register,
@@ -151,10 +211,12 @@ export default function Users() {
   async function handleConfirmDelete() {
     if (!deleteId) return;
     try {
-      await deleteRecord(deleteId);
-      toast.success('Registro do usuário excluído com sucesso!');
-    } catch (err) {
-      toast.error('Erro ao excluir usuário.');
+      // Apaga de verdade: login no Firebase Authentication + cadastro + atalhos de login.
+      // Antes só o cadastro era apagado e o login continuava existindo no Firebase.
+      await callManageUsers('delete', deleteId);
+      toast.success('Usuário excluído do sistema e do Firebase.');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir usuário.');
     } finally {
       setDeleteId(null);
     }
@@ -225,6 +287,47 @@ export default function Users() {
         </div>
       )}
 
+      {session?.role === 'admin' && orphans.length > 0 && (
+        <div className="mt-8 bg-[#e3b04b]/[0.04] border border-[#e3b04b]/20 rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#e3b04b]/10">
+            <h3 className="font-bold text-[#f2f0ea] flex items-center gap-2">
+              <i className="fa-solid fa-triangle-exclamation text-[#e3b04b]" />
+              Logins no Firebase sem cadastro no sistema ({orphans.length})
+            </h3>
+            <p className="text-xs text-[#8fa39a] mt-1">
+              Essas contas conseguem existir no Firebase mas não aparecem aqui. Vincule pra trazer pro sistema (entra como Usuário Normal, depois você edita), ou exclua se for conta antiga.
+            </p>
+          </div>
+          {orphans.map((o) => (
+            <div key={o.uid} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto] gap-x-4 gap-y-1 items-center px-5 py-3 border-b border-white/[0.04] last:border-0">
+              <div className="min-w-0">
+                <div className="font-semibold text-[#f2f0ea] truncate">{o.email || '(sem e-mail)'}</div>
+                <div className="text-xs text-[#8fa39a] truncate">{o.name || 'Sem nome'}</div>
+              </div>
+              <div className="hidden md:block text-xs text-[#8fa39a]">Criado em {o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '-'}</div>
+              <div className="hidden md:block text-xs text-[#8fa39a]">Último acesso: {o.lastSignIn ? new Date(o.lastSignIn).toLocaleDateString('pt-BR') : 'nunca'}</div>
+              <div className="flex justify-end gap-2">
+                <button disabled={orphanBusy === o.uid} onClick={() => handleLinkOrphan(o)} className="px-3 h-9 rounded-lg bg-[#e3b04b] text-black text-xs font-bold hover:bg-[#f5d78a] transition-colors disabled:opacity-50">
+                  {orphanBusy === o.uid ? '...' : 'Vincular'}
+                </button>
+                <button disabled={orphanBusy === o.uid} onClick={() => setDeleteOrphan(o)} className="px-3 h-9 rounded-lg bg-white/5 text-[#8fa39a] text-xs font-bold hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50">
+                  Excluir
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={!!deleteOrphan}
+        title="Excluir login do Firebase"
+        message={`Isso apaga de vez o login ${deleteOrphan?.email || ''} do Firebase. A pessoa não vai mais conseguir entrar. Continuar?`}
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDeleteOrphan}
+        onCancel={() => setDeleteOrphan(null)}
+      />
+
       {showForm && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowForm(false)}>
           <form className="bg-[#141d1a] border border-white/10 rounded-[20px] p-6 sm:p-8 w-full max-w-[540px] flex flex-col gap-4 shadow-2xl" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
@@ -290,7 +393,7 @@ export default function Users() {
         </div>
       )}
 
-      <ConfirmModal isOpen={!!deleteId} title="Excluir Usuário" message="Tem certeza que deseja excluir o registro deste usuário?" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
+      <ConfirmModal isOpen={!!deleteId} title="Excluir Usuário" message="Isso exclui o usuário do sistema e apaga o login dele no Firebase. A pessoa não vai mais conseguir entrar. Continuar?" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
     </div>
   );
 }

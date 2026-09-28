@@ -7,29 +7,45 @@
 // conteúdo do JSON da chave de serviço (o mesmo tipo de credencial usada
 // no server.js do NexClaim).
 
-import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { initializeApp, getApps, getApp, cert, App } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 
-function getAdminApp() {
-  if (getApps().length > 0) return getApp();
-  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-  return initializeApp({
-    credential: cert(serviceAccount),
-  });
+// Tipos mínimos da requisição/resposta da Vercel, declarados aqui pra não precisar
+// instalar o pacote @vercel/node só por causa deles.
+interface ApiRequest {
+  method?: string;
+  headers: Record<string, string | string[] | undefined>;
+  body?: any;
+}
+interface ApiResponse {
+  status(code: number): ApiResponse;
+  json(body: unknown): void;
 }
 
-function normalize(str) {
+function getBearerToken(req: ApiRequest): string {
+  const raw = req.headers.authorization;
+  const value = Array.isArray(raw) ? raw[0] : raw || '';
+  return value.replace('Bearer ', '');
+}
+
+function getAdminApp(): App {
+  if (getApps().length > 0) return getApp();
+  const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT as string);
+  return initializeApp({ credential: cert(serviceAccount) });
+}
+
+function normalize(str: unknown): string {
   return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-function toPersonKeys(value) {
+function toPersonKeys(value: string | string[] | undefined): string[] {
   if (!value) return [];
   const arr = Array.isArray(value) ? value : String(value).split(',');
   return [...new Set(arr.map((p) => normalize(p)).filter(Boolean))];
 }
 
-export default async function handler(req, res) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
   }
@@ -40,8 +56,7 @@ export default async function handler(req, res) {
     const db = getFirestore(app);
 
     // 1. Confirma que quem está chamando está logado E é admin
-    const authHeader = req.headers.authorization || '';
-    const idToken = authHeader.replace('Bearer ', '');
+    const idToken = getBearerToken(req);
     if (!idToken) {
       return res.status(401).json({ error: 'Token de autenticação ausente' });
     }
@@ -101,7 +116,7 @@ export default async function handler(req, res) {
     );
 
     return res.status(200).json({ success: true, uid: newUser.uid });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Erro ao criar usuário:', err);
     const message = err.code === 'auth/email-already-exists' ? 'Esse e-mail já está em uso' : err.message;
     return res.status(500).json({ error: message });
