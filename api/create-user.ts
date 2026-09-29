@@ -7,10 +7,26 @@
 // conteúdo do JSON da chave de serviço (o mesmo tipo de credencial usada
 // no server.js do NexClaim).
 
-import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
 import type { App } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
-import { getFirestore } from 'firebase-admin/firestore';
+
+type AppModule = typeof import('firebase-admin/app');
+
+// Carrega o firebase-admin só quando a função é chamada, e não no topo do arquivo.
+// Se o carregamento falhar na Vercel, o erro volta como JSON legível pra tela, em vez
+// de derrubar a função inteira com um 500 sem explicação nenhuma.
+async function loadFirebaseAdmin() {
+  const [appMod, authMod, firestoreMod] = await Promise.all([
+    import('firebase-admin/app'),
+    import('firebase-admin/auth'),
+    import('firebase-admin/firestore'),
+  ]);
+  return { appMod, getAuth: authMod.getAuth, getFirestore: firestoreMod.getFirestore };
+}
+
+function describeError(err: any): string {
+  const code = err && err.code ? `[${err.code}] ` : '';
+  return `${code}${(err && err.message) || String(err)}`;
+}
 
 // Tipos mínimos da requisição/resposta da Vercel, declarados aqui pra não precisar
 // instalar o pacote @vercel/node só por causa deles.
@@ -30,7 +46,8 @@ function getBearerToken(req: ApiRequest): string {
   return value.replace('Bearer ', '');
 }
 
-function getAdminApp(): App {
+function getAdminApp(appMod: AppModule): App {
+  const { initializeApp, getApps, getApp, cert } = appMod;
   if (getApps().length > 0) return getApp();
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (!raw) {
@@ -61,7 +78,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const app = getAdminApp();
+    const { appMod, getAuth, getFirestore } = await loadFirebaseAdmin();
+    const app = getAdminApp(appMod);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
@@ -128,7 +146,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(200).json({ success: true, uid: newUser.uid });
   } catch (err: any) {
     console.error('Erro ao criar usuário:', err);
-    const message = err.code === 'auth/email-already-exists' ? 'Esse e-mail já está em uso' : err.message;
+    const message = err.code === 'auth/email-already-exists' ? 'Esse e-mail já está em uso' : describeError(err);
     return res.status(500).json({ error: message });
   }
 }
