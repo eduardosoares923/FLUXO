@@ -3,6 +3,7 @@ import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User as Fireba
 import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { normalize } from '../utils/format';
+import { resolvePermissions } from '../utils/permissions';
 import { User } from '../types';
 
 interface AuthContextType {
@@ -62,7 +63,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           person: userData.person || userData.name || 'Eu',
         };
         // Propriedades dinâmicas de permissões que não ficam no User base:
-        (newSession as any).permissions = userData.permissions || {};
+        (newSession as any).permissions = resolvePermissions(newSession.role, userData.permissions);
         (newSession as any).allowedPersons = userData.allowedPersons || null;
         
         setSession(newSession);
