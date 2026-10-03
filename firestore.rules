@@ -18,6 +18,12 @@ service cloud.firestore {
       return isSignedIn() && myUser().role == 'gerente';
     }
 
+    // Qualquer pessoa com cadastro no sistema (documento em /users). Logins soltos do
+    // Firebase Authentication, sem cadastro, continuam sem acesso a nenhum dado.
+    function isMember() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     // Compatibilidade: continua aceitando comparação exata (owner == meu
     // nome/username/pessoa) pra documentos antigos que ainda não foram
     // salvos de novo e por isso não têm personKeys/ownerKey ainda.
@@ -87,26 +93,29 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // --- accounts: restrito por dono (owner/ownerKey) ---
+    // --- accounts: leitura liberada pra quem tem cadastro (a tela filtra por dono, porque o
+    //     Firestore recusa a lista inteira quando a regra depende do dono de cada documento);
+    //     escrita continua restrita por dono (owner/ownerKey) ---
     match /accounts/{id} {
-      allow read: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
+      allow read: if isMember();
       allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
       allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
+      // O saldo guardado da conta (computedBalance) é recalculado por quem lança uma transação
+      // nela, mesmo quando a conta é de outra pessoa. Por esse caminho só esse campo pode mudar.
+      allow update: if isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['computedBalance']);
     }
 
-    // --- cards: restrito por dono (owner/ownerKey) ---
+    // --- cards: leitura liberada pra quem tem cadastro; escrita restrita por dono ---
     match /cards/{id} {
-      allow read: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
+      allow read: if isMember();
       allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
       allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
     }
 
-    // --- transactions: restrito por autor (userId), pessoa(s) ou gerente autorizado ---
+    // --- transactions: leitura liberada pra quem tem cadastro (a tela filtra por pessoa);
+    //     escrita restrita por autor (userId), pessoa(s) ou gerente autorizado ---
     match /transactions/{id} {
-      allow read: if isAdmin() ||
-                  resource.data.userId == request.auth.uid ||
-                  souUmaDasPessoas(resource.data) ||
-                  pessoaPermitidaGerente(resource.data);
+      allow read: if isMember();
       allow create: if isAdmin() || (
         isSignedIn() && (
           request.resource.data.userId == request.auth.uid ||
@@ -120,9 +129,10 @@ service cloud.firestore {
                             pessoaPermitidaGerente(resource.data);
     }
 
-    // --- subscriptions: restrito por pessoa(s) ou gerente autorizado ---
+    // --- subscriptions: leitura liberada pra quem tem cadastro; escrita restrita por
+    //     pessoa(s) ou gerente autorizado ---
     match /subscriptions/{id} {
-      allow read: if isAdmin() || souUmaDasPessoas(resource.data) || pessoaPermitidaGerente(resource.data);
+      allow read: if isMember();
       allow create: if isAdmin() || (isSignedIn() && (souUmaDasPessoas(request.resource.data) || pessoaPermitidaGerente(request.resource.data)));
       allow update, delete: if isAdmin() || souUmaDasPessoas(resource.data) || pessoaPermitidaGerente(resource.data);
     }
