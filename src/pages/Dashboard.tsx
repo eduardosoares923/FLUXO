@@ -146,6 +146,12 @@ export default function Dashboard() {
 
   const personOptions = useMemo(() => (personsList || []).map((p) => p.name).filter((n): n is string => Boolean(n) && canAccessPerson(n)), [personsList, canAccessPerson]);
 
+  // Se a pessoa escolhida no filtro deixou de existir na lista (ex: outro usuário entrou no mesmo
+  // navegador), volta pra "Todos". Sem isso o painel ficava vazio e sem controle pra corrigir.
+  useEffect(() => {
+    if (selectedPerson !== 'all' && personOptions.length > 0 && !personOptions.includes(selectedPerson)) setSelectedPerson('all');
+  }, [personOptions, selectedPerson, setSelectedPerson]);
+
   const currentBalance = useMemo(() => {
     let sum = 0; let fallbackIncome = 0; let fallbackExpense = 0; const fallbackAccs = new Set();
     visibleAccounts.forEach(acc => {
@@ -274,12 +280,19 @@ export default function Dashboard() {
           Olá, {session.name.split(' ')[0]}
         </h2>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-        {personOptions.length > 0 && (
+        {personOptions.length > 1 ? (
           <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="w-auto shrink-0" title="Filtrar painel por pessoa">
             <option value="all">Todos</option>
             {personOptions.map((name) => (<option key={name} value={name}>{name}</option>))}
           </CustomSelect>
-        )}
+        ) : personOptions.length === 1 ? (
+          // Quem só enxerga uma pessoa (usuário normal) não precisa de filtro nem de "Todos":
+          // mostra só a pessoa vinculada à conta.
+          <div className="flex items-center gap-2 px-4 h-10 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm shrink-0" title="Painel desta pessoa">
+            <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
+            <span className="truncate max-w-[160px]">{personOptions[0]}</span>
+          </div>
+        ) : null}
         <button onClick={handleCopySummary} className="flex items-center gap-2 px-3 sm:px-4 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold text-xs sm:text-sm transition-colors shrink-0" title="Copiar resumo do mês pro WhatsApp">
           <i className="fa-brands fa-whatsapp text-[#34d399]" /> <span className="hidden sm:inline">Copiar resumo</span>
         </button>

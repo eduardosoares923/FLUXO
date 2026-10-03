@@ -35,6 +35,10 @@ export default function Subscriptions() {
     return list.length > 0 ? list : ['Eduardo', 'Mãe', 'Rodrigo'];
   }, [personsList]);
 
+  // Pessoas que este usuário pode enxergar (pro filtro da lista). A lista completa acima continua
+  // servindo pra escolher com quem dividir uma assinatura.
+  const filterPersons = useMemo(() => availablePersons.filter((p) => session?.role === 'admin' || canAccessPerson(p)), [availablePersons, session, canAccessPerson]);
+
   const { register, handleSubmit, reset, watch, control, formState: { errors, isSubmitting } } = useForm({
     defaultValues: { name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: '' },
   });
@@ -283,9 +287,11 @@ export default function Subscriptions() {
           <CustomSelect value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
             <option value="all">Cobrança</option><option value="account">Contas</option><option value="card">Cartões</option>
           </CustomSelect>
-          <CustomSelect value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
-            <option value="all">Pessoas</option>{availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-          </CustomSelect>
+          {filterPersons.length > 1 && (
+            <CustomSelect value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
+              <option value="all">Pessoas</option>{filterPersons.map((p) => (<option key={p} value={p}>{p}</option>))}
+            </CustomSelect>
+          )}
         </div>
       </div>
 

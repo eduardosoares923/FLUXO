@@ -318,10 +318,18 @@ export default function Reports() {
             <span className="px-2 text-sm font-bold text-[#f2f0ea] capitalize whitespace-nowrap">{monthLabel(selectedMonth)}</span>
             <button onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8fa39a] hover:text-white hover:bg-white/10 transition-colors"><i className="fa-solid fa-chevron-right" /></button>
           </div>
-          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none">
-            <option value="todos">Todos (Consolidado)</option>
-            {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-          </CustomSelect>
+          {availablePersons.length > 1 ? (
+            <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none">
+              <option value="todos">Todos (Consolidado)</option>
+              {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
+            </CustomSelect>
+          ) : availablePersons.length === 1 ? (
+            // Quem só enxerga uma pessoa não precisa de filtro nem de "Todos": mostra só a pessoa da conta.
+            <div className="flex items-center gap-2 px-4 h-11 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm" title="Relatório desta pessoa">
+              <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
+              <span className="truncate max-w-[160px]">{availablePersons[0]}</span>
+            </div>
+          ) : null}
           <button onClick={handleExportCSV} className="w-11 h-11 flex items-center justify-center rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors" title="Exportar para Excel"><i className="fa-solid fa-file-excel" /></button>
           <button onClick={() => window.print()} className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors" title="Imprimir / PDF"><i className="fa-solid fa-print" /></button>
         </div>
