@@ -5,6 +5,7 @@ import { formatCurrency, parseTxDate } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { CustomSelect } from '../components/CustomSelect';
 import { toast } from '../stores/useToastStore';
+import { auth } from '../firebase';
 import { Transaction, Account, User } from '../types';
 
 const ReportsCharts = lazy(() => import('../components/ReportsCharts'));
@@ -30,6 +31,8 @@ export default function Reports() {
   const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedPerson, setSelectedPerson] = useState('todos');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const [simAmount, setSimAmount] = useState('');
   const [simInstallments, setSimInstallments] = useState(1);
 
@@ -281,6 +284,46 @@ export default function Reports() {
     });
   }, [accessibleTx, metrics.equity]);
 
+  // Excel formatado: o servidor (api/export-report) monta o arquivo com as mesmas regras desta tela e o navegador baixa.
+  async function handleExportExcel() {
+    setExportMenuOpen(false);
+    if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
+    setExportingExcel(true);
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      const response = await fetch('/api/export-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+        body: JSON.stringify({ month: selectedMonth, person: selectedPerson, format: 'xlsx' }),
+      });
+      // Se a função do servidor não estiver publicada, a Vercel devolve a página do app (HTML) em vez de JSON.
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error(`A função /api/export-report não respondeu (status ${response.status}). Verifique se o deploy da pasta api terminou na Vercel.`);
+      }
+      let result: any;
+      try {
+        result = (await response.json()) || {};
+      } catch {
+        throw new Error(`Resposta inválida do servidor (status ${response.status}).`);
+      }
+      if (!response.ok) throw new Error(result.error || `Erro no servidor (status ${response.status})`);
+      if (result.success !== true || !result.filename || !result.mime || !result.base64) throw new Error('Resposta inválida do servidor.');
+      const binary = atob(result.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: result.mime }));
+      const a = document.createElement('a'); a.href = url; a.download = result.filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      toast.success('Relatório em Excel gerado!');
+    } catch (err: any) {
+      console.error('Erro ao exportar em Excel:', err);
+      toast.error(err.message || 'Erro ao gerar o relatório em Excel.');
+    } finally {
+      setExportingExcel(false);
+    }
+  }
+
   function handleExportCSV() {
     if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
     const headers = ['Data', 'Descricao', 'Categoria', 'Pessoa', 'Tipo', 'Valor', 'Metodo'];
@@ -330,7 +373,28 @@ export default function Reports() {
               <span className="truncate max-w-[160px]">{availablePersons[0]}</span>
             </div>
           ) : null}
-          <button onClick={handleExportCSV} className="w-11 h-11 flex items-center justify-center rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors" title="Exportar para Excel"><i className="fa-solid fa-file-excel" /></button>
+          <div className="relative">
+            <button onClick={() => setExportMenuOpen((v) => !v)} disabled={exportingExcel} className="h-11 px-4 flex items-center gap-2 rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors text-sm font-semibold disabled:opacity-60" title="Exportar relatório">
+              <i className={`fa-solid ${exportingExcel ? 'fa-spinner fa-spin' : 'fa-file-export'}`} />
+              <span>{exportingExcel ? 'Gerando...' : 'Exportar'}</span>
+              <i className="fa-solid fa-chevron-down text-[10px]" />
+            </button>
+            {exportMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
+                <div className="absolute right-0 z-40 mt-2 w-72 overflow-hidden rounded-xl border border-white/10 bg-[#1a2422] shadow-2xl">
+                  <button onClick={handleExportExcel} className="w-full text-left px-4 py-3 text-sm text-[#f2f0ea] hover:bg-white/5 transition-colors">
+                    <span className="flex items-center gap-2 font-semibold"><i className="fa-solid fa-file-excel text-[#10b981]" /> Excel formatado (.xlsx)</span>
+                    <span className="mt-0.5 block text-xs text-[#8fa39a]">Resumo, transações, categorias e evolução, com totais em fórmulas</span>
+                  </button>
+                  <button onClick={() => { setExportMenuOpen(false); handleExportCSV(); }} className="w-full text-left px-4 py-3 text-sm text-[#f2f0ea] hover:bg-white/5 transition-colors border-t border-white/5">
+                    <span className="flex items-center gap-2 font-semibold"><i className="fa-solid fa-file-csv text-[#8fa39a]" /> CSV simples (.csv)</span>
+                    <span className="mt-0.5 block text-xs text-[#8fa39a]">Só os lançamentos, sem formatação</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button onClick={() => window.print()} className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors" title="Imprimir / PDF"><i className="fa-solid fa-print" /></button>
         </div>
       </div>
