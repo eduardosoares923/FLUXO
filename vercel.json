@@ -2,6 +2,9 @@
   "functions": {
     "api/export-report.ts": {
       "maxDuration": 30
+    },
+    "api/import-file.ts": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
