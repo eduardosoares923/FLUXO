@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, where, or, and, Query } from 'firebase/firestore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../firebase';
 import { generateId } from '../utils/format';
 import { useAuth } from '../context/AuthContext';
+
+const FAMILY_SCOPED_COLLECTIONS = ['transactions', 'accounts', 'cards', 'subscriptions', 'paidInvoices'];
 
 export function useCollection<T = any>(collectionName: string) {
   const queryClient = useQueryClient();
@@ -21,8 +23,39 @@ export function useCollection<T = any>(collectionName: string) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    let q: Query = collection(db, collectionName);
+
+    const familyId = session?.familyId?.trim();
+    const myUid = session?.id;
+    const isSuperAdmin = Boolean((session as any)?.superAdmin);
+
+    if (FAMILY_SCOPED_COLLECTIONS.includes(collectionName)) {
+      if (familyId) {
+        const isFamilyAdmin = myUid === familyId;
+        if (isFamilyAdmin) {
+          // Administrador da família (uid == familyId)
+          q = query(collection(db, collectionName), where('familyId', '==', familyId));
+        } else {
+          // Não é o administrador da família: registros próprios ou compartilhados com ele
+          q = query(
+            collection(db, collectionName),
+            or(
+              and(where('familyId', '==', familyId), where('ownerUid', '==', myUid)),
+              and(where('familyId', '==', familyId), where('sharedWith', 'array-contains', myUid))
+            )
+          );
+        }
+      }
+      // Se não tem familyId (conta ainda não preparada), mantém a consulta antiga sem filtro.
+    } else if (collectionName === 'users') {
+      if (!isSuperAdmin && familyId) {
+        // Quem não é administrador geral e tem familyId lista apenas usuários da mesma família
+        q = query(collection(db, 'users'), where('familyId', '==', familyId));
+      }
+    }
+
     const unsub = onSnapshot(
-      collection(db, collectionName),
+      q,
       (snapshot) => {
         const items: T[] = [];
         snapshot.forEach((d) => items.push({ id: d.id, ...d.data() } as unknown as T));
@@ -42,7 +75,7 @@ export function useCollection<T = any>(collectionName: string) {
       }
     );
     return unsub;
-  }, [collectionName, queryClient]);
+  }, [collectionName, queryClient, session?.id, session?.familyId, (session as any)?.superAdmin]);
 
   // MOTOR DA OTIMIZAÇÃO 1: Recalcula e salva o saldo final da conta no Firebase
   const syncAccountBalance = async (paymentMethod: string) => {
@@ -88,6 +121,31 @@ export function useCollection<T = any>(collectionName: string) {
         rec.createdBy = actor;
         rec.createdByUid = session?.id || null;
         rec.createdAt = now;
+
+        // TAREFA 2: Acrescentar familyId e ownerUid apenas em documentos novos das coleções alvo
+        if (FAMILY_SCOPED_COLLECTIONS.includes(collectionName)) {
+          const fid = session?.familyId?.trim();
+          if (fid) {
+            rec.familyId = fid;
+          }
+          if (session?.id) {
+            rec.ownerUid = session.id;
+          }
+          if (!Array.isArray(rec.sharedWith)) {
+            rec.sharedWith = [];
+          }
+        }
+      } else {
+        // Nunca sobrescrever familyId/ownerUid que já existem em edições
+        if (previous?.familyId !== undefined) {
+          rec.familyId = previous.familyId;
+        }
+        if (previous?.ownerUid !== undefined) {
+          rec.ownerUid = previous.ownerUid;
+        }
+        if (previous?.sharedWith !== undefined && rec.sharedWith === undefined) {
+          rec.sharedWith = previous.sharedWith;
+        }
       }
 
       queryClient.setQueryData<T[]>([collectionName], (prev = []) => {

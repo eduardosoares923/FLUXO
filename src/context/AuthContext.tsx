@@ -61,6 +61,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
           avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}`,
           role: userData.role || 'viewer',
           person: userData.person || userData.name || 'Eu',
+          familyId: userData.familyId || '',
+          ownerUid: userData.ownerUid || userDocId,
+          sharedWith: Array.isArray(userData.sharedWith) ? userData.sharedWith : [],
+          superAdmin: Boolean(userData.superAdmin),
         };
         // Propriedades dinâmicas de permissões que não ficam no User base:
         (newSession as any).permissions = resolvePermissions(newSession.role, userData.permissions);

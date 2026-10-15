@@ -91,11 +91,16 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const decoded = await auth.verifyIdToken(idToken);
     const callerDoc = await db.collection('users').doc(decoded.uid).get();
-    if (!callerDoc.exists || callerDoc.data().role !== 'admin') {
+    const callerData = callerDoc.data() || {};
+    if (!callerDoc.exists || callerData.role !== 'admin') {
       return res.status(403).json({ error: 'Só administradores podem criar usuários' });
     }
 
-    // 2. Valida os dados recebidos
+    const callerFamilyId = typeof callerData.familyId === 'string' && callerData.familyId.trim()
+      ? callerData.familyId.trim()
+      : '';
+
+    // 2. Valida os dados recebidos (ignora familyId e superAdmin de req.body)
     const { name, username, email, cpf, password, role, person, allowedPersons } = req.body || {};
     if (!name || !username || !email || !password) {
       return res.status(400).json({ error: 'Preencha nome, usuário, e-mail e senha' });
@@ -116,7 +121,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const finalPerson = person?.trim() || name.trim();
     const finalAllowedPersons = role === 'gerente' ? allowedPersons?.trim() || '' : '';
 
-    const record = {
+    const record: Record<string, any> = {
       id: newUser.uid,
       name: name.trim(),
       username: username.trim(),
@@ -126,10 +131,12 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       person: finalPerson,
       allowedPersons: finalAllowedPersons,
       status: 'ativo',
+      familyId: callerFamilyId,
       personKeys: toPersonKeys([finalPerson, name, username].filter(Boolean)),
       allowedPersonKeys: finalAllowedPersons ? toPersonKeys(finalAllowedPersons) : [],
       createdAt: new Date().toISOString(),
     };
+    delete record.superAdmin;
 
     await db.collection('users').doc(newUser.uid).set(record);
 
