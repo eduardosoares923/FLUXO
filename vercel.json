@@ -5,6 +5,9 @@
     },
     "api/import-file.ts": {
       "maxDuration": 30
+    },
+    "api/signup.ts": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

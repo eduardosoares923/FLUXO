@@ -39,11 +39,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       let userDocId = uid;
 
       if (!userData && authEmail) {
-        const q = query(collection(db, 'users'), where('email', '==', authEmail.toLowerCase()));
-        const qs = await getDocs(q);
-        if (!qs.empty) {
-          userDocId = qs.docs[0].id;
-          userData = qs.docs[0].data();
+        try {
+          const q = query(collection(db, 'users'), where('email', '==', authEmail.toLowerCase()));
+          const qs = await getDocs(q);
+          if (!qs.empty) {
+            userDocId = qs.docs[0].id;
+            userData = qs.docs[0].data();
+          }
+        } catch {
+          // Sob as regras v2, list em 'users' sem familyId/users/<uid> é bloqueado;
+          // segue normalmente para deslogar logo abaixo.
         }
       }
 
@@ -61,6 +66,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           avatar: userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.name || 'User')}`,
           role: userData.role || 'viewer',
           person: userData.person || userData.name || 'Eu',
+          familyId: typeof userData.familyId === 'string' ? userData.familyId : '',
+          superAdmin: userData.superAdmin === true,
+          photo: typeof userData.photo === 'string' ? userData.photo : undefined,
         };
         // Propriedades dinâmicas de permissões que não ficam no User base:
         (newSession as any).permissions = resolvePermissions(newSession.role, userData.permissions);
@@ -187,6 +195,14 @@ export async function upsertUserLookup(userRecord: any) {
   }
 
   await Promise.all(
-    [...ids].map((id) => setDoc(doc(db, 'user_lookup', id), { email }, { merge: true }))
+    [...ids].map(async (id) => {
+      const ref = doc(db, 'user_lookup', id);
+      const existing = await getDoc(ref);
+      if (existing.exists()) {
+        const existingEmail = String(existing.data()?.email || '').trim().toLowerCase();
+        if (existingEmail && existingEmail !== email) return;
+      }
+      await setDoc(ref, { email }, { merge: true });
+    })
   );
 }

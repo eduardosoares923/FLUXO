@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, writeBatch, getDocs, where } from 'firebase/firestore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { db } from '../firebase';
-import { generateId } from '../utils/format';
+import { generateId, normalize } from '../utils/format';
+import { SCOPED_COLLECTIONS, scopedQuery } from '../utils/scope';
 import { useAuth } from '../context/AuthContext';
 
 export function useCollection<T = any>(collectionName: string) {
@@ -22,7 +23,7 @@ export function useCollection<T = any>(collectionName: string) {
 
   useEffect(() => {
     const unsub = onSnapshot(
-      collection(db, collectionName),
+      scopedQuery(collectionName, session),
       (snapshot) => {
         const items: T[] = [];
         snapshot.forEach((d) => items.push({ id: d.id, ...d.data() } as unknown as T));
@@ -42,16 +43,17 @@ export function useCollection<T = any>(collectionName: string) {
       }
     );
     return unsub;
-  }, [collectionName, queryClient]);
+  }, [collectionName, queryClient, session?.id, session?.familyId, session?.superAdmin]);
 
   // MOTOR DA OTIMIZAÇÃO 1: Recalcula e salva o saldo final da conta no Firebase
   const syncAccountBalance = async (paymentMethod: string) => {
     if (!paymentMethod || !paymentMethod.startsWith('acc_')) return;
+    if (session?.familyId && session.id !== session.familyId) return;
     const accId = paymentMethod.replace('acc_', '');
     
     try {
       // Puxa transações da conta
-      const q = query(collection(db, 'transactions'), where('paymentMethod', '==', paymentMethod));
+      const q = scopedQuery('transactions', session, [where('paymentMethod', '==', paymentMethod)]);
       const snap = await getDocs(q);
       
       let income = 0; let expense = 0;
@@ -88,6 +90,26 @@ export function useCollection<T = any>(collectionName: string) {
         rec.createdBy = actor;
         rec.createdByUid = session?.id || null;
         rec.createdAt = now;
+      }
+
+      if (SCOPED_COLLECTIONS.has(collectionName)) {
+        if (session?.familyId) {
+          rec.familyId = session.familyId;
+        }
+        if (isNew && !rec.ownerUid) {
+          const recPerson = normalize(rec.person || rec.owner || '');
+          const sessionPerson = normalize(session?.person || '');
+          if (!recPerson || (sessionPerson && recPerson === sessionPerson)) {
+            if (session?.id) rec.ownerUid = session.id;
+          }
+        } else if (!isNew && previous) {
+          if (rec.ownerUid === undefined && previous.ownerUid !== undefined) {
+            rec.ownerUid = previous.ownerUid;
+          }
+          if (rec.sharedWith === undefined && previous.sharedWith !== undefined) {
+            rec.sharedWith = previous.sharedWith;
+          }
+        }
       }
 
       queryClient.setQueryData<T[]>([collectionName], (prev = []) => {

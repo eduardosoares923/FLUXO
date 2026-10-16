@@ -16,7 +16,7 @@ interface UserFormValues {
   email: string;
   cpf?: string;
   password?: string;
-  role: 'admin' | 'gerente' | 'usuario';
+  role: 'admin' | 'gerente' | 'usuario' | 'viewer';
   person?: string;
   allowedPersons?: string;
 }
@@ -71,14 +71,14 @@ export default function Users() {
   }, [callManageUsers]);
 
   useEffect(() => {
-    if (session?.role === 'admin') loadOrphans();
-  }, [session?.role, loadOrphans]);
+    if (session?.superAdmin) loadOrphans();
+  }, [session?.superAdmin, loadOrphans]);
 
   async function handleLinkOrphan(o: OrphanLogin) {
     setOrphanBusy(o.uid);
     try {
       await callManageUsers('link', o.uid);
-      toast.success(`${o.email || o.name} agora faz parte do sistema, como Usuário Normal.`);
+      toast.success(`${o.email || o.name} agora faz parte do sistema.`);
       await loadOrphans();
     } catch (err: any) {
       toast.error(err.message || 'Erro ao vincular login.');
@@ -195,6 +195,7 @@ export default function Users() {
 
       const person = data.person?.trim() || data.name.trim();
       const allowedPersons = data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '';
+      const isEditingSelf = editingId === session?.id && !session?.superAdmin;
 
       const record: any = {
         id: editingId,
@@ -202,13 +203,14 @@ export default function Users() {
         username: data.username.trim(),
         email: data.email.trim().toLowerCase(),
         cpf: data.cpf?.trim() || '',
-        role: data.role,
-        person,
-        allowedPersons,
-        status: 'ativo',
         personKeys: toPersonKeys([person, data.name, data.username].filter(Boolean)),
         allowedPersonKeys: allowedPersons ? toPersonKeys(allowedPersons) : [],
       };
+      if (!isEditingSelf) {
+        record.role = data.role;
+        record.person = person;
+        record.allowedPersons = allowedPersons;
+      }
 
       await saveRecord(record);
       await upsertUserLookup(record);
@@ -276,8 +278,11 @@ export default function Users() {
               </div>
               <div className="hidden md:block text-sm text-[#c9d2cf] truncate" title={u.email}>{u.email || '-'}</div>
               <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.person || u.name}</div>
-              <div className="hidden md:block">
+              <div className="hidden md:flex items-center gap-1.5 flex-wrap">
                 <span className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
+                {u.status === 'inativo' && (
+                  <span className="px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] bg-red-500/20 text-red-400">Bloqueado</span>
+                )}
               </div>
               <div className="flex justify-end gap-1">
                 <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário">
@@ -294,13 +299,16 @@ export default function Users() {
                 <span>&bull;</span>
                 <span>{u.person || u.name}</span>
                 <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
+                {u.status === 'inativo' && (
+                  <span className="px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] bg-red-500/20 text-red-400">Bloqueado</span>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {session?.role === 'admin' && (
+      {session?.superAdmin && (
         <div className="mt-6 flex flex-wrap items-center gap-3 text-xs">
           <button onClick={loadOrphans} disabled={checkingOrphans} className="px-3 h-9 rounded-lg bg-white/5 text-[#8fa39a] font-bold hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50">
             <i className={`fa-solid fa-rotate mr-1.5 ${checkingOrphans ? 'fa-spin' : ''}`} />
@@ -312,13 +320,13 @@ export default function Users() {
         </div>
       )}
 
-      {session?.role === 'admin' && orphanError && (
+      {session?.superAdmin && orphanError && (
         <div className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300">
           <i className="fa-solid fa-circle-exclamation mr-2" />{orphanError}
         </div>
       )}
 
-      {session?.role === 'admin' && orphans.length > 0 && (
+      {session?.superAdmin && orphans.length > 0 && (
         <div className="mt-8 bg-[#e3b04b]/[0.04] border border-[#e3b04b]/20 rounded-2xl overflow-hidden">
           <div className="px-5 py-4 border-b border-[#e3b04b]/10">
             <h3 className="font-bold text-[#f2f0ea] flex items-center gap-2">
@@ -326,7 +334,7 @@ export default function Users() {
               Logins no Firebase sem cadastro no sistema ({orphans.length})
             </h3>
             <p className="text-xs text-[#8fa39a] mt-1">
-              Essas contas conseguem existir no Firebase mas não aparecem aqui. Vincule pra trazer pro sistema (entra como Usuário Normal, depois você edita), ou exclua se for conta antiga.
+              Essas contas conseguem existir no Firebase mas não aparecem aqui. Vincule pra trazer pro sistema, ou exclua se for conta antiga.
             </p>
           </div>
           {orphans.map((o) => (
@@ -394,7 +402,10 @@ export default function Users() {
                   <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
                     <option value="usuario">Usuário Normal</option>
                     <option value="gerente">Gerente</option>
-                    <option value="admin">Administrador</option>
+                    <option value="viewer">Visualizador</option>
+                    {(session?.superAdmin || field.value === 'admin') && (
+                      <option value="admin">Administrador</option>
+                    )}
                   </CustomSelect>
                 )} />
               </div>

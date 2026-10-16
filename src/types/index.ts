@@ -37,6 +37,12 @@ export interface Transaction {
   updatedBy?: string;
   updatedByUid?: string | null;
   updatedAt?: string;
+  familyId?: string;
+  ownerUid?: string;
+  sharedWith?: string[];
+  originalAmount?: number;
+  currency?: string;
+  fxRate?: number;
 }
 
 export interface Account {
@@ -49,6 +55,9 @@ export interface Account {
   bank?: string;
   owner?: string;
   ownerKey?: string;
+  familyId?: string;
+  ownerUid?: string;
+  sharedWith?: string[];
 }
 
 export interface User {
@@ -59,6 +68,10 @@ export interface User {
   role: 'admin' | 'gerente' | 'viewer' | 'usuario' | string;
   person?: string;
   avatar?: string;
+  status?: string;
+  familyId?: string;
+  superAdmin?: boolean;
+  photo?: string;
 }
 
 export interface Card {
@@ -70,6 +83,9 @@ export interface Card {
   owner?: string;
   ownerKey?: string;
   color?: string;
+  familyId?: string;
+  ownerUid?: string;
+  sharedWith?: string[];
 }
 
 export interface Person {

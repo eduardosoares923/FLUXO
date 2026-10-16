@@ -35,6 +35,28 @@ function addMonthsClamped(dateStr: string, months: number) {
   return `${finalDate.getFullYear()}-${String(finalDate.getMonth() + 1).padStart(2, '0')}-${String(finalDate.getDate()).padStart(2, '0')}`;
 }
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: 'US$',
+  EUR: '€',
+  GBP: '£',
+  JPY: '¥',
+  ARS: 'ARS',
+};
+
+function formatForeignCurrency(tx: Transaction): string | null {
+  if (!tx.originalAmount || !tx.currency) return null;
+  const code = String(tx.currency).toUpperCase();
+  const sym = CURRENCY_SYMBOLS[code] || code;
+  const origStr = Number(tx.originalAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (tx.fxRate && Number(tx.fxRate) > 0) {
+    const rate = Number(tx.fxRate);
+    const decimals = rate < 0.1 ? 4 : 2;
+    const rateStr = rate.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    return `${sym} ${origStr} a R$ ${rateStr}`;
+  }
+  return `${sym} ${origStr}`;
+}
+
 export default function Transactions() {
   const { session, hasPermission, canAccessPerson } = useAuth() as { session: User; hasPermission: (r: string, a: string) => boolean; canAccessPerson: (p?: string | null, tx?: any) => boolean };
   const { data: transactions, loading, error, saveRecord, deleteRecord, deleteRecords } = useCollection<Transaction>('transactions');
@@ -627,6 +649,9 @@ export default function Transactions() {
                        {tx.description}
                        {tx.groupId && <i className="fa-solid fa-layer-group text-xs text-[#e3b04b]" />}
                      </div>
+                     {formatForeignCurrency(tx) && (
+                       <div className="text-xs text-[#8fa39a]">{formatForeignCurrency(tx)}</div>
+                     )}
                      <div className="text-xs text-[#8fa39a] mt-0.5">{formatDate(tx.date)} &bull; {tx.category} &bull; {tx.person}</div>
                      {Array.isArray(tx.tags) && tx.tags.length > 0 && (
                        <div className="flex flex-wrap gap-1 mt-1">
@@ -637,10 +662,15 @@ export default function Transactions() {
 
                   {/* Colunas Exclusivas PC */}
                   <div className="hidden md:block w-[100px] text-sm text-[#8fa39a] font-medium">{formatDate(tx.date)}</div>
-                  <div className="hidden md:flex flex-1 min-w-[200px] items-center gap-2 text-[#f2f0ea] font-medium text-[0.95rem] truncate">
-                     <span className="truncate">{tx.description}</span>
-                     {tx.groupId && <i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" title="Parcelamento" />}
-                     {Array.isArray(tx.tags) && tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full shrink-0">#{t}</span>))}
+                  <div className="hidden md:flex flex-1 min-w-[200px] flex-col justify-center truncate">
+                     <div className="flex items-center gap-2 text-[#f2f0ea] font-medium text-[0.95rem] truncate">
+                       <span className="truncate">{tx.description}</span>
+                       {tx.groupId && <i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" title="Parcelamento" />}
+                       {Array.isArray(tx.tags) && tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full shrink-0">#{t}</span>))}
+                     </div>
+                     {formatForeignCurrency(tx) && (
+                       <div className="text-xs text-[#8fa39a] truncate">{formatForeignCurrency(tx)}</div>
+                     )}
                   </div>
                   <div className="hidden md:block w-[140px] text-sm text-[#8fa39a] truncate"><span className="bg-white/5 px-2 py-1 rounded-md">{tx.category}</span></div>
                   <div className="hidden md:block w-[100px] text-sm text-[#8fa39a] truncate">{tx.person}</div>

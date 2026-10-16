@@ -83,7 +83,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // 1. Confirma que quem está chamando está logado E é admin
+    // 1. Confirma que quem está chamando está logado, ativo E é admin
     const idToken = getBearerToken(req);
     if (!idToken) {
       return res.status(401).json({ error: 'Token de autenticação ausente' });
@@ -91,55 +91,89 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const decoded = await auth.verifyIdToken(idToken);
     const callerDoc = await db.collection('users').doc(decoded.uid).get();
-    if (!callerDoc.exists || callerDoc.data().role !== 'admin') {
+    const callerData = callerDoc.data() || {};
+    if (!callerDoc.exists || callerData.role !== 'admin' || callerData.status === 'inativo') {
       return res.status(403).json({ error: 'Só administradores podem criar usuários' });
     }
 
-    // 2. Valida os dados recebidos
+    const callerFamilyId = callerData.familyId || decoded.uid;
+    const isSuperAdmin = callerData.superAdmin === true;
+
+    // 2. Valida os dados recebidos (nunca aceita familyId vindo do body)
     const { name, username, email, cpf, password, role, person, allowedPersons } = req.body || {};
     if (!name || !username || !email || !password) {
       return res.status(400).json({ error: 'Preencha nome, usuário, e-mail e senha' });
     }
-    if (password.length < 6) {
+    if (String(password).length < 6) {
       return res.status(400).json({ error: 'A senha precisa ter pelo menos 6 caracteres' });
     }
+
+    const allowedRoles = isSuperAdmin
+      ? ['admin', 'gerente', 'usuario', 'viewer']
+      : ['gerente', 'usuario', 'viewer'];
+    const requestedRole = role ? String(role).trim() : 'usuario';
+    if (!allowedRoles.includes(requestedRole)) {
+      return res.status(403).json({ error: 'Cargo inválido ou sem permissão para criar administrador' });
+    }
+    const finalRole = requestedRole;
+
+    const normalizedEmail = String(email).trim().toLowerCase();
 
     // 3. Cria o usuário no Firebase Auth (sem afetar a sessão de ninguém,
     //    porque isso roda no servidor, não no navegador)
     const newUser = await auth.createUser({
-      email: email.trim().toLowerCase(),
-      password,
-      displayName: name.trim(),
+      email: normalizedEmail,
+      password: String(password),
+      displayName: String(name).trim(),
     });
 
-    // 4. Cria o documento no Firestore, já com as chaves normalizadas
-    const finalPerson = person?.trim() || name.trim();
-    const finalAllowedPersons = role === 'gerente' ? allowedPersons?.trim() || '' : '';
+    // 4. Cria o documento no Firestore, já com as chaves normalizadas e familyId
+    const finalPerson = person?.trim() || String(name).trim();
+    const finalAllowedPersons = finalRole === 'gerente' ? allowedPersons?.trim() || '' : '';
+    const familyId = isSuperAdmin && finalRole === 'admin' ? newUser.uid : callerFamilyId;
 
     const record = {
       id: newUser.uid,
-      name: name.trim(),
-      username: username.trim(),
-      email: email.trim().toLowerCase(),
+      name: String(name).trim(),
+      username: String(username).trim(),
+      email: normalizedEmail,
       cpf: cpf?.trim() || '',
-      role: role || 'usuario',
+      role: finalRole,
       person: finalPerson,
       allowedPersons: finalAllowedPersons,
       status: 'ativo',
       personKeys: toPersonKeys([finalPerson, name, username].filter(Boolean)),
       allowedPersonKeys: finalAllowedPersons ? toPersonKeys(finalAllowedPersons) : [],
+      familyId,
       createdAt: new Date().toISOString(),
     };
 
     await db.collection('users').doc(newUser.uid).set(record);
 
-    // 5. Mantém a coleção user_lookup em dia (login por username/CPF)
-    const lookupIds = new Set([normalize(username), normalize(email)]);
-    const cpfDigits = (cpf || '').replace(/\D/g, '');
+    // 5. Mantém a coleção user_lookup em dia (login por username/CPF),
+    //    sem sobrescrever atalho que já aponte para outro e-mail.
+    const lookupIds = new Set([normalize(username), normalize(normalizedEmail)].filter(Boolean));
+    const cpfDigits = String(cpf || '').replace(/\D/g, '');
     if (cpfDigits.length >= 11) lookupIds.add(cpfDigits);
+
+    const existingLookups = await Promise.all(
+      [...lookupIds].map((id) => db.collection('user_lookup').doc(id).get())
+    );
+    const hasConflict = existingLookups.some((snap) => {
+      if (!snap.exists) return false;
+      const existingEmail = String(snap.data()?.email || '').trim().toLowerCase();
+      return Boolean(existingEmail && existingEmail !== normalizedEmail);
+    });
+
+    if (hasConflict) {
+      await auth.deleteUser(newUser.uid).catch(() => {});
+      await db.collection('users').doc(newUser.uid).delete().catch(() => {});
+      return res.status(409).json({ error: 'Esse usuário ou CPF já está em uso' });
+    }
+
     await Promise.all(
       [...lookupIds].map((id) =>
-        db.collection('user_lookup').doc(id).set({ email: email.trim().toLowerCase() }, { merge: true })
+        db.collection('user_lookup').doc(id).set({ email: normalizedEmail }, { merge: true })
       )
     );
 
