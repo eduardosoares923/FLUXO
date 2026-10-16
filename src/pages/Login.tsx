@@ -1,22 +1,70 @@
 import React, { useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 
 const ERROR_MESSAGES: Record<string, string> = {
   'auth/user-not-found': 'Usuário não encontrado.',
   'auth/wrong-password': 'Senha incorreta.',
-  'auth/invalid-email': 'Formato de login inválido.',
+  'auth/invalid-email': 'Formato de e-mail inválido.',
   'auth/invalid-credential': 'Identificador ou senha incorretos.',
   'auth/account-pending': 'Conta aguardando aprovação',
-  'auth/account-blocked': 'Esta conta está bloqueada. Procure o administrador.',
+  'auth/account-blocked': 'Esta conta está bloqueada pelo administrador.',
 };
 
-function BackgroundBlobs() {
+function EyeSvg({ show }: { show: boolean }) {
+  if (show) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-5 h-5"
+        aria-hidden="true"
+      >
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0" aria-hidden="true">
-      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-[#e3b04b]/20 blur-[120px] mix-blend-screen animate-[pulse_8s_ease-in-out_infinite]" />
-      <div className="absolute top-[40%] right-[-10%] w-[400px] h-[400px] rounded-full bg-[#10b981]/10 blur-[100px] mix-blend-screen animate-[pulse_10s_ease-in-out_infinite_1s]" />
-      <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] rounded-full bg-[#6366f1]/10 blur-[120px] mix-blend-screen animate-[pulse_12s_ease-in-out_infinite_2s]" />
-    </div>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-5 h-5"
+      aria-hidden="true"
+    >
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  );
+}
+
+function CloseSvg() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-5 h-5"
+      aria-hidden="true"
+    >
+      <path d="M18 6L6 18" />
+      <path d="M6 6L18 18" />
+    </svg>
   );
 }
 
@@ -32,13 +80,22 @@ export default function Login() {
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Estados de Esqueci a senha
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMsg, setForgotMsg] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   // Estados do Cadastro ("Criar nova conta")
   const [signupName, setSignupName] = useState('');
+  const [signupUsername, setSignupUsername] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [usageType, setUsageType] = useState<'individual' | 'family'>('individual');
   const [inviteCode, setInviteCode] = useState('');
-  const [website, setWebsite] = useState(''); // Honeypot invisível contra robôs
+  const [website, setWebsite] = useState(''); // Honeypot invisível
 
   async function handleLoginSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,7 +134,7 @@ export default function Login() {
       return;
     }
     if (usageType === 'family' && inviteCode.trim().length < 4) {
-      setError('Informe o código de convite fornecido pelo responsável.');
+      setError('Informe o código de convite fornecido.');
       return;
     }
 
@@ -88,6 +145,7 @@ export default function Login() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: signupName.trim(),
+          username: signupUsername.trim() || signupEmail.trim().split('@')[0],
           email: signupEmail.trim().toLowerCase(),
           password: signupPassword,
           usageType,
@@ -98,7 +156,7 @@ export default function Login() {
 
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
-        throw new Error('Serviço de cadastro indisponível no momento. Tente novamente em instantes.');
+        throw new Error('Serviço indisponível no momento. Tente novamente em instantes.');
       }
 
       const result = await response.json();
@@ -107,8 +165,9 @@ export default function Login() {
         return;
       }
 
-      // Não faz login automático: limpa os campos, volta para a tela de login e mostra o aviso
+      // Sem login automático
       setSignupName('');
+      setSignupUsername('');
       setSignupEmail('');
       setSignupPassword('');
       setInviteCode('');
@@ -123,243 +182,482 @@ export default function Login() {
     }
   }
 
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
+      setForgotError('Informe um e-mail válido.');
+      return;
+    }
+    setForgotError('');
+    setForgotMsg('');
+    setForgotLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
+      setForgotMsg('E-mail de recuperação enviado com sucesso. Verifique sua caixa de entrada.');
+    } catch (err: any) {
+      setForgotError(ERROR_MESSAGES[err.code] || 'Não foi possível enviar o e-mail de recuperação.');
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-[#0f172a] flex items-center justify-center p-4 relative overflow-hidden">
-      <BackgroundBlobs />
-
-      {mode === 'login' ? (
-        <form
-          className="w-full max-w-[420px] bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col animate-in fade-in zoom-in-95 duration-500"
-          onSubmit={handleLoginSubmit}
+    <div className="min-h-screen flex flex-col lg:flex-row bg-bg text-ink">
+      {/* Painel Esquerdo Hero (Desktop) */}
+      <div className="hidden lg:flex lg:w-1/2 min-h-screen relative overflow-hidden bg-gradient-to-br from-[#1F5A41] to-[#2F7A57] dark:from-[#123A33] dark:to-[#1F5A4C] p-12 lg:p-16 flex-col justify-between text-white select-none">
+        {/* Marca d'água W ao fundo */}
+        <span
+          aria-hidden="true"
+          className="font-display font-bold text-[34rem] leading-none text-white/[0.04] absolute -right-16 -top-12 pointer-events-none select-none"
         >
-          <div className="text-center mb-10">
-            <h1 className="text-4xl font-black tracking-tighter text-[#f2f0ea] mb-2 drop-shadow-md">Wynd</h1>
-            <p className="text-[#8fa39a] text-[0.95rem]">Entre com usuário, e-mail ou CPF</p>
+          W
+        </span>
+
+        {/* Topo do painel: W wynd em dourado */}
+        <div className="flex items-center gap-2.5 z-10">
+          <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 font-display text-2xl font-bold bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
+            W
+          </span>
+          <span className="font-display text-2xl font-bold tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
+            wynd
+          </span>
+        </div>
+
+        {/* Centro: Frase e descrição */}
+        <div className="max-w-[480px] z-10 py-12">
+          <h1 className="font-display text-[46px] lg:text-[54px] font-bold leading-[1.08] tracking-tight text-white mb-6">
+            Seu dinheiro, no seu ritmo.
+          </h1>
+          <p className="text-white/80 text-base lg:text-lg leading-relaxed">
+            O mesmo Wynd no app e no site, com a mesma conta.
+            <br />
+            Contas, cartões, fixas e metas num lugar só.
+          </p>
+        </div>
+
+        {/* Rodapé: Pílulas com destaques */}
+        <div className="flex flex-wrap items-center gap-2.5 z-10">
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+            Contas e cartões
+          </span>
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+            Fixas e assinaturas
+          </span>
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+            Metas e relatórios
+          </span>
+        </div>
+      </div>
+
+      {/* Painel Direito (Formulário) */}
+      <div className="w-full lg:w-1/2 min-h-screen flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-bg relative overflow-y-auto">
+        <div className="w-full max-w-[420px] mx-auto py-8 animate-in fade-in duration-300">
+          {/* Marca no topo exclusivo celular */}
+          <div className="lg:hidden flex items-center justify-center gap-2.5 mb-8">
+            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border font-display text-2xl font-bold bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
+              W
+            </span>
+            <span className="font-display text-2xl font-bold tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
+              wynd
+            </span>
           </div>
 
-          <div className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="email" className="text-[0.8rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">Identificador</label>
-              <input
-                id="email"
-                type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                autoComplete="username"
-                placeholder="Ex: eduardo.silva"
-                className="w-full p-3.5 rounded-xl border border-white/[0.08] bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20"
-              />
-            </div>
+          {mode === 'login' ? (
+            <form onSubmit={handleLoginSubmit} className="flex flex-col">
+              <h2 className="font-display text-[32px] font-bold text-ink mb-1 tracking-tight">
+                Entrar
+              </h2>
+              <p className="text-muted text-sm mb-6">
+                Use seu usuário, e-mail ou CPF.
+              </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="password" className="text-[0.8rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">Senha</label>
-              <div className="relative">
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  className="w-full p-3.5 pr-12 rounded-xl border border-white/[0.08] bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20"
-                />
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="login-identifier" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Usuário ou e-mail
+                  </label>
+                  <input
+                    id="login-identifier"
+                    type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    autoComplete="username"
+                    placeholder="marcos"
+                    className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="login-password" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="login-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      className="w-full min-h-[48px] pl-4 pr-12 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      onContextMenu={(e) => e.preventDefault()}
+                      aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                      tabIndex={-1}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                    >
+                      <EyeSvg show={showPassword} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotOpen(true);
+                      setForgotError('');
+                      setForgotMsg('');
+                      setForgotEmail(identifier.includes('@') ? identifier : '');
+                    }}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="text-xs font-semibold text-ink hover:underline"
+                  >
+                    Esqueci a senha
+                  </button>
+                </div>
+              </div>
+
+              {error && (
+                <p className="text-xs font-medium text-spendText mt-3 leading-relaxed animate-in fade-in">
+                  {error}
+                </p>
+              )}
+
+              {successMsg && (
+                <p className="text-xs font-medium text-pri mt-3 leading-relaxed animate-in fade-in">
+                  {successMsg}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                onContextMenu={(e) => e.preventDefault()}
+                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-pri hover:opacity-95 active:scale-[0.99] text-white dark:text-[#0A1110] font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+              >
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+
+              <div className="mt-8 text-center text-sm text-muted">
+                <span>Ainda não tem conta? </span>
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  tabIndex={-1}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8fa39a] hover:text-[#e3b04b] transition-colors"
+                  onClick={() => {
+                    setError('');
+                    setSuccessMsg('');
+                    setMode('signup');
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="font-bold text-ink hover:underline"
                 >
-                  <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} />
+                  Criar conta
                 </button>
               </div>
-            </div>
-          </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSignupSubmit} className="flex flex-col">
+              <h2 className="font-display text-[32px] font-bold text-ink mb-1 tracking-tight">
+                Criar conta
+              </h2>
+              <p className="text-muted text-sm mb-6">
+                Sua conta é liberada depois que o administrador aprovar.
+              </p>
 
-          {successMsg && (
-            <div className="mt-6 p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-medium text-center animate-in slide-in-from-top-2">
-              <i className="fa-solid fa-circle-check mr-2" />
-              {successMsg}
-            </div>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-name" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Nome
+                  </label>
+                  <input
+                    id="signup-name"
+                    type="text"
+                    value={signupName}
+                    onChange={(e) => setSignupName(e.target.value)}
+                    autoComplete="name"
+                    placeholder="Marcos Junior"
+                    className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-username" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Usuário
+                  </label>
+                  <input
+                    id="signup-username"
+                    type="text"
+                    value={signupUsername}
+                    onChange={(e) => setSignupUsername(e.target.value)}
+                    autoComplete="username"
+                    placeholder="marcos"
+                    className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-email" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    E-mail
+                  </label>
+                  <input
+                    id="signup-email"
+                    type="email"
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    autoComplete="email"
+                    placeholder="marcos@email.com"
+                    className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="signup-password" className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Senha
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="signup-password"
+                      type={showSignupPassword ? 'text' : 'password'}
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      autoComplete="new-password"
+                      placeholder="••••••••"
+                      className="w-full min-h-[48px] pl-4 pr-12 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSignupPassword((v) => !v)}
+                      onContextMenu={(e) => e.preventDefault()}
+                      aria-label={showSignupPassword ? 'Ocultar senha' : 'Exibir senha'}
+                      tabIndex={-1}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted hover:text-ink w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
+                    >
+                      <EyeSvg show={showSignupPassword} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Escolha "Só eu" ou "Com outra pessoa" (cartões de rádio próprios) */}
+                <div className="flex flex-col gap-2 pt-1">
+                  <span className="text-xs font-bold text-muted uppercase tracking-wider">
+                    Como você vai usar
+                  </span>
+                  <div className="grid grid-cols-1 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setUsageType('individual')}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`flex items-start gap-3.5 p-3.5 rounded-[18px] border text-left transition-all ${
+                        usageType === 'individual'
+                          ? 'border-pri bg-priSoft/20 ring-1 ring-pri text-ink'
+                          : 'border-border bg-card text-muted hover:border-muted/60'
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
+                          usageType === 'individual' ? 'border-pri' : 'border-border'
+                        }`}
+                      >
+                        {usageType === 'individual' && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-pri" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-sm text-ink leading-tight">
+                          Só eu
+                        </div>
+                        <div className="text-xs text-muted mt-0.5 leading-snug">
+                          Seus dados ficam só com você.
+                        </div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setUsageType('family')}
+                      onContextMenu={(e) => e.preventDefault()}
+                      className={`flex items-start gap-3.5 p-3.5 rounded-[18px] border text-left transition-all ${
+                        usageType === 'family'
+                          ? 'border-pri bg-priSoft/20 ring-1 ring-pri text-ink'
+                          : 'border-border bg-card text-muted hover:border-muted/60'
+                      }`}
+                    >
+                      <span
+                        className={`w-5 h-5 rounded-full border mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
+                          usageType === 'family' ? 'border-pri' : 'border-border'
+                        }`}
+                      >
+                        {usageType === 'family' && (
+                          <span className="w-2.5 h-2.5 rounded-full bg-pri" />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-sm text-ink leading-tight">
+                          Com outra pessoa
+                        </div>
+                        <div className="text-xs text-muted mt-0.5 leading-snug">
+                          Entre com o código de convite que você recebeu.
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Código de convite só quando "Com outra pessoa" */}
+                {usageType === 'family' && (
+                  <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
+                    <label htmlFor="signup-invite" className="text-xs font-bold text-muted uppercase tracking-wider">
+                      Código de convite
+                    </label>
+                    <input
+                      id="signup-invite"
+                      type="text"
+                      value={inviteCode}
+                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                      placeholder="K7M2QX9A"
+                      className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors uppercase tracking-wider font-mono text-sm"
+                    />
+                  </div>
+                )}
+
+                {/* Honeypot invisível contra robôs */}
+                <div aria-hidden="true" className="hidden">
+                  <label htmlFor="signup-website">Website</label>
+                  <input
+                    id="signup-website"
+                    name="website"
+                    type="text"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <p className="text-xs font-medium text-spendText mt-3 leading-relaxed animate-in fade-in">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                onContextMenu={(e) => e.preventDefault()}
+                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-pri hover:opacity-95 active:scale-[0.99] text-white dark:text-[#0A1110] font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+              >
+                {loading ? 'Enviando...' : 'Criar conta'}
+              </button>
+
+              <div className="mt-8 text-center text-sm text-muted">
+                <span>Já tem conta? </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError('');
+                    setMode('login');
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="font-bold text-ink hover:underline"
+                >
+                  Entrar
+                </button>
+              </div>
+            </form>
           )}
+        </div>
+      </div>
 
-          {error && (
-            <div className={`mt-6 p-3 rounded-lg border text-sm font-medium text-center animate-in slide-in-from-top-2 ${error === 'Conta aguardando aprovação' ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-              <i className={`fa-solid ${error === 'Conta aguardando aprovação' ? 'fa-clock' : 'fa-triangle-exclamation'} mr-2`} />
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-8 w-full py-4 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-extrabold text-[1.05rem] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-[0_0_20px_rgba(227,176,75,0.3)]"
+      {/* Modal Esqueci a senha (Radix Dialog) */}
+      <Dialog.Root open={forgotOpen} onOpenChange={setForgotOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
+          <Dialog.Content
+            aria-describedby={undefined}
+            className="fixed inset-x-4 top-1/2 -translate-y-1/2 max-w-[440px] mx-auto z-50 rounded-[28px] bg-card border border-border p-6 shadow-2xl focus:outline-none text-ink"
           >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <i className="fa-solid fa-circle-notch fa-spin" /> Autenticando...
-              </span>
-            ) : 'Entrar no Wynd'}
-          </button>
-
-          <div className="mt-6 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setError('');
-                setSuccessMsg('');
-                setMode('signup');
-              }}
-              className="text-xs font-medium text-[#8fa39a] hover:text-[#e3b04b] transition-colors"
-            >
-              Criar nova conta
-            </button>
-          </div>
-        </form>
-      ) : (
-        <form
-          className="w-full max-w-[440px] bg-white/[0.03] backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl relative z-10 flex flex-col animate-in fade-in zoom-in-95 duration-500"
-          onSubmit={handleSignupSubmit}
-        >
-          <div className="text-center mb-7">
-            <h1 className="text-3xl font-black tracking-tighter text-[#f2f0ea] mb-1.5 drop-shadow-md">Criar nova conta</h1>
-            <p className="text-[#8fa39a] text-sm">Preencha seus dados para solicitar acesso ao Wynd</p>
-          </div>
-
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <span className="text-[0.75rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">Tipo de uso</span>
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-black/30 border border-white/[0.08]">
+            <div className="flex items-center justify-between mb-3">
+              <Dialog.Title className="font-display text-xl font-bold text-ink">
+                Recuperar senha
+              </Dialog.Title>
+              <Dialog.Close asChild>
                 <button
                   type="button"
-                  onClick={() => setUsageType('individual')}
-                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${usageType === 'individual' ? 'bg-[#e3b04b] text-[#1c1206] shadow' : 'text-[#8fa39a] hover:text-white'}`}
+                  aria-label="Fechar"
+                  className="w-9 h-9 rounded-full bg-neutral text-ink flex items-center justify-center hover:bg-neutral/80 transition-colors"
                 >
-                  Uso individual
+                  <CloseSvg />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setUsageType('family')}
-                  className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all ${usageType === 'family' ? 'bg-[#e3b04b] text-[#1c1206] shadow' : 'text-[#8fa39a] hover:text-white'}`}
-                >
-                  Entrar em uma família
-                </button>
-              </div>
+              </Dialog.Close>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="signup-name" className="text-[0.8rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">Nome</label>
-              <input
-                id="signup-name"
-                type="text"
-                value={signupName}
-                onChange={(e) => setSignupName(e.target.value)}
-                autoComplete="name"
-                placeholder="Ex: Maria Silva"
-                className="w-full p-3.5 rounded-xl border border-white/[0.08] bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20"
-              />
-            </div>
+            <p className="text-xs text-muted mb-4 leading-relaxed">
+              Informe seu e-mail cadastrado para receber as instruções de recuperação de senha.
+            </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="signup-email" className="text-[0.8rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">E-mail</label>
-              <input
-                id="signup-email"
-                type="email"
-                value={signupEmail}
-                onChange={(e) => setSignupEmail(e.target.value)}
-                autoComplete="email"
-                placeholder="voce@exemplo.com"
-                className="w-full p-3.5 rounded-xl border border-white/[0.08] bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="signup-password" className="text-[0.8rem] font-bold text-[#8fa39a] uppercase tracking-wider ml-1">Senha</label>
-              <div className="relative">
+            <form onSubmit={handleForgotSubmit} className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="forgot-email" className="text-xs font-bold text-muted uppercase tracking-wider">
+                  E-mail
+                </label>
                 <input
-                  id="signup-password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={signupPassword}
-                  onChange={(e) => setSignupPassword(e.target.value)}
-                  autoComplete="new-password"
-                  placeholder="Mínimo de 6 caracteres"
-                  className="w-full p-3.5 pr-12 rounded-xl border border-white/[0.08] bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20"
+                  id="forgot-email"
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  placeholder="voce@exemplo.com"
+                  className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors text-sm"
                 />
+              </div>
+
+              {forgotError && (
+                <p className="text-xs font-medium text-spendText leading-relaxed">
+                  {forgotError}
+                </p>
+              )}
+
+              {forgotMsg && (
+                <p className="text-xs font-medium text-pri leading-relaxed">
+                  {forgotMsg}
+                </p>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 mt-2">
                 <button
                   type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  tabIndex={-1}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-[#8fa39a] hover:text-[#e3b04b] transition-colors"
+                  onClick={() => setForgotOpen(false)}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="px-4 min-h-[44px] rounded-pill bg-neutral text-ink text-xs font-bold hover:bg-neutral/80 transition-colors"
                 >
-                  <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`} />
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={forgotLoading}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className="px-5 min-h-[44px] rounded-pill bg-pri text-white dark:text-[#0A1110] text-xs font-bold hover:opacity-95 transition-all disabled:opacity-50"
+                >
+                  {forgotLoading ? 'Enviando...' : 'Enviar link de recuperação'}
                 </button>
               </div>
-            </div>
-
-            {usageType === 'family' && (
-              <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
-                <label htmlFor="signup-invite" className="text-[0.8rem] font-bold text-[#e3b04b] uppercase tracking-wider ml-1">Código de convite da família</label>
-                <input
-                  id="signup-invite"
-                  type="text"
-                  value={inviteCode}
-                  onChange={(e) => setInviteCode(e.target.value)}
-                  placeholder="Ex: A1B2C3D4"
-                  className="w-full p-3.5 rounded-xl border border-[#e3b04b]/30 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-all placeholder:text-white/20 uppercase tracking-wider font-mono"
-                />
-                <span className="text-[11px] text-[#8fa39a] ml-1">
-                  Peça o código de convite de 8 caracteres ao administrador da família.
-                </span>
-              </div>
-            )}
-
-            {/* Honeypot invisível para barrar robôs */}
-            <div aria-hidden="true" className="hidden">
-              <label htmlFor="signup-website">Website</label>
-              <input
-                id="signup-website"
-                name="website"
-                type="text"
-                tabIndex={-1}
-                autoComplete="off"
-                value={website}
-                onChange={(e) => setWebsite(e.target.value)}
-              />
-            </div>
-          </div>
-
-          {error && (
-            <div className="mt-5 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm font-medium text-center animate-in slide-in-from-top-2">
-              <i className="fa-solid fa-triangle-exclamation mr-2" />
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-7 w-full py-4 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-extrabold text-[1.05rem] transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:pointer-events-none shadow-[0_0_20px_rgba(227,176,75,0.3)]"
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <i className="fa-solid fa-circle-notch fa-spin" /> Enviando...
-              </span>
-            ) : 'Solicitar Cadastro'}
-          </button>
-
-          <div className="mt-5 text-center">
-            <button
-              type="button"
-              onClick={() => {
-                setError('');
-                setMode('login');
-              }}
-              className="text-xs font-medium text-[#8fa39a] hover:text-white transition-colors"
-            >
-              Já tem uma conta? Voltar para o login
-            </button>
-          </div>
-        </form>
-      )}
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

@@ -7,9 +7,11 @@ import { useAuth } from '../context/AuthContext';
 import { CustomSelect } from '../components/CustomSelect';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys, generateId } from '../utils/format';
+import * as Popover from '@radix-ui/react-popover';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { DatePicker, MoneyField, NumberField, Tooltip } from '../components/ui';
+import { DatePicker, MonthPicker, MoneyField, NumberField, Tooltip } from '../components/ui';
+import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
@@ -55,6 +57,14 @@ function formatForeignCurrency(tx: Transaction): string | null {
     const rateStr = rate.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
     return `${sym} ${origStr} a R$ ${rateStr}`;
   }
+  return `${sym} ${origStr}`;
+}
+
+function formatForeignCurrencyShort(tx: Transaction): string | null {
+  if (!tx.originalAmount || !tx.currency) return null;
+  const code = String(tx.currency).toUpperCase();
+  const sym = CURRENCY_SYMBOLS[code] || code;
+  const origStr = Number(tx.originalAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${sym} ${origStr}`;
 }
 
@@ -157,16 +167,47 @@ export default function Transactions() {
     setValue('paymentMethod', smartSuggestion.paymentMethod);
   }
 
+  const selectedPeriod = useUIStore((s) => s.selectedPeriod);
+  const setSelectedPeriod = useUIStore((s) => s.setSelectedPeriod);
+
+  const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  function formatDayHeader(dateStr: string) {
+    if (!dateStr || !dateStr.includes('-')) return dateStr;
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const monthShort = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+    if (dateStr === todayStr) {
+      return `Hoje, ${d} ${monthShort}`;
+    }
+    return `${d} ${monthShort}`;
+  }
+
   const filteredBase = useMemo(() =>
     [...transactions]
       .filter((tx) => !pendingDeleteIds.has(tx.id as string))
       .filter((tx) => canAccessPerson(tx.person, tx))
+      .filter((tx) => {
+        if (!selectedPeriod) return true;
+        return (tx.date || '').startsWith(selectedPeriod);
+      })
       .filter((tx) => typeFilter === 'all' || (typeFilter === 'transfer' ? (tx.type === 'transfer_out' || tx.type === 'transfer_in') : tx.type === typeFilter))
       .filter((tx) => categoryFilter === 'all' || tx.category === categoryFilter)
       .filter((tx: any) => tagFilter === 'all' || (Array.isArray(tx.tags) && tx.tags.includes(tagFilter)))
       .filter((tx) => !search || tx.description?.toLowerCase().includes(search.toLowerCase()) || tx.category?.toLowerCase().includes(search.toLowerCase())),
-    [transactions, pendingDeleteIds, canAccessPerson, typeFilter, categoryFilter, tagFilter, search]
+    [transactions, pendingDeleteIds, canAccessPerson, selectedPeriod, typeFilter, categoryFilter, tagFilter, search]
   );
+
+  const { summaryIncome, summaryExpense, summaryBalance } = useMemo(() => {
+    let inc = 0;
+    let exp = 0;
+    filteredBase.forEach((tx) => {
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income' || tx.type === 'transfer_in') inc += amt;
+      else if (tx.type === 'expense' || tx.type === 'transfer_out' || tx.type === 'invoice_payment') exp += amt;
+    });
+    return { summaryIncome: inc, summaryExpense: exp, summaryBalance: inc - exp };
+  }, [filteredBase]);
 
   const visible = useMemo(() =>
     filteredBase
@@ -174,6 +215,35 @@ export default function Transactions() {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
     [filteredBase, dayFilter]
   );
+
+  const groupedByDay = useMemo(() => {
+    const groups: { date: string; dateLabel: string; total: number; items: Transaction[] }[] = [];
+    const map = new Map<string, { date: string; dateLabel: string; total: number; items: Transaction[] }>();
+
+    visible.forEach((tx) => {
+      const key = tx.date || '';
+      if (!map.has(key)) {
+        const g = {
+          date: key,
+          dateLabel: formatDayHeader(key),
+          total: 0,
+          items: [],
+        };
+        map.set(key, g);
+        groups.push(g);
+      }
+      const g = map.get(key)!;
+      g.items.push(tx);
+      const amt = Number(tx.amount) || 0;
+      if (tx.type === 'income' || tx.type === 'transfer_in') {
+        g.total += amt;
+      } else {
+        g.total -= amt;
+      }
+    });
+
+    return groups;
+  }, [visible, todayStr]);
 
   const calendarDays = useMemo(() => {
     const year = calDate.getFullYear();
@@ -508,7 +578,7 @@ export default function Transactions() {
     setConfirmBulkDelete(false);
   }
 
-    if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
+    if (loading) return <PageLoading />;
   if (error) return <PageError error={error as Error} title={'Erro ao carregar transações'} />;
 
   return (
@@ -516,36 +586,177 @@ export default function Transactions() {
       
       {/* HEADER E AÇÃO PRINCIPAL */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Livro Caixa</h2>
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <div className="flex bg-white/5 rounded-xl p-1 shrink-0">
-            <button onClick={() => setViewMode('list')} className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'list' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}><i className="fa-solid fa-list mr-1.5" />Lista</button>
-            <button onClick={() => setViewMode('calendar')} className={`px-3 py-2 rounded-lg text-sm font-bold transition-colors ${viewMode === 'calendar' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}><i className="fa-solid fa-calendar-days mr-1.5" />Calendário</button>
-          </div>
+        <h1 className="text-2xl sm:text-3xl font-bold font-heading text-ink">Transações</h1>
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+          <MonthPicker value={selectedPeriod} onChange={setSelectedPeriod} />
           {canEdit && (
-            <button className="flex-1 sm:flex-none px-5 py-3.5 sm:py-3 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-extrabold text-[0.95rem] shadow-[0_4px_14px_rgba(227,176,75,0.25)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2" onClick={openNew}>
-              <i className="fa-solid fa-plus" /> Nova Transação
+            <button
+              onClick={openNew}
+              className="px-4 py-2.5 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+            >
+              <i className="fa-solid fa-plus text-xs" /> Nova transação
             </button>
           )}
         </div>
       </div>
 
+      {/* QUADROS DE RESUMO (Receitas, Despesas, Saldo do mês) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+        <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-xs">
+          <span className="text-xs font-medium text-muted block mb-1">Receitas</span>
+          <strong className="text-xl sm:text-2xl font-bold font-heading text-pri">
+            {formatCurrency(summaryIncome)}
+          </strong>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-xs">
+          <span className="text-xs font-medium text-muted block mb-1">Despesas</span>
+          <strong className="text-xl sm:text-2xl font-bold font-heading text-spendText">
+            {formatCurrency(summaryExpense)}
+          </strong>
+        </div>
+        <div className="bg-card border border-border rounded-2xl p-4 sm:p-5 shadow-xs">
+          <span className="text-xs font-medium text-muted block mb-1">Saldo do mês</span>
+          <strong className="text-xl sm:text-2xl font-bold font-heading text-ink">
+            {formatCurrency(summaryBalance)}
+          </strong>
+        </div>
+      </div>
+
+      {/* ABAS, BUSCA E FILTROS */}
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-6">
+        {/* Abas em Cápsula */}
+        <div className="flex items-center bg-card border border-border p-1 rounded-full overflow-x-auto scrollbar-none shrink-0">
+          {[
+            { id: 'all', label: 'Todas' },
+            { id: 'expense', label: 'Despesas' },
+            { id: 'income', label: 'Receitas' },
+            { id: 'transfer', label: 'Transferências' },
+          ].map((tab) => {
+            const active = typeFilter === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => { setTypeFilter(tab.id); setDayFilter(null); }}
+                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
+                  active
+                    ? 'bg-pri text-white shadow-xs'
+                    : 'text-muted hover:text-ink'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Busca e Botão de Filtros */}
+        <div className="flex items-center gap-2 flex-1 md:max-w-md">
+          <div className="relative flex-1">
+            <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-xs" />
+            <input
+              type="text"
+              placeholder="Buscar por descrição, categoria ou tag"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 rounded-full border border-border bg-card text-ink text-sm outline-none focus:border-pri transition-colors placeholder:text-muted/70"
+            />
+          </div>
+
+          <Popover.Root>
+            <Popover.Trigger asChild>
+              <button className="px-4 py-2 rounded-full border border-border bg-card text-ink text-sm font-medium hover:bg-priSoft/20 transition-colors flex items-center gap-1.5 shrink-0">
+                <i className="fa-solid fa-sliders text-xs text-muted" />
+                Filtros
+                {(categoryFilter !== 'all' || tagFilter !== 'all' || viewMode === 'calendar') && (
+                  <span className="w-2 h-2 rounded-full bg-pri" />
+                )}
+              </button>
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                className="z-50 w-72 p-4 bg-card border border-border rounded-2xl shadow-xl animate-in fade-in zoom-in-95 text-ink flex flex-col gap-3"
+                sideOffset={8}
+                align="end"
+              >
+                <div className="flex items-center justify-between border-b border-border pb-2">
+                  <span className="text-sm font-bold font-heading">Filtros</span>
+                  {(categoryFilter !== 'all' || tagFilter !== 'all' || viewMode === 'calendar' || search) && (
+                    <button
+                      onClick={() => { setCategoryFilter('all'); setTagFilter('all'); setViewMode('list'); setSearch(''); }}
+                      className="text-xs text-pri hover:underline"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-muted uppercase">Visualização</label>
+                  <div className="flex bg-border/30 rounded-xl p-1 gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('list')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
+                        viewMode === 'list' ? 'bg-card text-ink shadow-xs' : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      <i className="fa-solid fa-list" /> Lista
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewMode('calendar')}
+                      className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
+                        viewMode === 'calendar' ? 'bg-card text-ink shadow-xs' : 'text-muted hover:text-ink'
+                      }`}
+                    >
+                      <i className="fa-solid fa-calendar-days" /> Calendário
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-muted uppercase">Categoria</label>
+                  <CustomSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+                    <option value="all">Todas as categorias</option>
+                    {availableCategories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </CustomSelect>
+                </div>
+
+                {allTags.length > 0 && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] font-semibold text-muted uppercase">Tag</label>
+                    <CustomSelect value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+                      <option value="all">Todas as tags</option>
+                      {allTags.map((t) => (
+                        <option key={t} value={t}>#{t}</option>
+                      ))}
+                    </CustomSelect>
+                  </div>
+                )}
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        </div>
+      </div>
+
       {dayFilter && (
-        <div className="flex items-center gap-2 mb-4 bg-[#e3b04b]/10 text-[#e3b04b] px-4 py-2.5 rounded-xl text-sm font-bold w-fit">
+        <div className="flex items-center gap-2 mb-4 bg-priSoft/40 text-pri px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold w-fit">
           <i className="fa-solid fa-calendar-day" /> Filtrado por {formatDate(dayFilter)}
-          <button onClick={() => setDayFilter(null)} className="hover:text-white"><i className="fa-solid fa-xmark" /></button>
+          <button onClick={() => setDayFilter(null)} className="hover:opacity-75 ml-2"><i className="fa-solid fa-xmark" /></button>
         </div>
       )}
 
       {viewMode === 'calendar' && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-4 sm:p-6 mb-6">
+        <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 mb-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white flex items-center justify-center"><i className="fa-solid fa-chevron-left" /></button>
-            <strong className="text-[#f2f0ea] capitalize">{calDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
-            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="w-9 h-9 rounded-lg bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white flex items-center justify-center"><i className="fa-solid fa-chevron-right" /></button>
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><i className="fa-solid fa-chevron-left text-xs" /></button>
+            <strong className="text-ink capitalize font-heading">{calDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><i className="fa-solid fa-chevron-right text-xs" /></button>
           </div>
           <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
-            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold text-[#8fa39a] uppercase">{d}</div>))}
+            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold text-muted uppercase">{d}</div>))}
           </div>
           <div className="grid grid-cols-7 gap-1 sm:gap-2">
             {calendarDays.map((cell, i) => cell === null ? (
@@ -554,174 +765,165 @@ export default function Transactions() {
               <button
                 key={cell.dateStr}
                 onClick={() => setDayFilter(cell.dateStr === dayFilter ? null : cell.dateStr)}
-                className={`aspect-square rounded-lg sm:rounded-xl p-1 sm:p-2 flex flex-col items-center justify-start text-left transition-colors ${dayFilter === cell.dateStr ? 'bg-[#e3b04b]/20 ring-2 ring-[#e3b04b]' : 'bg-white/[0.03] hover:bg-white/[0.06]'}`}
+                className={`aspect-square rounded-xl p-1 sm:p-2 flex flex-col items-center justify-start text-left transition-colors ${dayFilter === cell.dateStr ? 'bg-priSoft/50 ring-2 ring-pri' : 'bg-card border border-border hover:bg-priSoft/20'}`}
               >
-                <span className="text-xs sm:text-sm font-bold text-[#f2f0ea]">{cell.day}</span>
-                {cell.expense > 0 && <span className="text-[8px] sm:text-[10px] font-mono text-[#f87171] leading-tight mt-auto">-{formatCurrency(cell.expense).replace('R$', '')}</span>}
-                {cell.income > 0 && <span className="text-[8px] sm:text-[10px] font-mono text-[#34d399] leading-tight">+{formatCurrency(cell.income).replace('R$', '')}</span>}
+                <span className="text-xs sm:text-sm font-bold text-ink">{cell.day}</span>
+                {cell.expense > 0 && <span className="text-[8px] sm:text-[10px] font-medium text-spendText leading-tight mt-auto">-{formatCurrency(cell.expense).replace('R$', '')}</span>}
+                {cell.income > 0 && <span className="text-[8px] sm:text-[10px] font-medium text-pri leading-tight">+{formatCurrency(cell.income).replace('R$', '')}</span>}
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {/* FILTROS RESPONSIVOS */}
-      <div className="bg-white/[0.02] border border-white/[0.08] p-4 sm:p-5 rounded-2xl shadow-lg flex flex-col md:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-[#8fa39a]" />
-          <input type="text" placeholder="Buscar por descrição ou categoria..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] focus:bg-black/40 outline-none transition-colors" />
-        </div>
-        <div className="flex gap-3">
-          <CustomSelect value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px]">
-            <option value="all">Tipos</option>
-            <option value="income">Receitas</option>
-            <option value="expense">Despesas</option>
-            <option value="transfer">Transferências</option>
-            <option value="invoice_payment">Pagamentos de Fatura</option>
-          </CustomSelect>
-          <CustomSelect value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[170px]">
-            <option value="all">Categorias</option>
-            {availableCategories.map((c) => (<option key={c} value={c}>{c}</option>))}
-          </CustomSelect>
-          {allTags.length > 0 && (
-            <CustomSelect value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} className="flex-1 md:flex-none w-full md:w-[150px]">
-              <option value="all">Tags</option>
-              {allTags.map((t) => (<option key={t} value={t}>#{t}</option>))}
-            </CustomSelect>
-          )}
-        </div>
-      </div>
-
       {/* PAINEL DE SELEÇÃO EM MASSA */}
       {selectedIds.size > 0 && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
-          <span className="text-red-400 font-bold">{selectedIds.size} selecionada(s)</span>
+        <div className="bg-spendSoft/20 border border-spendText/20 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 animate-in slide-in-from-top-2">
+          <span className="text-spendText font-bold">{selectedIds.size} selecionada(s)</span>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#3b82f6]/20 text-[#3b82f6] hover:bg-[#3b82f6]/30 transition-colors font-semibold flex items-center justify-center gap-2" onClick={() => setBulkEditOpen(true)}>
+            <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-card border border-border text-ink hover:bg-border/30 transition-colors font-semibold text-xs flex items-center justify-center gap-2" onClick={() => setBulkEditOpen(true)}>
               <i className="fa-solid fa-pen" /> Editar selecionadas
             </button>
-            <button className="w-full sm:w-auto px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors font-semibold flex items-center justify-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
+            <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-spendText text-white hover:opacity-90 transition-opacity font-semibold text-xs flex items-center justify-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
               <i className="fa-solid fa-trash" /> Excluir selecionadas
             </button>
           </div>
         </div>
       )}
 
-      {/* LISTA DE TRANSAÇÕES (Substituindo a antiga Tabela HTML) */}
+      {/* LISTA DE TRANSAÇÕES AGRUPADA POR DIA */}
       {viewMode === 'calendar' && !dayFilter ? null : visible.length === 0 ? (
         <EmptyState icon="fa-receipt" title={'Nenhuma transação encontrada'} description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
       ) : (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
-          {/* Cabeçalho visível só no PC */}
-          <div className="hidden md:flex items-center gap-4 p-4 border-b border-white/[0.05] bg-white/[0.02] text-xs font-bold text-[#8fa39a] uppercase tracking-wider">
-            {canEdit && (
-               <div className="w-10 flex justify-center">
-                 <input type="checkbox" checked={selectedIds.size === visible.length} onChange={toggleSelectAll} className="w-4 h-4 accent-[#e3b04b] cursor-pointer" />
-               </div>
-            )}
-            <div className="w-[100px]">Data</div>
-            <div className="flex-1 min-w-[200px]">Descrição</div>
-            <div className="w-[140px]">Categoria</div>
-            <div className="w-[100px] truncate">Pessoa</div>
-            <div className="w-[130px] text-right">Valor</div>
-            <div className="w-[100px] text-center">Ações</div>
-          </div>
-
-          <div className="flex flex-col divide-y divide-white/[0.05]">
-            {visible.map((tx) => (
-              <div key={tx.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-4 hover:bg-white/[0.04] transition-colors ${selectedIds.has(tx.id) ? 'bg-white/[0.04]' : ''}`}>
-                
-                {/* Linha Mobile / Colunas PC */}
-                <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
-                  {canEdit && (
-                    <div className="md:w-10 flex justify-center shrink-0">
-                      <input type="checkbox" checked={selectedIds.has(tx.id)} onChange={() => toggleSelect(tx.id)} className="w-5 h-5 md:w-4 md:h-4 accent-[#e3b04b] cursor-pointer" />
-                    </div>
-                  )}
-                  
-                  {/* Ícone (Mobile + PC) */}
-                  <div className={`w-12 h-12 md:w-10 md:h-10 rounded-xl flex items-center justify-center shrink-0 text-lg md:text-base ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : categoryStyles[tx.category] ? '' : 'bg-white/10 text-[#8fa39a]'}`} style={tx.type === 'expense' && categoryStyles[tx.category] ? { backgroundColor: `${categoryStyles[tx.category].color}26`, color: categoryStyles[tx.category].color } : undefined}>
-                    <i className={`fa-solid ${tx.type === 'expense' && categoryStyles[tx.category]?.icon ? categoryStyles[tx.category].icon : iconForCategory(tx.category, tx.type)}`} />
-                  </div>
-
-                  {/* Descrição e Infos (Cresce) */}
-                  <div className="flex-1 min-w-0 md:hidden">
-                     <div className="font-bold text-[#f2f0ea] text-base truncate flex items-center gap-2">
-                       {tx.description}
-                       {tx.groupId && <i className="fa-solid fa-layer-group text-xs text-[#e3b04b]" />}
-                     </div>
-                     {formatForeignCurrency(tx) && (
-                       <div className="text-xs text-[#8fa39a]">{formatForeignCurrency(tx)}</div>
-                     )}
-                     <div className="text-xs text-[#8fa39a] mt-0.5">{formatDate(tx.date)} &bull; {tx.category} &bull; {tx.person}</div>
-                     {Array.isArray(tx.tags) && tx.tags.length > 0 && (
-                       <div className="flex flex-wrap gap-1 mt-1">
-                         {tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full">#{t}</span>))}
-                       </div>
-                     )}
-                  </div>
-
-                  {/* Colunas Exclusivas PC */}
-                  <div className="hidden md:block w-[100px] text-sm text-[#8fa39a] font-medium">{formatDate(tx.date)}</div>
-                  <div className="hidden md:flex flex-1 min-w-[200px] flex-col justify-center truncate">
-                     <div className="flex items-center gap-2 text-[#f2f0ea] font-medium text-[0.95rem] truncate">
-                       <span className="truncate">{tx.description}</span>
-                       {tx.groupId && (
-                         <Tooltip content="Parcelamento">
-                           <span className="inline-flex"><i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" /></span>
-                         </Tooltip>
-                       )}
-                       {Array.isArray(tx.tags) && tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full shrink-0">#{t}</span>))}
-                     </div>
-                     {formatForeignCurrency(tx) && (
-                       <div className="text-xs text-[#8fa39a] truncate">{formatForeignCurrency(tx)}</div>
-                     )}
-                  </div>
-                  <div className="hidden md:block w-[140px] text-sm text-[#8fa39a] truncate"><span className="bg-white/5 px-2 py-1 rounded-md">{tx.category}</span></div>
-                  <div className="hidden md:block w-[100px] text-sm text-[#8fa39a] truncate">{tx.person}</div>
-                </div>
-
-                {/* Valor e Ações */}
-                <div className="flex items-center justify-between md:justify-end gap-4 mt-2 md:mt-0 pl-[52px] md:pl-0 w-full md:w-auto md:flex-1">
-                   <div className="flex-1 md:w-[130px] md:flex-none text-left md:text-right">
-                     <strong className={`font-mono text-lg md:text-base ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'text-[#a78bfa]' : 'text-[#f2f0ea]'}`}>
-                       {tx.type === 'income' ? '+ ' : tx.type === 'transfer_out' ? '→ ' : tx.type === 'transfer_in' ? '← ' : '- '}{formatCurrency(tx.amount)}
-                     </strong>
-                   </div>
-                   <div className="flex items-center gap-1 md:w-[100px] justify-end shrink-0">
-                     <button onClick={() => setDetailsTx(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center"><i className="fa-solid fa-eye" /></button>
-                     {canEdit && (
-                       <>
-                         {!tx.transferId && !tx.paidCardId && (
-                           <Tooltip content="Duplicar transação">
-                             <button onClick={() => handleDuplicate(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#e3b04b]/20 hover:text-[#e3b04b] transition-colors flex items-center justify-center"><i className="fa-solid fa-copy" /></button>
-                           </Tooltip>
-                         )}
-                         <button onClick={() => openEdit(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] transition-colors flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
-                         <button onClick={() => requestDelete(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
-                       </>
-                     )}
-                   </div>
-                </div>
-
+        <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xs divide-y divide-border/60">
+          {groupedByDay.map((group) => (
+            <div key={group.date} className="pt-4 first:pt-0 pb-2">
+              {/* Header do dia */}
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-bold font-heading text-ink">{group.dateLabel}</span>
+                <span className="text-xs font-medium text-muted">
+                  {group.total > 0 ? `+ ${formatCurrency(group.total)}` : group.total < 0 ? `- ${formatCurrency(Math.abs(group.total))}` : formatCurrency(0)}
+                </span>
               </div>
-            ))}
-          </div>
+
+              {/* Lançamentos do dia */}
+              <div className="flex flex-col divide-y divide-border/30">
+                {group.items.map((tx) => (
+                  <div
+                    key={tx.id}
+                    onClick={() => setDetailsTx(tx)}
+                    className="group flex items-center justify-between gap-3 py-3 px-2 sm:px-3 -mx-2 sm:-mx-3 rounded-xl hover:bg-priSoft/20 transition-colors cursor-pointer"
+                  >
+                    {/* Ícone + Descrição e Categoria */}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 text-base ${
+                        tx.type === 'income'
+                          ? 'bg-priSoft/50 text-pri'
+                          : (tx.type === 'transfer_out' || tx.type === 'transfer_in')
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                          : tx.type === 'invoice_payment'
+                          ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
+                          : 'bg-spendSoft/30 text-spendText'
+                      }`}>
+                        <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                      </div>
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-ink text-sm sm:text-base truncate">{tx.description}</span>
+                          {tx.groupId && (
+                            <span className="inline-flex items-center text-[10px] text-muted font-medium">
+                              <i className="fa-solid fa-layer-group text-[9px]" />
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-xs text-muted truncate">{tx.category || (tx.type === 'income' ? 'Receita' : 'Geral')}</span>
+                      </div>
+                    </div>
+
+                    {/* Meio: Conta / Cartão e Etiquetas */}
+                    <div className="hidden md:flex items-center gap-2 min-w-0 shrink-0">
+                      <span className="text-xs text-muted truncate">{accountNameFor(tx.paymentMethod)}</span>
+                      {tx.person && tx.person !== session?.person && (
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-border/40 text-muted">{tx.person}</span>
+                      )}
+                      {Array.isArray(tx.tags) && tx.tags.map((t: string) => (
+                        <span key={t} className="px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-priSoft/30 text-pri">#{t}</span>
+                      ))}
+                    </div>
+
+                    {/* Direita: Valor, Câmbio e Ações */}
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+                      <div className="text-right">
+                        <strong className={`block text-sm sm:text-base font-bold font-heading ${
+                          tx.type === 'income'
+                            ? 'text-pri'
+                            : (tx.type === 'transfer_out' || tx.type === 'transfer_in')
+                            ? 'text-ink'
+                            : 'text-spendText'
+                        }`}>
+                          {tx.type === 'income' ? '+ ' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? '' : '- '}
+                          {formatCurrency(tx.amount)}
+                        </strong>
+                        {formatForeignCurrencyShort(tx) && (
+                          <span className="text-xs text-muted block -mt-0.5">
+                            {formatForeignCurrencyShort(tx)}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Botões de Ação ao Passar o Mouse */}
+                      <div className="hidden sm:flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                        {canEdit && (
+                          <>
+                            {!tx.transferId && !tx.paidCardId && (
+                              <Tooltip content="Duplicar">
+                                <button
+                                  onClick={() => handleDuplicate(tx)}
+                                  className="w-7 h-7 rounded-lg text-muted hover:text-ink hover:bg-card flex items-center justify-center transition-colors"
+                                  aria-label="Duplicar"
+                                >
+                                  <i className="fa-solid fa-copy text-xs" />
+                                </button>
+                              </Tooltip>
+                            )}
+                            <button
+                              onClick={() => openEdit(tx)}
+                              className="w-7 h-7 rounded-lg text-muted hover:text-ink hover:bg-card flex items-center justify-center transition-colors"
+                              aria-label="Editar"
+                            >
+                              <i className="fa-solid fa-pen text-xs" />
+                            </button>
+                            <button
+                              onClick={() => requestDelete(tx)}
+                              className="w-7 h-7 rounded-lg text-muted hover:text-spendText hover:bg-card flex items-center justify-center transition-colors"
+                              aria-label="Excluir"
+                            >
+                              <i className="fa-solid fa-trash text-xs" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {/* MODAL DE TRANSAÇÃO (FORMULÁRIO FULL RESPONSIVO) */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setShowForm(false)}>
-          <form className="w-full max-w-[500px] max-h-[90vh] overflow-y-auto bg-[#141d1a] border border-white/10 rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-2">{editingId ? 'Editar Transação' : 'Nova Transação'}</h3>
+          <form className="w-full max-w-[500px] max-h-[90vh] overflow-y-auto bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-2xl flex flex-col gap-4 animate-in zoom-in-95 text-ink" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
+            <h3 className="text-xl font-bold font-heading text-ink mb-2">{editingId ? 'Editar Transação' : 'Nova Transação'}</h3>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase font-bold text-[#8fa39a]">Descrição</label>
-              <input {...register('description')} placeholder="Ex: Supermercado" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
-              {errors.description && <span className="text-red-400 text-xs mt-1">{(errors.description as any).message}</span>}
+              <label className="text-xs uppercase font-bold text-muted">Descrição</label>
+              <input {...register('description')} placeholder="Ex: Supermercado" className="w-full p-3 rounded-xl border border-border bg-card text-ink focus:border-pri outline-none transition-colors" />
+              {errors.description && <span className="text-spendText text-xs mt-1">{(errors.description as any).message}</span>}
               {smartSuggestion && (
-                <button type="button" onClick={applySuggestion} className="mt-1 text-left text-xs bg-[#e3b04b]/10 text-[#e3b04b] hover:bg-[#e3b04b]/20 rounded-lg px-3 py-2 transition-colors">
+                <button type="button" onClick={applySuggestion} className="mt-1 text-left text-xs bg-priSoft/40 text-pri hover:bg-priSoft/60 rounded-lg px-3 py-2 transition-colors">
                   <i className="fa-solid fa-lightbulb mr-1.5" />
                   Última vez: {smartSuggestion.category || 'sem categoria'} &bull; {formatCurrency(smartSuggestion.amount)} &bull; {accountNameFor(smartSuggestion.paymentMethod)}. Usar esses dados?
                 </button>
@@ -730,7 +932,7 @@ export default function Transactions() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase font-bold text-[#8fa39a]">Tipo</label>
+                <label className="text-xs uppercase font-bold text-muted">Tipo</label>
                 <Controller name="type" control={control} render={({ field }) => (
                   <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
                     <option value="expense">Despesa (-)</option><option value="income">Receita (+)</option><option value="transfer">Transferência entre contas</option>
@@ -738,7 +940,7 @@ export default function Transactions() {
                 )} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase font-bold text-[#8fa39a]">Data {paymentMode === 'installments' ? '(1ª)' : ''}</label>
+                <label className="text-xs uppercase font-bold text-muted">Data {paymentMode === 'installments' ? '(1ª)' : ''}</label>
                 <Controller name="date" control={control} render={({ field }) => (
                   <DatePicker value={field.value} onChange={field.onChange} />
                 )} />
@@ -746,24 +948,24 @@ export default function Transactions() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase font-bold text-[#8fa39a]">Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total da compra)' : ''}</label>
+              <label className="text-xs uppercase font-bold text-muted">Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total da compra)' : ''}</label>
               <Controller name="amount" control={control} render={({ field }) => (
                 <MoneyField value={field.value} onChange={(e) => field.onChange(e.target.value)} />
               )} />
-              {errors.amount && <span className="text-red-400 text-xs mt-1">{(errors.amount as any).message}</span>}
+              {errors.amount && <span className="text-spendText text-xs mt-1">{(errors.amount as any).message}</span>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {watchedType !== 'transfer' && (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs uppercase font-bold text-[#8fa39a]">Categoria</label>
-                  <input {...register('category')} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+                  <label className="text-xs uppercase font-bold text-muted">Categoria</label>
+                  <input {...register('category')} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-border bg-card text-ink focus:border-pri outline-none transition-colors" />
                 </div>
               )}
               {watchedType === 'transfer' ? (
                 <>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-bold text-[#8fa39a]">De (origem)</label>
+                    <label className="text-xs uppercase font-bold text-muted">De (origem)</label>
                     <Controller name="fromAccount" control={control} render={({ field }) => (
                       <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} disabled={!!editingId}>
                         <option value="">Selecione</option>
@@ -772,7 +974,7 @@ export default function Transactions() {
                     )} />
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-bold text-[#8fa39a]">Para (destino)</label>
+                    <label className="text-xs uppercase font-bold text-muted">Para (destino)</label>
                     <Controller name="toAccount" control={control} render={({ field }) => (
                       <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)} disabled={!!editingId}>
                         <option value="">Selecione</option>
@@ -783,7 +985,7 @@ export default function Transactions() {
                 </>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-xs uppercase font-bold text-[#8fa39a]">Conta / Cartão</label>
+                  <label className="text-xs uppercase font-bold text-muted">Conta / Cartão</label>
                   <Controller name="paymentMethod" control={control} render={({ field }) => (
                     <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
                       <option value="account">Principal</option>
@@ -797,19 +999,19 @@ export default function Transactions() {
 
             {/* SEÇÃO PARCELAMENTO */}
             {!editingId && watchedType === 'expense' && (
-              <div className="mt-2 p-4 bg-white/[0.03] rounded-2xl border border-white/5">
-                <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-[#f2f0ea]">
-                  <input type="checkbox" checked={paymentMode === 'installments'} onChange={(e) => setPaymentMode(e.target.checked ? 'installments' : 'single')} className="w-4 h-4 accent-[#e3b04b]" />
+              <div className="mt-2 p-4 bg-border/20 rounded-2xl border border-border">
+                <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-ink">
+                  <input type="checkbox" checked={paymentMode === 'installments'} onChange={(e) => setPaymentMode(e.target.checked ? 'installments' : 'single')} className="w-4 h-4 accent-pri" />
                   Parcelar essa compra
                 </label>
                 {paymentMode === 'installments' && (
                   <div className="flex gap-3 mt-4 animate-in slide-in-from-top-2">
                     <div className="flex-1">
-                      <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Parcelas</label>
+                      <label className="text-[10px] uppercase font-bold text-muted block mb-1">Parcelas</label>
                       <NumberField min={2} max={48} value={installmentsCount} onChange={(e) => setInstallmentsCount(parseInt(e.target.value) || 2)} />
                     </div>
                     <div className="flex-[2]">
-                      <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Valor informado</label>
+                      <label className="text-[10px] uppercase font-bold text-muted block mb-1">Valor informado</label>
                       <CustomSelect value={installmentValueType} onChange={(e) => setInstallmentValueType(e.target.value)}>
                         <option value="total">Total da compra</option><option value="per">Valor da parcela</option>
                       </CustomSelect>
@@ -819,32 +1021,32 @@ export default function Transactions() {
               </div>
             )}
 
-            {/* SEÇÃO RATEIO (não se aplica a transferência entre contas) */}
+            {/* SEÇÃO RATEIO */}
             {watchedType !== 'transfer' && (
-            <div className="mt-2 p-4 bg-white/[0.03] rounded-2xl border border-white/5">
-              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-[#f2f0ea]">
-                <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="w-4 h-4 accent-[#e3b04b]" />
+            <div className="mt-2 p-4 bg-border/20 rounded-2xl border border-border">
+              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-ink">
+                <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="w-4 h-4 accent-pri" />
                 Dividir com outras pessoas
               </label>
               {isSplit ? (
                 <div className="mt-4 animate-in slide-in-from-top-2">
                   <div className="mb-3">
-                    <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Quem pagou</label>
+                    <label className="text-[10px] uppercase font-bold text-muted block mb-1">Quem pagou</label>
                     <CustomSelect value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
                       {availablePersons.map((pName) => (<option key={pName} value={pName}>{pName}</option>))}
                     </CustomSelect>
                   </div>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-[#8fa39a]">Marque quem participa:</span>
-                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-[#e3b04b] bg-[#e3b04b]/10 px-2 py-1 rounded hover:bg-[#e3b04b]/20"><i className="fa-solid fa-calculator" /> Dividir igual</button>
+                    <span className="text-xs text-muted">Marque quem participa:</span>
+                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-pri bg-priSoft/40 px-2 py-1 rounded hover:bg-priSoft/60 transition-colors"><i className="fa-solid fa-calculator" /> Dividir igual</button>
                   </div>
                   <div className="flex flex-col gap-2">
                     {availablePersons.map((pName) => {
                       const isChecked = Object.prototype.hasOwnProperty.call(splitItems, pName);
                       return (
-                        <div key={pName} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5">
-                          <label className="flex items-center gap-3 text-sm text-[#f2f0ea] cursor-pointer">
-                            <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" /> {pName}
+                        <div key={pName} className="flex items-center justify-between p-2 rounded-lg hover:bg-border/30">
+                          <label className="flex items-center gap-3 text-sm text-ink cursor-pointer">
+                            <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-pri" /> {pName}
                           </label>
                           <div className="w-32">
                             <MoneyField disabled={!isChecked} value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} placeholder="0,00" />
@@ -856,8 +1058,8 @@ export default function Transactions() {
                 </div>
               ) : (
                 <div className="mt-3">
-                  <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Atribuir a</label>
-                  <input {...register('person')} placeholder={session.person} className="w-full p-2.5 rounded-lg border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+                  <label className="text-[10px] uppercase font-bold text-muted block mb-1">Atribuir a</label>
+                  <input {...register('person')} placeholder={session.person} className="w-full p-2.5 rounded-lg border border-border bg-card text-ink focus:border-pri outline-none transition-colors" />
                 </div>
               )}
             </div>
@@ -865,22 +1067,22 @@ export default function Transactions() {
 
             {watchedType !== 'transfer' && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase font-bold text-[#8fa39a]">Tags</label>
+                <label className="text-xs uppercase font-bold text-muted">Tags</label>
                 <div className="flex gap-2">
                   <input
                     value={tagInput}
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(); } }}
                     placeholder="Ex: viagem (Enter pra adicionar)"
-                    className="flex-1 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none"
+                    className="flex-1 p-2.5 rounded-xl border border-border bg-card text-ink focus:border-pri outline-none transition-colors"
                   />
-                  <button type="button" onClick={addTag} className="px-4 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold">Add</button>
+                  <button type="button" onClick={addTag} className="px-4 rounded-xl bg-border/40 hover:bg-border/60 text-ink font-bold">Add</button>
                 </div>
                 {tags.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-1">
                     {tags.map((t) => (
-                      <span key={t} className="flex items-center gap-1.5 bg-[#8b5cf6]/15 text-[#8b5cf6] text-xs font-bold px-2.5 py-1 rounded-full">
-                        #{t} <button type="button" onClick={() => removeTag(t)} className="hover:text-white"><i className="fa-solid fa-xmark" /></button>
+                      <span key={t} className="flex items-center gap-1.5 bg-priSoft/40 text-pri text-xs font-bold px-2.5 py-1 rounded-full">
+                        #{t} <button type="button" onClick={() => removeTag(t)} className="hover:opacity-75"><i className="fa-solid fa-xmark" /></button>
                       </span>
                     ))}
                   </div>
@@ -889,8 +1091,8 @@ export default function Transactions() {
             )}
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
-              <button type="button" onClick={() => setShowForm(false)} className="w-full sm:w-auto px-6 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-colors">Cancelar</button>
-              <button type="submit" disabled={isSubmitting} className="w-full sm:flex-1 px-6 py-3 rounded-xl bg-gradient-to-r from-[#e3b04b] to-[#f5d78a] text-[#1c1206] font-bold shadow-lg hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              <button type="button" onClick={() => setShowForm(false)} className="w-full sm:w-auto px-6 py-3 rounded-full border border-border text-ink font-semibold hover:bg-border/20 transition-colors">Cancelar</button>
+              <button type="submit" disabled={isSubmitting} className="w-full sm:flex-1 px-6 py-3 rounded-full bg-pri text-white font-bold shadow-sm hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                 {isSubmitting ? <><i className="fa-solid fa-spinner fa-spin" /> Salvando...</> : <><i className="fa-solid fa-check" /> Salvar Transação</>}
               </button>
             </div>
@@ -898,28 +1100,26 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* MODAL DETALHES, CONFIRMAÇÃO DE EXCLUSÃO E PARCELAMENTO */}
-      {/* Como o Tailwind já está 100% nas listas e form, os modais menores continuam com classes de fallback ou você já aplica os visuais aqui se desejar */}
-      
+      {/* MODAIS: CONFIRMAÇÃO DE EXCLUSÃO, EDIÇÃO EM MASSA E DETALHES */}
       <ConfirmModal isOpen={!!deleteId} title={'Excluir'} message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
       <ConfirmModal isOpen={confirmBulkDelete} title={'Excluir selecionadas'} message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
 
       {bulkEditOpen && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setBulkEditOpen(false)}>
-          <div className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-1">Editar {selectedIds.size} transação(ões)</h3>
-            <p className="text-xs text-[#8fa39a] -mt-2">Deixe em branco o que não quiser alterar.</p>
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={() => setBulkEditOpen(false)}>
+          <div className="bg-card border border-border p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-ink shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold font-heading mb-1">Editar {selectedIds.size} transação(ões)</h3>
+            <p className="text-xs text-muted -mt-2">Deixe em branco o que não quiser alterar.</p>
             <div>
-              <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova categoria</label>
-              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+              <label className="text-[10px] uppercase font-bold text-muted block mb-1">Nova categoria</label>
+              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-border bg-card text-ink focus:border-pri outline-none transition-colors" />
             </div>
             <div>
-              <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova pessoa</label>
-              <input value={bulkPerson} onChange={(e) => setBulkPerson(e.target.value)} placeholder="Ex: Marcos" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+              <label className="text-[10px] uppercase font-bold text-muted block mb-1">Nova pessoa</label>
+              <input value={bulkPerson} onChange={(e) => setBulkPerson(e.target.value)} placeholder="Ex: Marcos" className="w-full p-3 rounded-xl border border-border bg-card text-ink focus:border-pri outline-none transition-colors" />
             </div>
             <div className="flex gap-3 mt-2">
-              <button onClick={() => setBulkEditOpen(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
-              <button onClick={handleBulkEdit} className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors">Aplicar</button>
+              <button onClick={() => setBulkEditOpen(false)} className="flex-1 border border-border hover:bg-border/20 py-3 rounded-full font-bold transition-colors">Cancelar</button>
+              <button onClick={handleBulkEdit} className="flex-1 bg-pri text-white font-bold py-3 rounded-full hover:opacity-95 transition-opacity">Aplicar</button>
             </div>
           </div>
         </div>
@@ -929,14 +1129,14 @@ export default function Transactions() {
 
       {groupDeleteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setGroupDeleteTx(null)}>
-          <div className="w-full max-w-md bg-[#141d1a] border border-white/10 rounded-3xl p-6 shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 mx-auto bg-red-500/20 text-red-500 rounded-full flex items-center justify-center text-3xl mb-4"><i className="fa-solid fa-trash" /></div>
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-2">Excluir parcelamento</h3>
-            <p className="text-sm text-[#8fa39a] mb-6">"{groupDeleteTx.description}" faz parte de um parcelamento. Você deseja excluir só esta parcela, ou a compra inteira?</p>
+          <div className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-2xl text-center text-ink" onClick={(e) => e.stopPropagation()}>
+            <div className="w-16 h-16 mx-auto bg-spendSoft/30 text-spendText rounded-full flex items-center justify-center text-3xl mb-4"><i className="fa-solid fa-trash" /></div>
+            <h3 className="text-xl font-bold font-heading text-ink mb-2">Excluir parcelamento</h3>
+            <p className="text-sm text-muted mb-6">"{groupDeleteTx.description}" faz parte de um parcelamento. Você deseja excluir só esta parcela, ou a compra inteira?</p>
             <div className="flex flex-col gap-2">
-              <button className="w-full py-3 rounded-xl bg-red-500/20 text-red-400 font-bold hover:bg-red-500/30 transition-colors" onClick={handleDeleteWholeGroup}>Excluir Todas as Parcelas</button>
-              <button className="w-full py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-colors" onClick={handleDeleteJustThis}>Só Esta Parcela</button>
-              <button className="w-full py-2 text-[#8fa39a] hover:text-white transition-colors text-sm mt-2" onClick={() => setGroupDeleteTx(null)}>Cancelar</button>
+              <button className="w-full py-3 rounded-full bg-spendText text-white font-bold hover:opacity-90 transition-opacity" onClick={handleDeleteWholeGroup}>Excluir Todas as Parcelas</button>
+              <button className="w-full py-3 rounded-full border border-border text-ink font-bold hover:bg-border/20 transition-colors" onClick={handleDeleteJustThis}>Só Esta Parcela</button>
+              <button className="w-full py-2 text-muted hover:text-ink transition-colors text-sm mt-2" onClick={() => setGroupDeleteTx(null)}>Cancelar</button>
             </div>
           </div>
         </div>
@@ -944,43 +1144,43 @@ export default function Transactions() {
 
       {detailsTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setDetailsTx(null)}>
-          <div className="w-full max-w-sm bg-[#141d1a] border border-white/10 rounded-3xl p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-4 pb-4 border-b border-white/5">Detalhes da Transação</h3>
+          <div className="w-full max-w-sm bg-card border border-border rounded-3xl p-6 shadow-2xl text-ink" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-bold font-heading text-ink mb-4 pb-4 border-b border-border">Detalhes da Transação</h3>
             <div className="flex flex-col gap-3 text-sm">
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Descrição:</span> <strong className="text-[#f2f0ea] text-right">{detailsTx.description}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-[#34d399]' : (detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') ? 'text-[#3b82f6]' : detailsTx.type === 'invoice_payment' ? 'text-[#a78bfa]' : 'text-[#f87171]'}>{formatCurrency(detailsTx.amount)}</strong></div>
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Tipo:</span> <span className="text-[#f2f0ea]">{detailsTx.type === 'income' ? 'Receita' : detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in' ? 'Transferência' : detailsTx.type === 'invoice_payment' ? 'Pagamento de Fatura' : 'Despesa'}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Descrição:</span> <strong className="text-ink text-right">{detailsTx.description}</strong></div>
+              <div className="flex justify-between"><span className="text-muted">Valor:</span> <strong className={detailsTx.type === 'income' ? 'text-pri' : (detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') ? 'text-ink' : detailsTx.type === 'invoice_payment' ? 'text-purple-600 dark:text-purple-400' : 'text-spendText'}>{formatCurrency(detailsTx.amount)}</strong></div>
+              <div className="flex justify-between"><span className="text-muted">Tipo:</span> <span className="text-ink">{detailsTx.type === 'income' ? 'Receita' : detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in' ? 'Transferência' : detailsTx.type === 'invoice_payment' ? 'Pagamento de Fatura' : 'Despesa'}</span></div>
               {(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
-                <div className="flex justify-between"><span className="text-[#8fa39a]">{detailsTx.type === 'transfer_out' ? 'De → Para:' : 'De ← Para:'}</span> <span className="text-[#f2f0ea]">{accountNameFor(detailsTx.paymentMethod)} {detailsTx.type === 'transfer_out' ? '→' : '←'} {accountNameFor(detailsTx.transferAccountId)}</span></div>
+                <div className="flex justify-between"><span className="text-muted">{detailsTx.type === 'transfer_out' ? 'De → Para:' : 'De ← Para:'}</span> <span className="text-ink">{accountNameFor(detailsTx.paymentMethod)} {detailsTx.type === 'transfer_out' ? '→' : '←'} {accountNameFor(detailsTx.transferAccountId)}</span></div>
               )}
               {detailsTx.type === 'invoice_payment' && (
-                <div className="flex justify-between"><span className="text-[#8fa39a]">Pago com:</span> <span className="text-[#f2f0ea]">{accountNameFor(detailsTx.paymentMethod)}</span></div>
+                <div className="flex justify-between"><span className="text-muted">Pago com:</span> <span className="text-ink">{accountNameFor(detailsTx.paymentMethod)}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Data:</span> <span className="text-[#f2f0ea]">{formatDate(detailsTx.date)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Data:</span> <span className="text-ink">{formatDate(detailsTx.date)}</span></div>
               {!(detailsTx.type === 'transfer_out' || detailsTx.type === 'transfer_in') && (
-                <div className="flex justify-between"><span className="text-[#8fa39a]">Categoria:</span> <span className="text-[#f2f0ea] bg-white/5 px-2 py-0.5 rounded">{detailsTx.category || '-'}</span></div>
+                <div className="flex justify-between"><span className="text-muted">Categoria:</span> <span className="text-ink bg-border/30 px-2 py-0.5 rounded">{detailsTx.category || '-'}</span></div>
               )}
-              <div className="flex justify-between"><span className="text-[#8fa39a]">Pessoa:</span> <span className="text-[#f2f0ea]">{detailsTx.person}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Pessoa:</span> <span className="text-ink">{detailsTx.person}</span></div>
               
               {detailsTx.totalInstallments && (
-                <div className="mt-2 p-3 bg-white/5 rounded-xl border border-white/5">
-                  <div className="flex justify-between mb-1"><span className="text-[#8fa39a]">Parcela:</span> <strong className="text-[#e3b04b]">{detailsTx.installmentIndex} de {detailsTx.totalInstallments}</strong></div>
-                  <div className="flex justify-between"><span className="text-[#8fa39a]">Total:</span> <span className="text-[#f2f0ea]">{formatCurrency(detailsTx.totalPurchaseAmount)}</span></div>
+                <div className="mt-2 p-3 bg-border/20 rounded-xl border border-border">
+                  <div className="flex justify-between mb-1"><span className="text-muted">Parcela:</span> <strong className="text-pri">{detailsTx.installmentIndex} de {detailsTx.totalInstallments}</strong></div>
+                  <div className="flex justify-between"><span className="text-muted">Total:</span> <span className="text-ink">{formatCurrency(detailsTx.totalPurchaseAmount)}</span></div>
                 </div>
               )}
 
               {(detailsTx.createdBy || detailsTx.updatedBy) && (
-                <div className="mt-1 pt-3 border-t border-white/5 text-xs text-[#8fa39a] flex flex-col gap-1">
+                <div className="mt-1 pt-3 border-t border-border text-xs text-muted flex flex-col gap-1">
                   {detailsTx.createdBy && (
-                    <span>Criado por <strong className="text-[#f2f0ea]">{detailsTx.createdBy}</strong>{detailsTx.createdAt ? ` em ${formatDate(detailsTx.createdAt)}` : ''}</span>
+                    <span>Criado por <strong className="text-ink">{detailsTx.createdBy}</strong>{detailsTx.createdAt ? ` em ${formatDate(detailsTx.createdAt)}` : ''}</span>
                   )}
                   {detailsTx.updatedBy && detailsTx.updatedAt !== detailsTx.createdAt && (
-                    <span>Editado por <strong className="text-[#f2f0ea]">{detailsTx.updatedBy}</strong>{detailsTx.updatedAt ? ` em ${formatDate(detailsTx.updatedAt)}` : ''}</span>
+                    <span>Editado por <strong className="text-ink">{detailsTx.updatedBy}</strong>{detailsTx.updatedAt ? ` em ${formatDate(detailsTx.updatedAt)}` : ''}</span>
                   )}
                 </div>
               )}
             </div>
-            <button className="w-full mt-6 py-3 rounded-xl bg-white/5 text-white font-bold hover:bg-white/10 transition-colors" onClick={() => setDetailsTx(null)}>Fechar</button>
+            <button className="w-full mt-6 py-3 rounded-full border border-border text-ink font-bold hover:bg-border/20 transition-colors" onClick={() => setDetailsTx(null)}>Fechar</button>
           </div>
         </div>
       )}

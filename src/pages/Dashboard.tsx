@@ -1,23 +1,32 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, parseTxDate, maskCurrency, getCardInvoiceMonth } from '../utils/format';
-import { db } from '../firebase';
 import { useUIStore } from '../stores/useUIStore';
-import { toast } from '../stores/useToastStore';
 import { CustomSelect } from '../components/CustomSelect';
 import { Tooltip, MonthPicker } from '../components/ui';
 import { AndroidAppBanner } from '../components/AndroidAppBanner';
-import { Transaction, Account, User } from '../types';
+import { Transaction, Account, Card, User } from '../types';
 
-function getEffectiveAmount(tx: Transaction) { return parseFloat(String(tx.amount)) || 0; }
-function dayKey(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function getEffectiveAmount(tx: Transaction) {
+  return parseFloat(String(tx.amount)) || 0;
+}
 
 const CATEGORY_ICONS: Record<string, string> = {
-  alimentação: 'fa-utensils', mercado: 'fa-cart-shopping', moradia: 'fa-house', transporte: 'fa-car',
-  saúde: 'fa-heart-pulse', educação: 'fa-graduation-cap', lazer: 'fa-champagne-glasses',
-  salário: 'fa-sack-dollar', investimentos: 'fa-chart-line', assinaturas: 'fa-rotate', 'roupas e acessórios': 'fa-shirt',
+  alimentação: 'fa-utensils',
+  mercado: 'fa-cart-shopping',
+  moradia: 'fa-house',
+  transporte: 'fa-car',
+  saúde: 'fa-heart-pulse',
+  educação: 'fa-graduation-cap',
+  lazer: 'fa-champagne-glasses',
+  salário: 'fa-sack-dollar',
+  investimentos: 'fa-chart-line',
+  assinaturas: 'fa-rotate',
+  'roupas e acessórios': 'fa-shirt',
 };
 
 function iconForCategory(category?: string, type?: string) {
@@ -28,158 +37,150 @@ function iconForCategory(category?: string, type?: string) {
   return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
 }
 
-function FlowChart({ days }: { days: any[] }) {
-  const width = 260; const height = 70; const pad = 6;
-  if (!days || days.length === 0) return null;
-  const values = days.map((d) => d.cumulative);
-  const min = Math.min(...values); const max = Math.max(...values);
-  const range = max - min || 1;
-
-  const points = days.map((d, i) => {
-    const x = pad + (i / (days.length - 1)) * (width - pad * 2);
-    const y = height - pad - ((d.cumulative - min) / range) * (height - pad * 2);
-    return [x, y];
-  });
-
-  const pathD = points.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const [lastX, lastY] = points[points.length - 1] || [0, 0];
-  const trendUp = values[values.length - 1] >= values[0];
-
+function TargetSvg() {
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full drop-shadow-lg overflow-visible preserve-3d">
-      <defs>
-        <linearGradient id="flowGradient" x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={trendUp ? '#34d399' : '#f87171'} />
-          <stop offset="100%" stopColor="#e3b04b" />
-        </linearGradient>
-      </defs>
-      <path d={pathD} fill="none" stroke="url(#flowGradient)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={lastX} cy={lastY} r={4} fill="#e3b04b" stroke="#1c1206" strokeWidth="2" />
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-5 h-5 text-pri"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <circle cx="12" cy="12" r="4.5" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" />
     </svg>
   );
 }
 
-function useCountUp(target: number, duration = 900) {
-  const [value, setValue] = useState(0);
-  const frame = useRef<number | null>(null);
-
-  useEffect(() => {
-    const start = performance.now();
-    function tick(now: number) {
-      const progress = Math.min((now - start) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(target * eased);
-      if (progress < 1) frame.current = requestAnimationFrame(tick);
-    }
-    frame.current = requestAnimationFrame(tick);
-    return () => { if (frame.current) cancelAnimationFrame(frame.current); };
-  }, [target, duration]);
-
-  return value;
+function PlusSvg() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path d="M12 5V19" />
+      <path d="M5 12H19" />
+    </svg>
+  );
 }
 
-function nextBillingDate(billingDay: number, today: Date) {
-  const day = Number(billingDay) || 10;
-  let candidate = new Date(today.getFullYear(), today.getMonth(), day);
-  if (candidate < today) candidate = new Date(today.getFullYear(), today.getMonth() + 1, day);
-  return candidate;
+function EyeSvg({ show }: { show: boolean }) {
+  if (show) {
+    return (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="w-4 h-4"
+        aria-hidden="true"
+      >
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+      <line x1="2" x2="22" y1="2" y2="22" />
+    </svg>
+  );
 }
 
 export default function Dashboard() {
-  const { session, canAccessPerson } = useAuth() as { session: User; canAccessPerson: (p?: string, tx?: any) => boolean };
+  const navigate = useNavigate();
+  const { session, canAccessPerson } = useAuth() as {
+    session: User;
+    canAccessPerson: (p?: string, tx?: any) => boolean;
+  };
   const { data: transactions, loading: loadingTx } = useCollection<Transaction>('transactions');
-  const { data: accounts, loading: loadingAcc } = useCollection<any>('accounts');
-  const { data: subscriptions } = useCollection<any>('subscriptions');
-  const { data: cards } = useCollection<any>('cards');
+  const { data: accounts, loading: loadingAcc } = useCollection<Account>('accounts');
+  const { data: cards } = useCollection<Card>('cards');
   const { data: paidInvoices } = useCollection<any>('paidInvoices');
+  const { data: goals } = useCollection<any>('goals');
   const { data: personsList } = useCollection<{ id?: string; name?: string }>('persons');
-  const { privacyMode, togglePrivacyMode, selectedPerson, setSelectedPerson } = useUIStore();
 
-  const [budgets, setBudgets] = useState<Record<string, number>>({});
+  const { privacyMode, togglePrivacyMode, selectedPeriod, setSelectedPeriod, selectedPerson, setSelectedPerson } =
+    useUIStore();
+
   const [categoryStyles, setCategoryStyles] = useState<Record<string, { icon: string; color: string }>>({});
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'budgets')).then((snap) => {
-      if (snap.exists()) setBudgets(snap.data() as Record<string, number>);
-    }).catch((e) => console.error('Erro ao carregar metas:', e));
-    getDoc(doc(db, 'settings', 'categoryStyles')).then((snap) => {
-      if (snap.exists()) setCategoryStyles(snap.data() as Record<string, { icon: string; color: string }>);
-    }).catch((e) => console.error('Erro ao carregar estilos de categoria:', e));
+    getDoc(doc(db, 'settings', 'categoryStyles'))
+      .then((snap) => {
+        if (snap.exists()) setCategoryStyles(snap.data() as Record<string, { icon: string; color: string }>);
+      })
+      .catch((e) => console.error('Erro ao carregar estilos de categoria:', e));
   }, []);
 
-  const [navDate, setNavDate] = useState(() => new Date());
-  const navMonth = navDate.getMonth(); const navYear = navDate.getFullYear();
-  const monthLabel = navDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-  const isCurrentMonth = navMonth === new Date().getMonth() && navYear === new Date().getFullYear();
-
-  async function handleCopySummary() {
-    const linhas = [
-      `📊 Resumo financeiro — ${monthLabel}`,
-      '',
-      `💰 Saldo atual: ${formatCurrency(currentBalance)}`,
-      `📈 Receitas: ${formatCurrency(totalIncome)}`,
-      `📉 Despesas: ${formatCurrency(totalExpense)}`,
-    ];
-    if (personsSummary.length > 0) {
-      linhas.push('', '👤 Por pessoa:');
-      personsSummary.forEach((p) => {
-        linhas.push(`- ${p.person}: +${formatCurrency(p.income)} / -${formatCurrency(p.expense)}`);
-      });
+  const [periodYear, periodMonth] = useMemo(() => {
+    if (selectedPeriod && selectedPeriod.includes('-')) {
+      const parts = selectedPeriod.split('-');
+      return [parseInt(parts[0], 10), parseInt(parts[1], 10) - 1];
     }
-    const texto = linhas.join('\n');
-    try {
-      await navigator.clipboard.writeText(texto);
-      toast.success('Resumo copiado! Já pode colar no WhatsApp.');
-    } catch {
-      toast.error('Não foi possível copiar o resumo.');
-    }
-  }
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth()];
+  }, [selectedPeriod]);
 
-  function goPrevMonth() { setNavDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1)); }
-  function goNextMonth() { setNavDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1)); }
-  function goToday() { setNavDate(new Date()); }
+  const visibleAccounts = useMemo(
+    () => (session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.ownerUid || a.owner))),
+    [accounts, session, canAccessPerson]
+  );
 
-  const visibleAccounts = useMemo(() => (session.role === 'admin' ? accounts : accounts.filter((a) => canAccessPerson(a.owner))), [accounts, session, canAccessPerson]);
-  const visibleTx = useMemo(() =>
-    transactions
-      .filter((tx) => canAccessPerson(tx.person, tx))
-      .filter((tx) => selectedPerson === 'all' || tx.person === selectedPerson),
-    [transactions, canAccessPerson, selectedPerson]);
-  const currentPeriodTxs = useMemo(() => visibleTx.filter((tx) => { const d = parseTxDate(tx.date); return d && d.getMonth() === navMonth && d.getFullYear() === navYear; }), [visibleTx, navMonth, navYear]);
+  const visibleTx = useMemo(
+    () =>
+      transactions
+        .filter((tx) => canAccessPerson(tx.person, tx))
+        .filter((tx) => selectedPerson === 'all' || tx.person === selectedPerson),
+    [transactions, canAccessPerson, selectedPerson]
+  );
 
-  const personOptions = useMemo(() => (personsList || []).map((p) => p.name).filter((n): n is string => Boolean(n) && canAccessPerson(n)), [personsList, canAccessPerson]);
+  const currentPeriodTxs = useMemo(
+    () =>
+      visibleTx.filter((tx) => {
+        const d = parseTxDate(tx.date);
+        return d && d.getMonth() === periodMonth && d.getFullYear() === periodYear;
+      }),
+    [visibleTx, periodMonth, periodYear]
+  );
 
-  // Se a pessoa escolhida no filtro deixou de existir na lista (ex: outro usuário entrou no mesmo
-  // navegador), volta pra "Todos". Sem isso o painel ficava vazio e sem controle pra corrigir.
+  const personOptions = useMemo(
+    () => (personsList || []).map((p) => p.name).filter((n): n is string => Boolean(n) && canAccessPerson(n)),
+    [personsList, canAccessPerson]
+  );
+
   useEffect(() => {
-    if (selectedPerson !== 'all' && personOptions.length > 0 && !personOptions.includes(selectedPerson)) setSelectedPerson('all');
+    if (selectedPerson !== 'all' && personOptions.length > 0 && !personOptions.includes(selectedPerson)) {
+      setSelectedPerson('all');
+    }
   }, [personOptions, selectedPerson, setSelectedPerson]);
 
-  const currentBalance = useMemo(() => {
-    let sum = 0; let fallbackIncome = 0; let fallbackExpense = 0; const fallbackAccs = new Set();
-    visibleAccounts.forEach(acc => {
-      const initial = parseFloat(acc.balance) || 0;
-      if (acc.computedBalance !== undefined) sum += initial + Number(acc.computedBalance);
-      else { fallbackAccs.add(acc.id === 'default_account' ? 'account' : `acc_${acc.id}`); sum += initial; }
-    });
-    if (fallbackAccs.size > 0 || visibleAccounts.length === 0) {
-      visibleTx.forEach(tx => {
-        if (visibleAccounts.length === 0 || fallbackAccs.has(tx.paymentMethod)) {
-          const amt = getEffectiveAmount(tx);
-          if (tx.type === 'income' || tx.type === 'transfer_in') fallbackIncome += amt;
-          else if (tx.type === 'expense' || tx.type === 'transfer_out' || tx.type === 'invoice_payment') fallbackExpense += amt;
-        }
-      });
-      sum += (fallbackIncome - fallbackExpense);
-    }
-    return sum;
-  }, [visibleAccounts, visibleTx]);
-
-  const animatedBalance = useCountUp(currentBalance);
-
-  const { totalIncome, totalExpense, personsSummary, accountsSummary, categoryTotals } = useMemo(() => {
-    let income = 0; let expense = 0;
-    const pMap = new Map();
-    const aMap = new Map(visibleAccounts.map(a => [a.id === 'default_account' ? 'account' : `acc_${a.id}`, { ...a, periodIncome: 0, periodExpense: 0, periodNet: 0 }]));
+  const { totalIncome, totalExpense, categoryTotals } = useMemo(() => {
+    let income = 0;
+    let expense = 0;
     const catMap: Record<string, number> = {};
 
     currentPeriodTxs.forEach((tx) => {
@@ -188,305 +189,390 @@ export default function Dashboard() {
       const isInvoicePayment = tx.type === 'invoice_payment';
       const isInc = tx.type === 'income' || tx.type === 'transfer_in';
 
-      // Transferência entre contas e pagamento de fatura não são receita/despesa nova da família:
-      // a compra do cartão já foi contada como despesa quando aconteceu; pagar a fatura só move o dinheiro.
       if (!isTransfer && !isInvoicePayment) {
-        if (isInc) income += amt; else expense += amt;
-        const pLabel = tx.person || 'Sem pessoa';
-        if (!pMap.has(pLabel)) pMap.set(pLabel, { person: pLabel, income: 0, expense: 0 });
-        if (isInc) pMap.get(pLabel).income += amt; else pMap.get(pLabel).expense += amt;
-        if (!isInc && tx.category) {
-          catMap[tx.category] = (catMap[tx.category] || 0) + amt;
+        if (isInc) income += amt;
+        else {
+          expense += amt;
+          const cat = tx.category || 'Outros';
+          catMap[cat] = (catMap[cat] || 0) + amt;
         }
       }
-
-      // O saldo de cada conta continua contando transferência e pagamento de fatura normalmente.
-      if (aMap.has(tx.paymentMethod)) {
-         const accSum = aMap.get(tx.paymentMethod);
-         if (isInc) accSum.periodIncome += amt; else accSum.periodExpense += amt;
-         accSum.periodNet = accSum.periodIncome - accSum.periodExpense;
-      }
     });
 
-    const accList = [...aMap.values()].map(acc => {
-      const initial = parseFloat(acc.balance) || 0;
-      const comp = acc.computedBalance !== undefined ? Number(acc.computedBalance) : acc.periodNet;
-      return { ...acc, balance: initial + comp };
-    });
+    return { totalIncome: income, totalExpense: expense, categoryTotals: catMap };
+  }, [currentPeriodTxs]);
 
-    return { totalIncome: income, totalExpense: expense, personsSummary: [...pMap.values()].sort((a, b) => (b.expense + b.income) - (a.expense + a.income)), accountsSummary: accList, categoryTotals: catMap };
-  }, [currentPeriodTxs, visibleAccounts]);
+  const periodBalance = totalIncome - totalExpense;
 
-  const budgetedCategories = useMemo(
-    () => Object.keys(budgets).filter((cat) => (budgets[cat] || 0) > 0).map((cat) => ({ category: cat, spent: categoryTotals[cat] || 0, limit: budgets[cat] })),
-    [budgets, categoryTotals]
-  );
-
-  const upcomingSubscriptions = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    return (subscriptions || []).filter((s) => s.status !== 'pausada' && canAccessPerson(s.person)).map((s) => {
-      const due = nextBillingDate(s.billingDay, today);
-      return { ...s, diffDays: Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) };
-    }).filter((s) => s.diffDays >= 0 && s.diffDays <= 5).sort((a, b) => a.diffDays - b.diffDays);
-  }, [subscriptions, canAccessPerson]);
-
-  const upcomingInvoices = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    return (cards || []).filter((c) => canAccessPerson(c.owner)).map((c) => {
-      const due = nextBillingDate(c.dueDay, today);
-      const diffDays = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      const dayBeforeDue = new Date(due); dayBeforeDue.setDate(dayBeforeDue.getDate() - 1);
-      const monthStr = getCardInvoiceMonth(dayBeforeDue.toISOString().slice(0, 10), c.closeDay);
-      const isPaid = (paidInvoices || []).some((p) => p.id === `inv_${c.id}_${monthStr}`);
-      return { ...c, diffDays, isPaid };
-    }).filter((c) => !c.isPaid && c.diffDays >= 0 && c.diffDays <= 5).sort((a, b) => a.diffDays - b.diffDays);
-  }, [cards, paidInvoices, canAccessPerson]);
-
-  const last14Days = useMemo(() => {
-    const now = new Date(); const buckets = [];
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now); d.setDate(d.getDate() - i);
-      buckets.push({ key: dayKey(d), label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), net: 0 });
+  // Dias restantes no mês do período
+  const daysRemainingInMonth = useMemo(() => {
+    const now = new Date();
+    const lastDayOfMonth = new Date(periodYear, periodMonth + 1, 0).getDate();
+    if (now.getFullYear() === periodYear && now.getMonth() === periodMonth) {
+      return Math.max(0, lastDayOfMonth - now.getDate());
     }
-    const byKey = new Map(buckets.map((b) => [b.key, b]));
-    visibleTx.forEach((tx) => {
-      const d = parseTxDate(tx.date); if (!d) return;
-      const key = dayKey(d); if (!byKey.has(key)) return;
-      if (tx.type === 'transfer_out' || tx.type === 'transfer_in' || tx.type === 'invoice_payment') return;
-      byKey.get(key)!.net += tx.type === 'income' ? getEffectiveAmount(tx) : -getEffectiveAmount(tx);
+    return 0;
+  }, [periodYear, periodMonth]);
+
+  // Percentual gasto do que entrou
+  const spentPct = useMemo(() => {
+    if (totalIncome <= 0) return totalExpense > 0 ? 100 : 0;
+    return Math.round((totalExpense / totalIncome) * 100);
+  }, [totalIncome, totalExpense]);
+
+  // Cartão com maior fatura aberta ou principal
+  const openInvoiceCard = useMemo(() => {
+    if (!cards || cards.length === 0) return null;
+    const periodKey = `${periodYear}-${String(periodMonth + 1).padStart(2, '0')}`;
+
+    const evaluatedCards = cards.map((c) => {
+      const limit = Number(c.limit) || 5000;
+      const isPaid = (paidInvoices || []).some(
+        (p: any) => String(p.cardId) === String(c.id) && p.month === periodKey
+      );
+      const openTotal = transactions
+        .filter(
+          (t) =>
+            t.paymentMethod === `card_${c.id}` &&
+            (t.invoiceMonth ? t.invoiceMonth === periodKey : (t.date || '').startsWith(periodKey))
+        )
+        .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+      const usedPct = limit > 0 ? Math.min(100, Math.round((openTotal / limit) * 100)) : 0;
+
+      return {
+        card: c,
+        isPaid,
+        openTotal,
+        limit,
+        usedPct,
+        dueDay: c.dueDay || 15,
+      };
     });
-    let running = 0; return buckets.map((b) => { running += b.net; return { ...b, cumulative: running }; });
-  }, [visibleTx]);
 
-  const netLast14 = last14Days.length ? last14Days[last14Days.length - 1].cumulative : 0;
-  const recentTx = useMemo(() => [...currentPeriodTxs].sort((a, b) => (parseTxDate(b.date)?.getTime() || 0) - (parseTxDate(a.date)?.getTime() || 0)).slice(0, 10), [currentPeriodTxs]);
+    // Prefere cartão com fatura aberta > 0, senão o primeiro cartão
+    const withOpen = evaluatedCards.find((ec) => !ec.isPaid && ec.openTotal > 0);
+    return withOpen || evaluatedCards[0];
+  }, [cards, paidInvoices, transactions, periodYear, periodMonth]);
 
-  function cardNameFor(pm: string) {
-    if (!pm?.startsWith('card_')) return 'Conta corrente';
-    const card = cards.find((c) => `card_${c.id}` === pm);
-    return card ? `Cartão ${card.name}` : 'Cartão';
+  // Lista de "Para onde foi" (Top 5 categorias ordenadas)
+  const topCategories = useMemo(() => {
+    const list = Object.entries(categoryTotals).map(([name, amount]) => ({
+      name,
+      amount,
+      pct: totalExpense > 0 ? Math.round((amount / totalExpense) * 100) : 0,
+    }));
+    return list.sort((a, b) => b.amount - a.amount).slice(0, 5);
+  }, [categoryTotals, totalExpense]);
+
+  // 5 últimas transações
+  const recentTransactions = useMemo(() => {
+    return [...currentPeriodTxs]
+      .sort((a, b) => (parseTxDate(b.date)?.getTime() || 0) - (parseTxDate(a.date)?.getTime() || 0))
+      .slice(0, 5);
+  }, [currentPeriodTxs]);
+
+  function accountNameFor(pm?: string) {
+    if (!pm) return 'Principal';
+    if (pm.startsWith('card_')) {
+      const found = cards.find((c) => `card_${c.id}` === pm);
+      return found ? found.name : 'Cartão';
+    }
+    if (pm.startsWith('acc_')) {
+      const found = visibleAccounts.find((a) => `acc_${a.id}` === pm);
+      return found ? found.name : 'Conta';
+    }
+    return 'Principal';
   }
 
-  if (loadingTx || loadingAcc) return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
+  // Meta em destaque
+  const featuredGoal = useMemo(() => {
+    if (!goals || goals.length === 0) return null;
+    const sorted = [...goals].sort((a, b) => {
+      const targetA = Number(a.targetAmount ?? a.target ?? 1);
+      const curA = Number(a.currentAmount ?? a.current ?? 0);
+      const targetB = Number(b.targetAmount ?? b.target ?? 1);
+      const curB = Number(b.currentAmount ?? b.current ?? 0);
+      return curB / targetB - curA / targetA;
+    });
+    const g = sorted[0];
+    const target = Number(g.targetAmount ?? g.target ?? 0);
+    const current = Number(g.currentAmount ?? g.current ?? 0);
+    const pct = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
+    return { name: g.name || 'Meta Viagem', target, current, pct };
+  }, [goals]);
+
+  if (loadingTx || loadingAcc) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="w-10 h-10 border-4 border-pri border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-4 sm:pt-6 animate-in fade-in duration-500">
       <AndroidAppBanner />
-      
-      {/* HEADER RESPONSIVO */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-        <h2 className="font-display text-[34px] leading-tight font-bold text-ink truncate w-full sm:w-auto">
-          Olá, {session.name.split(' ')[0]}
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
-        {personOptions.length > 1 ? (
-          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="w-auto shrink-0" ariaLabel="Filtrar painel por pessoa">
-            <option value="all">Todos</option>
-            {personOptions.map((name) => (<option key={name} value={name}>{name}</option>))}
-          </CustomSelect>
-        ) : personOptions.length === 1 ? (
-          <Tooltip content="Painel desta pessoa">
-            <div className="flex items-center gap-2 px-4 h-11 rounded-[18px] border border-border bg-card text-ink text-sm shrink-0">
-              <i className="fa-solid fa-user text-muted text-xs" />
-              <span className="truncate max-w-[160px]">{personOptions[0]}</span>
-            </div>
-          </Tooltip>
-        ) : null}
-        <Tooltip content="Copiar resumo do mês para o WhatsApp">
-          <button onClick={handleCopySummary} onContextMenu={(e) => e.preventDefault()} aria-label="Copiar resumo do mês para o WhatsApp" className="flex items-center gap-2 px-3 sm:px-4 min-h-[44px] rounded-[18px] bg-card border border-border hover:bg-neutral text-ink font-bold text-xs sm:text-sm transition-colors shrink-0">
-            <i className="fa-brands fa-whatsapp text-pri" /> <span className="hidden sm:inline">Copiar resumo</span>
+
+      {/* Barra de Ações do Topo */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          {personOptions.length > 1 && (
+            <CustomSelect
+              value={selectedPerson}
+              onChange={(e) => setSelectedPerson(e.target.value)}
+              className="w-auto shrink-0"
+              ariaLabel="Filtrar painel por pessoa"
+            >
+              <option value="all">Todos</option>
+              {personOptions.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </CustomSelect>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <MonthPicker value={selectedPeriod} onChange={setSelectedPeriod} />
+          <button
+            type="button"
+            onClick={() => navigate('/transactions?new=1')}
+            onContextMenu={(e) => e.preventDefault()}
+            className="inline-flex items-center gap-2 min-h-[44px] px-4 rounded-pill bg-fab text-fabIcon font-bold text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all"
+          >
+            <PlusSvg />
+            <span>Nova transação</span>
           </button>
-        </Tooltip>
-        <MonthPicker value={selectedPeriod} onChange={setSelectedPeriod} />
         </div>
       </div>
 
-      {/* ALERTAS DE ASSINATURA */}
-      {upcomingSubscriptions.length > 0 && (
-        <div className="mb-6 sm:mb-8 flex flex-col gap-3">
-          {upcomingSubscriptions.map((s) => (
-            <div key={s.id} className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3 sm:p-4 flex items-start sm:items-center gap-3 sm:gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-yellow-500/20 text-yellow-500 flex items-center justify-center text-lg sm:text-xl shrink-0">
-                <i className="fa-solid fa-bell animate-pulse" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <strong className="text-yellow-500 block mb-0.5 sm:mb-1 text-sm sm:text-base truncate">"{s.name}"</strong>
-                <p className="text-xs sm:text-sm text-yellow-200/80 leading-snug">
-                  Cobrança de {formatCurrency(s.amount)} para {s.diffDays === 0 ? 'hoje' : s.diffDays === 1 ? 'amanhã' : `em ${s.diffDays} dias`} ({cardNameFor(s.paymentMethod)}).
-                </p>
-              </div>
+      {/* LINHA SUPERIOR: Saldo do mês (Verde Hero) + Fatura Aberta */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
+        {/* Cartão verde com Saldo do mês (Bricolage 56 px) */}
+        <div className="lg:col-span-8 rounded-card p-6 sm:p-8 bg-gradient-to-br from-heroStart to-heroEnd text-heroInk shadow-sm flex flex-col justify-between relative overflow-hidden">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-heroMuted">
+                Saldo do mês
+              </span>
+              <Tooltip content={privacyMode ? 'Mostrar valores' : 'Esconder valores'}>
+                <button
+                  type="button"
+                  onClick={togglePrivacyMode}
+                  onContextMenu={(e) => e.preventDefault()}
+                  aria-label={privacyMode ? 'Mostrar valores' : 'Esconder valores'}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-heroMuted hover:text-white transition-colors"
+                >
+                  <EyeSvg show={!privacyMode} />
+                </button>
+              </Tooltip>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* ALERTAS DE FATURA */}
-      {upcomingInvoices.length > 0 && (
-        <div className="mb-6 sm:mb-8 flex flex-col gap-3">
-          {upcomingInvoices.map((c) => (
-            <div key={c.id} className="bg-orange-500/10 border border-orange-500/20 rounded-2xl p-3 sm:p-4 flex items-start sm:items-center gap-3 sm:gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-lg sm:text-xl shrink-0">
-                <i className="fa-solid fa-credit-card" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <strong className="text-orange-400 block mb-0.5 sm:mb-1 text-sm sm:text-base truncate">Fatura "{c.name}"</strong>
-                <p className="text-xs sm:text-sm text-orange-200/80 leading-snug">
-                  Vence {c.diffDays === 0 ? 'hoje' : c.diffDays === 1 ? 'amanhã' : `em ${c.diffDays} dias`} e ainda não foi marcada como paga.
-                </p>
-              </div>
+            <div className="font-display text-[40px] sm:text-[56px] font-bold text-white tracking-tight leading-none mb-3 break-all">
+              {maskCurrency(periodBalance, privacyMode)}
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* HERO BALANCE - ADAPTADO PARA MOBILE */}
-      <div className="bg-gradient-to-br from-[#1a2320] to-[#141d1a] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 mb-6 sm:mb-8 shadow-2xl flex flex-col md:flex-row justify-between gap-6 md:gap-8 relative overflow-hidden">
-        <div className="absolute top-[-50px] right-[-50px] w-48 h-48 sm:w-64 sm:h-64 bg-[#e3b04b]/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex flex-col justify-center relative z-10 w-full">
-          <span className="text-[#8fa39a] font-semibold tracking-widest uppercase text-xs sm:text-sm mb-2 flex items-center gap-2">
-            <i className="fa-solid fa-wallet" /> Saldo atual
-            <Tooltip content={privacyMode ? 'Mostrar valores' : 'Esconder valores'}>
-              <button onClick={togglePrivacyMode} onContextMenu={(e) => e.preventDefault()} aria-label={privacyMode ? 'Mostrar valores' : 'Esconder valores'} className="text-[#8fa39a] hover:text-white ml-1">
-                <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
-              </button>
-            </Tooltip>
-          </span>
-          <strong className="text-[2rem] sm:text-5xl md:text-6xl font-black text-[#f2f0ea] font-mono tracking-tighter mb-4 drop-shadow-md break-all leading-none">
-            {maskCurrency(animatedBalance, privacyMode)}
-          </strong>
-          <span className={`inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-bold w-fit ${netLast14 >= 0 ? 'bg-[#34d399]/20 text-[#34d399]' : 'bg-[#f87171]/20 text-[#f87171]'}`}>
-            <i className={`fa-solid ${netLast14 >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`} />
-            {maskCurrency(Math.abs(netLast14), privacyMode)} em 14d
-          </span>
+            <p className="text-xs sm:text-sm text-heroMuted mb-3">
+              {spentPct > 0 ? `Gastou ${spentPct}% do que entrou` : 'Sem gastos no mês'}
+              {daysRemainingInMonth > 0 && `, faltam ${daysRemainingInMonth} dias para fechar o mês`}
+            </p>
+
+            {/* Barra de gasto */}
+            <div className="w-full h-2 rounded-full bg-white/20 overflow-hidden mb-6">
+              <div
+                className="h-full rounded-full bg-white transition-all duration-500"
+                style={{ width: `${Math.min(100, spentPct)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* Receitas e Despesas */}
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/15">
+            <div>
+              <span className="block text-xs text-heroMuted font-medium mb-1">Receitas</span>
+              <strong className="font-display text-lg sm:text-2xl font-bold text-white">
+                {maskCurrency(totalIncome, privacyMode)}
+              </strong>
+            </div>
+            <div>
+              <span className="block text-xs text-heroMuted font-medium mb-1">Despesas</span>
+              <strong className="font-display text-lg sm:text-2xl font-bold text-white">
+                {maskCurrency(totalExpense, privacyMode)}
+              </strong>
+            </div>
+          </div>
         </div>
-        <div className="w-full md:w-[280px] h-[80px] sm:h-[100px] relative z-10 mt-2 md:mt-0 opacity-90 shrink-0">
-          <FlowChart days={last14Days} />
+
+        {/* Cartão da fatura aberta */}
+        <div className="lg:col-span-4 rounded-card p-6 bg-card border border-border shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <strong className="text-base font-bold text-ink truncate">
+                {openInvoiceCard ? openInvoiceCard.card.name : 'Cartão principal'}
+              </strong>
+              <span className="px-2.5 py-0.5 rounded-pill bg-neutral text-ink text-[11px] font-bold shrink-0">
+                {openInvoiceCard?.isPaid ? 'Paga' : 'Aberta'}
+              </span>
+            </div>
+
+            <p className="text-xs text-muted mb-3">
+              {openInvoiceCard
+                ? `Fatura de ${new Date(periodYear, periodMonth, 1).toLocaleDateString('pt-BR', { month: 'long' })}, vence dia ${openInvoiceCard.dueDay}`
+                : 'Nenhum cartão cadastrado'}
+            </p>
+
+            <div className="font-display text-[32px] sm:text-[36px] font-bold text-ink tracking-tight mb-4">
+              {maskCurrency(openInvoiceCard?.openTotal || 0, privacyMode)}
+            </div>
+
+            {/* Barra de limite usado */}
+            <div className="w-full h-2 rounded-full bg-track overflow-hidden mb-2">
+              <div
+                className="h-full rounded-full bg-pri transition-all duration-500"
+                style={{ width: `${openInvoiceCard?.usedPct || 0}%` }}
+              />
+            </div>
+
+            <span className="text-xs text-muted">
+              Limite usado {openInvoiceCard?.usedPct || 0}% de{' '}
+              {maskCurrency(openInvoiceCard?.limit || 5000, privacyMode)}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/cards')}
+            onContextMenu={(e) => e.preventDefault()}
+            className="text-xs font-bold text-pri hover:underline text-left mt-5"
+          >
+            Ver faturas
+          </button>
         </div>
       </div>
 
-      {/* STAT CHIPS - 2 COLUNAS NO MOBILE */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 mb-6 sm:mb-8">
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-[20px] sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#34d399]" />
-          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#34d399]/10 text-[#34d399] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-down" /></div>
-          <div className="min-w-0">
-            <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Receitas</span>
-            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{maskCurrency(totalIncome, privacyMode)}</strong>
-          </div>
-        </div>
-        <div className="bg-white/[0.03] border border-white/[0.08] rounded-[20px] sm:rounded-3xl p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f87171]" />
-          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-[#f87171]/10 text-[#f87171] flex items-center justify-center text-lg sm:text-2xl shrink-0"><i className="fa-solid fa-arrow-up" /></div>
-          <div className="min-w-0">
-            <span className="block text-[#8fa39a] text-[10px] sm:text-xs uppercase tracking-wider font-semibold mb-0.5 sm:mb-1 truncate">Despesas</span>
-            <strong className="text-lg sm:text-2xl font-bold text-[#f2f0ea] font-mono truncate block">{maskCurrency(totalExpense, privacyMode)}</strong>
-          </div>
-        </div>
-      </div>
+      {/* LINHA DO MEIO: "Para onde foi" + "Últimas transações" */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+        {/* "Para onde foi" com barras por categoria */}
+        <div className="rounded-card p-6 bg-card border border-border shadow-sm flex flex-col">
+          <h3 className="font-display text-lg font-bold text-ink mb-5">Para onde foi</h3>
 
-      {budgetedCategories.length > 0 && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 shadow-xl mb-6 sm:mb-8">
-          <h3 className="text-lg sm:text-xl font-bold text-[#f2f0ea] mb-5 flex items-center gap-3">
-            <i className="fa-solid fa-bullseye text-[#f59e0b]" /> Metas do mês
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {budgetedCategories.map(({ category, spent, limit }) => {
-              const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
-              const over = spent > limit;
-              return (
-                <div key={category}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-[#f2f0ea] font-medium">{category}</span>
-                    <span className={`font-mono ${over ? 'text-red-400' : 'text-[#8fa39a]'}`}>{formatCurrency(spent)} / {formatCurrency(limit)}</span>
-                  </div>
-                  <div className="w-full h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${pct >= 100 ? 'bg-red-400' : pct >= 80 ? 'bg-yellow-300' : 'bg-[#34d399]'}`} style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* COLUNAS PRINCIPAIS: TRANSAÇÕES VS CONTA/PESSOA */}
-      <div className="flex flex-col lg:flex-row gap-6 sm:gap-8">
-        
-        {/* TRANSAÇÕES RECENTES */}
-        <div className="w-full lg:w-[60%] xl:w-[65%] bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-8 shadow-xl">
-          <h3 className="text-lg sm:text-xl font-bold text-[#f2f0ea] mb-5 sm:mb-6 flex items-center gap-3">
-            <i className="fa-solid fa-clock-rotate-left text-[#e3b04b]" /> Recentes
-          </h3>
-          {recentTx.length === 0 ? (
-             <div className="flex flex-col items-center justify-center py-10 sm:py-12 text-[#8fa39a] text-sm sm:text-base text-center"><i className="fa-solid fa-receipt text-3xl sm:text-4xl mb-3 sm:mb-4 opacity-50" /><p>Nenhuma transação no período.</p></div>
+          {topCategories.length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted">Nenhuma despesa registrada neste mês.</p>
           ) : (
-            <div className="flex flex-col gap-2">
-              {recentTx.map((tx) => (
-                <div key={tx.id} className="group p-3 sm:p-4 rounded-[16px] sm:rounded-2xl bg-black/10 hover:bg-white/5 transition-colors flex items-center justify-between gap-3 sm:gap-4 border border-white/[0.02] hover:border-white/10">
-                  <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
-                    <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center text-base sm:text-lg shrink-0 ${tx.type === 'income' ? 'bg-[#34d399]/15 text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'bg-[#3b82f6]/15 text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'bg-[#a78bfa]/15 text-[#a78bfa]' : categoryStyles[tx.category] ? '' : 'bg-white/10 text-[#8fa39a]'}`} style={tx.type === 'expense' && categoryStyles[tx.category] ? { backgroundColor: `${categoryStyles[tx.category].color}26`, color: categoryStyles[tx.category].color } : undefined}>
-                      <i className={`fa-solid ${tx.type === 'expense' && categoryStyles[tx.category]?.icon ? categoryStyles[tx.category].icon : iconForCategory(tx.category, tx.type)}`} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-[#f2f0ea] truncate text-[0.95rem] sm:text-[1.05rem] leading-tight">{tx.description}</div>
-                      <div className="text-[10px] sm:text-xs text-[#8fa39a] truncate mt-1">{formatDate(tx.date)} &bull; {tx.category}</div>
-                    </div>
+            <div className="flex flex-col gap-4">
+              {topCategories.map((c) => (
+                <div key={c.name} className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-ink truncate">{c.name}</span>
+                    <span className="font-mono text-xs font-semibold text-muted shrink-0">
+                      {maskCurrency(c.amount, privacyMode)} &bull; {c.pct}%
+                    </span>
                   </div>
-                  <strong className={`font-mono text-sm sm:text-lg shrink-0 pl-2 ${tx.type === 'income' ? 'text-[#34d399]' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'text-[#3b82f6]' : tx.type === 'invoice_payment' ? 'text-[#a78bfa]' : 'text-[#f2f0ea]'}`}>
-                    {tx.type === 'income' ? '+' : tx.type === 'transfer_out' ? '→' : tx.type === 'transfer_in' ? '←' : '-'}{formatCurrency(getEffectiveAmount(tx))}
-                  </strong>
+                  <div className="w-full h-2 rounded-full bg-track overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-pri transition-all duration-500"
+                      style={{
+                        width: `${c.pct}%`,
+                        backgroundColor: categoryStyles[c.name]?.color || undefined,
+                      }}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* SIDEBAR: CONTAS E PESSOAS */}
-        <div className="w-full lg:w-[40%] xl:w-[35%] flex flex-col gap-6 sm:gap-8">
-          
-          {/* POR CONTA */}
-          <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-6 shadow-xl">
-            <h3 className="text-base sm:text-lg font-bold text-[#f2f0ea] mb-4 sm:mb-5 flex items-center gap-2"><i className="fa-solid fa-wallet text-[#8b5cf6]" /> Por conta</h3>
-            {accountsSummary.length === 0 ? (
-              <p className="text-xs sm:text-sm text-[#8fa39a] text-center py-3">Nenhuma conta cadastrada.</p>
-            ) : (
-              <div className="flex flex-col gap-3 sm:gap-4">
-                {accountsSummary.map((acc) => (
-                  <div key={acc.id} className="flex items-center justify-between gap-2">
-                    <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate">{acc.name}</span>
-                    <div className="text-right shrink-0">
-                      <strong className="block text-[#f2f0ea] font-mono text-[0.9rem] sm:text-base">{maskCurrency(acc.balance, privacyMode)}</strong>
-                      <small className={`font-bold text-[10px] sm:text-xs ${acc.periodNet >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{acc.periodNet >= 0 ? '+' : ''}{maskCurrency(acc.periodNet, privacyMode)} no mês</small>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+        {/* "Últimas transações" */}
+        <div className="rounded-card p-6 bg-card border border-border shadow-sm flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-display text-lg font-bold text-ink">Últimas transações</h3>
+            <button
+              type="button"
+              onClick={() => navigate('/transactions')}
+              onContextMenu={(e) => e.preventDefault()}
+              className="text-xs font-bold text-pri hover:underline"
+            >
+              Ver todas
+            </button>
           </div>
 
-          {/* POR PESSOA */}
-          <div className="bg-white/[0.02] border border-white/[0.08] rounded-[24px] sm:rounded-3xl p-5 sm:p-6 shadow-xl">
-            <h3 className="text-base sm:text-lg font-bold text-[#f2f0ea] mb-4 sm:mb-5 flex items-center gap-2"><i className="fa-solid fa-users text-[#ec4899]" /> Por pessoa</h3>
-            {personsSummary.length === 0 ? (
-              <p className="text-xs sm:text-sm text-[#8fa39a] text-center py-3">Sem movimentação.</p>
-            ) : (
-              <div className="flex flex-col gap-3 sm:gap-4">
-                {personsSummary.map((p) => (
-                  <div key={p.person} className="flex items-center justify-between gap-2">
-                    <span className="text-[#f2f0ea] font-medium text-[0.85rem] sm:text-[0.95rem] truncate max-w-[100px] sm:max-w-[140px]">{p.person}</span>
-                    <div className="flex items-center gap-2 font-mono text-[10px] sm:text-xs shrink-0">
-                      <span className="text-[#34d399] bg-[#34d399]/10 px-1.5 sm:px-2 py-0.5 rounded">+{maskCurrency(p.income, privacyMode)}</span>
-                      <span className="text-[#f87171] bg-[#f87171]/10 px-1.5 sm:px-2 py-0.5 rounded">-{maskCurrency(p.expense, privacyMode)}</span>
+          {recentTransactions.length === 0 ? (
+            <p className="py-8 text-center text-xs text-muted">Nenhuma transação no período selecionado.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-border/60">
+              {recentTransactions.map((tx) => {
+                const isInc = tx.type === 'income' || tx.type === 'transfer_in';
+                const isTrans = tx.type === 'transfer_out' || tx.type === 'transfer_in';
+                const sign = isInc ? '+' : isTrans ? '→' : '-';
+                return (
+                  <div
+                    key={tx.id}
+                    onClick={() => navigate(`/transactions?detail=${tx.id}`)}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="py-3 flex items-center justify-between gap-3 cursor-pointer hover:bg-neutral/50 -mx-2 px-2 rounded-[14px] transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                          isInc ? 'bg-priSoft/40 text-pri' : 'bg-spendSoft/40 text-spendText'
+                        }`}
+                      >
+                        <i className={`fa-solid ${categoryStyles[tx.category]?.icon || iconForCategory(tx.category, tx.type)} text-sm`} />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-ink truncate">{tx.description}</div>
+                        <div className="text-xs text-muted truncate mt-0.5">
+                          {formatDate(tx.date)} &bull; {accountNameFor(tx.paymentMethod)}
+                        </div>
+                      </div>
                     </div>
+
+                    <strong
+                      className={`font-mono text-sm font-bold shrink-0 ${
+                        isInc ? 'text-pri' : 'text-spendText'
+                      }`}
+                    >
+                      {sign} {maskCurrency(tx.amount, privacyMode)}
+                    </strong>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* LINHA INFERIOR: Cartão da meta em destaque */}
+      <div className="rounded-card p-5 bg-card border border-border shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5 w-full sm:w-auto">
+          <div className="w-11 h-11 rounded-2xl bg-neutral flex items-center justify-center shrink-0">
+            <TargetSvg />
           </div>
+          <div className="min-w-0">
+            <h4 className="font-bold text-sm text-ink truncate">
+              {featuredGoal ? featuredGoal.name : 'Meta Viagem'}
+            </h4>
+            <p className="text-xs text-muted mt-0.5">
+              {featuredGoal
+                ? `Guardado ${maskCurrency(featuredGoal.current, privacyMode)} de ${maskCurrency(featuredGoal.target, privacyMode)}`
+                : 'Defina suas metas para acompanhar aqui'}
+            </p>
+          </div>
+        </div>
+
+        <div className="w-full sm:flex-1 max-w-[400px] flex items-center gap-3.5">
+          <div className="flex-1 h-3 rounded-full bg-track overflow-hidden">
+            <div
+              className="h-full rounded-full bg-pri transition-all duration-500"
+              style={{ width: `${featuredGoal?.pct || 50}%` }}
+            />
+          </div>
+          <span className="font-display text-lg font-bold text-ink shrink-0">
+            {featuredGoal?.pct || 50}%
+          </span>
         </div>
       </div>
     </div>

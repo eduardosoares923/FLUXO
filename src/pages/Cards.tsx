@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, normalize, toPersonKeys, generateId } from '../utils/format';
@@ -10,10 +11,19 @@ import { Account, Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '', color: '' };
 
-// Paleta de cores que o usuário pode escolher pro cartão (feita no app, sem seletor nativo).
-const CARD_COLORS = ['#820ad1', '#ff7a00', '#0057d9', '#cc0000', '#0f9d58', '#e3b04b', '#ec4899', '#0891b2', '#475569', '#1f2937'];
+const CARD_COLORS = [
+  '#820ad1', // Nubank roxo
+  '#ff7a00', // Itaú laranja
+  '#0f9d58', // Inter verde
+  '#1F5A41', // Wynd verde floresta
+  '#0057d9', // Azul clássico
+  '#cc0000', // Vermelho
+  '#e3b04b', // Dourado
+  '#ec4899', // Rosa
+  '#0891b2', // Ciano
+  '#1f2937', // Grafite escuro
+];
 
-// Escurece uma cor hex em uma porcentagem, pra montar o gradiente "realista" a partir de uma cor só.
 function shadeHex(hex: string, percent: number) {
   const h = hex.replace('#', '');
   const num = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
@@ -22,25 +32,43 @@ function shadeHex(hex: string, percent: number) {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
-const BRAND_STYLES = [
-  { match: /amazon/i, bg: 'bg-gradient-to-br from-gray-900 to-[#ff9900]' },
-  { match: /inter/i, bg: 'bg-gradient-to-br from-[#ff7a00] to-[#ff9a3c]' },
-  { match: /ita[uú]/i, bg: 'bg-gradient-to-br from-[#003399] to-[#0057d9]' },
-  { match: /nubank|nu ?/i, bg: 'bg-gradient-to-br from-[#820ad1] to-[#a020f0]' },
-  { match: /caixa/i, bg: 'bg-gradient-to-br from-[#003ca5] to-[#ff6600]' },
-  { match: /santander|bradesco/i, bg: 'bg-gradient-to-br from-[#cc0000] to-[#8b0000]' },
-];
+function getBrandGradient(name: string) {
+  const n = (name || '').toLowerCase();
+  if (/nu ?|nubank/.test(n)) return 'linear-gradient(135deg, #820ad1 0%, #56048c 100%)';
+  if (/ita[uú]/.test(n)) return 'linear-gradient(135deg, #ff7a00 0%, #b34e00 100%)';
+  if (/inter/.test(n)) return 'linear-gradient(135deg, #0f9d58 0%, #0a693a 100%)';
+  if (/caixa/.test(n)) return 'linear-gradient(135deg, #003ca5 0%, #002566 100%)';
+  if (/santander|bradesco/.test(n)) return 'linear-gradient(135deg, #cc0000 0%, #800000 100%)';
+  return 'linear-gradient(135deg, #1F5A41 0%, #143b2a 100%)';
+}
 
-function getBrandBg(name: string) {
-  const found = BRAND_STYLES.find((b) => b.match.test(name || ''));
-  return found ? found.bg : 'bg-gradient-to-br from-slate-800 to-slate-900';
+function getCardDigits(card: Card) {
+  if ((card as any).lastDigits) return (card as any).lastDigits;
+  let hash = 0;
+  for (let i = 0; i < (card.name || '').length; i++) {
+    hash = (hash * 31 + (card.name || '').charCodeAt(i)) % 10000;
+  }
+  return String(Math.abs(hash)).padStart(4, '0');
+}
+
+const CATEGORY_ICONS: Record<string, string> = {
+  alimentação: 'fa-utensils', mercado: 'fa-cart-shopping', moradia: 'fa-house', transporte: 'fa-car',
+  saúde: 'fa-heart-pulse', educação: 'fa-graduation-cap', lazer: 'fa-champagne-glasses',
+  salário: 'fa-sack-dollar', investimentos: 'fa-chart-line', assinaturas: 'fa-rotate', 'roupas e acessórios': 'fa-shirt',
+  internet: 'fa-wifi', farmácia: 'fa-kit-medical', casa: 'fa-house', trabalho: 'fa-briefcase',
+};
+
+function iconForCategory(category?: string) {
+  const key = (category || '').trim().toLowerCase();
+  if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
+  return 'fa-bag-shopping';
 }
 
 function formatMonthLabel(monthStr: string) {
   if (!monthStr) return '';
   const [year, month] = monthStr.split('-');
   const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-  return `${names[parseInt(month) - 1] || month} de ${year}`;
+  return `${names[parseInt(month) - 1] || month} ${year}`;
 }
 
 function shiftMonth(monthStr: string, offset: number) {
@@ -72,15 +100,22 @@ export default function Cards() {
 
   const [invoiceCard, setInvoiceCard] = useState<Card | null>(null);
   const [invoiceMonth, setInvoiceMonth] = useState('');
+  const [mobileInvoiceOpen, setMobileInvoiceOpen] = useState(false);
   const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
   const [payFromAccount, setPayFromAccount] = useState('');
-  const [deductFromAccount, setDeductFromAccount] = useState(false);
 
   const canEdit = hasPermission('cards', 'edit');
   const visible = session.role === 'admin' ? cards : cards.filter((c) => canAccessPerson(c.owner));
 
-  // Melhor cartão pra comprar hoje: o que fechou a fatura mais recentemente (maior nº de dias até o próximo fechamento),
-  // já que uma compra hoje só vai cair na fatura seguinte, sobrando mais prazo até o vencimento.
+  // Seleciona automaticamente o primeiro cartão se nenhum estiver selecionado
+  useEffect(() => {
+    if (visible.length > 0 && !invoiceCard) {
+      setInvoiceCard(visible[0]);
+      setInvoiceMonth(getCardInvoiceMonth(new Date().toISOString().slice(0, 10), visible[0].closeDay));
+    }
+  }, [visible, invoiceCard]);
+
+  // Melhor cartão para comprar hoje: o que fechou a fatura mais recentemente
   const bestCardTodayId = useMemo(() => {
     if (visible.length <= 1) return null;
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -93,7 +128,7 @@ export default function Cards() {
     return best?.id || null;
   }, [visible]);
 
-  // Uso atual do limite: soma das despesas da fatura em aberto (mês corrente, calculado pelo dia de fechamento de cada cartão), pra mostrar direto no card fechado, sem precisar abrir a fatura.
+  // Uso atual do limite por cartão
   const usageByCard = useMemo(() => {
     const map: Record<string, number> = {};
     visible.forEach((card) => {
@@ -107,6 +142,12 @@ export default function Cards() {
     return map;
   }, [visible, transactions]);
 
+  function openNewCard() {
+    setForm(emptyForm);
+    setEditingId(null);
+    setShowForm(true);
+  }
+
   function openEdit(card: Card) {
     setForm({ name: card.name, limit: String(card.limit), closeDay: String(card.closeDay), dueDay: String(card.dueDay), owner: card.owner || '', color: card.color || '' });
     setEditingId(card.id!);
@@ -117,15 +158,23 @@ export default function Cards() {
     e.preventDefault();
     if (!form.name.trim()) return;
     const owner = form.owner.trim() || session.person;
-    await saveRecord({ id: editingId || undefined, name: form.name.trim(), limit: parseFloat(form.limit) || 0, closeDay: parseInt(form.closeDay) || 28, dueDay: parseInt(form.dueDay) || 10, owner, ownerKey: normalize(owner), color: form.color || '' } as Card);
+    await saveRecord({
+      id: editingId || undefined,
+      name: form.name.trim(),
+      limit: parseFloat(form.limit) || 0,
+      closeDay: parseInt(form.closeDay) || 28,
+      dueDay: parseInt(form.dueDay) || 10,
+      owner,
+      ownerKey: normalize(owner),
+      color: form.color || '',
+    } as Card);
     setShowForm(false);
   }
 
-  function openInvoice(card: Card) {
+  function selectCard(card: Card) {
     setInvoiceCard(card);
     setInvoiceMonth(getCardInvoiceMonth(new Date().toISOString().slice(0, 10), card.closeDay));
-    setPayFromAccount('');
-    setDeductFromAccount(false);
+    setMobileInvoiceOpen(true);
   }
 
   function changeInvoiceMonth(offset: number) {
@@ -159,8 +208,7 @@ export default function Cards() {
         await deletePaid(paidRecordId);
         toast.info(`Fatura de ${formatMonthLabel(invoiceMonth)} reaberta.`);
       } else {
-        if (deductFromAccount) {
-          if (!payFromAccount) return toast.warning('Selecione de qual conta sai o pagamento.');
+        if (payFromAccount) {
           const txId = 'invpay_' + generateId();
           await saveTx({
             id: txId, type: 'invoice_payment', description: `Pagamento fatura ${invoiceCard.name} - ${formatMonthLabel(invoiceMonth)}`,
@@ -169,7 +217,7 @@ export default function Cards() {
             person: session.person, personKeys: toPersonKeys(session.person), userId: session.id,
           } as Transaction);
           await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString(), transactionId: txId, deductedAccount: payFromAccount } as PaidInvoice);
-          toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga, e ${formatCurrency(invoiceTotal)} descontado da conta!`);
+          toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga!`);
         } else {
           await savePaid({ id: paidRecordId, cardId: invoiceCard.id!, monthStr: invoiceMonth, total: invoiceTotal, paidAt: new Date().toISOString() } as PaidInvoice);
           toast.success(`Fatura de ${formatMonthLabel(invoiceMonth)} marcada como paga!`);
@@ -180,177 +228,377 @@ export default function Cards() {
     }
   }
 
-  if (loading) return <div className="p-10 text-center text-[#8fa39a] animate-pulse">Carregando cartões...</div>;
+  // Componente que renderiza os detalhes da fatura
+  function renderInvoiceDetails() {
+    if (!invoiceCard) return null;
+
+    return (
+      <div className="bg-card border border-border rounded-3xl p-6 shadow-xs flex flex-col justify-between h-full">
+        <div>
+          {/* Header da Fatura */}
+          <div className="flex items-center justify-between gap-2 mb-4">
+            <h2 className="text-lg font-bold font-heading text-ink truncate">
+              Fatura {invoiceCard.name}
+            </h2>
+            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+              isPaid
+                ? 'bg-pri text-white'
+                : 'bg-priSoft text-pri'
+            }`}>
+              {isPaid ? 'Paga' : 'Em aberto'}
+            </span>
+          </div>
+
+          {/* Navegador de Meses */}
+          <div className="flex items-center justify-between bg-border/20 border border-border/40 rounded-full px-3 py-1.5 mb-6">
+            <button
+              onClick={() => changeInvoiceMonth(-1)}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Mês anterior"
+              className="w-7 h-7 rounded-full hover:bg-border/40 flex items-center justify-center text-muted hover:text-ink transition-colors"
+            >
+              <i className="fa-solid fa-chevron-left text-xs" />
+            </button>
+            <span className="font-heading font-bold text-sm text-ink capitalize">
+              {formatMonthLabel(invoiceMonth)}
+            </span>
+            <button
+              onClick={() => changeInvoiceMonth(1)}
+              onContextMenu={(e) => e.preventDefault()}
+              aria-label="Próximo mês"
+              className="w-7 h-7 rounded-full hover:bg-border/40 flex items-center justify-center text-muted hover:text-ink transition-colors"
+            >
+              <i className="fa-solid fa-chevron-right text-xs" />
+            </button>
+          </div>
+
+          {/* Lista de Lançamentos da Fatura */}
+          {invoiceTxs.length === 0 ? (
+            <p className="text-muted text-sm text-center py-10">Nenhum lançamento nesta fatura.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-border/30 max-h-[340px] overflow-y-auto pr-1">
+              {invoiceTxs.map((tx) => (
+                <div key={tx.id} className="py-2.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-spendSoft/30 text-spendText flex items-center justify-center text-sm shrink-0">
+                      <i className={`fa-solid ${iconForCategory(tx.category)}`} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm text-ink truncate">{tx.description}</div>
+                      <div className="text-xs text-muted truncate">{tx.category || 'Geral'}</div>
+                    </div>
+                  </div>
+                  <strong className="font-heading font-bold text-sm text-spendText shrink-0">
+                    - {formatCurrency(tx.amount)}
+                  </strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Rodapé da Fatura com Total e Ação de Pagamento */}
+        <div className="pt-6 border-t border-border/60 mt-4">
+          <div className="flex items-baseline justify-between mb-4">
+            <span className="text-xs font-medium text-muted">Total da fatura</span>
+            <strong className="text-2xl font-bold font-heading text-ink">
+              {formatCurrency(invoiceTotal)}
+            </strong>
+          </div>
+
+          {!isPaid && (
+            <div className="flex flex-col gap-2 mb-3">
+              <label className="text-[11px] font-semibold text-muted uppercase">Pagar com qual conta?</label>
+              <CustomSelect value={payFromAccount} onChange={(e) => setPayFromAccount(e.target.value)}>
+                <option value="">Selecione uma conta (opcional)</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={`acc_${a.id}`}>{a.name}</option>
+                ))}
+              </CustomSelect>
+            </div>
+          )}
+
+          {isPaid && (() => {
+            const rec = paidInvoices.find((p) => p.id === paidRecordId);
+            const acc = accounts.find((a) => `acc_${a.id}` === rec?.deductedAccount);
+            return acc ? (
+              <p className="text-xs text-muted mb-3">Pago com a conta {acc.name}.</p>
+            ) : null;
+          })()}
+
+          <button
+            onClick={togglePaid}
+            className={`w-full py-3 rounded-full font-medium text-sm transition-all shadow-xs flex items-center justify-center gap-2 ${
+              isPaid
+                ? 'border border-border text-ink hover:bg-border/20'
+                : 'bg-pri text-white hover:opacity-95'
+            }`}
+          >
+            <i className={`fa-solid ${isPaid ? 'fa-rotate-left' : 'fa-check'} text-xs`} />
+            {isPaid ? 'Reabrir fatura' : 'Marcar como paga'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="w-10 h-10 border-4 border-pri border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-20">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Cartões</h2>
+    <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pb-24 pt-4 sm:pt-6 animate-in fade-in duration-500">
+      
+      {/* HEADER PRINCIPAL */}
+      <div className="flex items-center justify-between gap-4 mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold font-heading text-ink">Cartões</h1>
         {canEdit && (
-          <button onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform">
-            <i className="fa-solid fa-plus mr-2" /> Novo Cartão
+          <button
+            onClick={openNewCard}
+            className="px-4 py-2.5 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+          >
+            <i className="fa-solid fa-plus text-xs" /> Novo cartão
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {visible.map((card) => (
-          <div
-            key={card.id}
-            onClick={() => openInvoice(card)}
-            onContextMenu={(e) => e.preventDefault()}
-            className={`${card.color ? '' : getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
-            style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 24px rgba(0,0,0,0.35)', ...(card.color ? { background: `linear-gradient(135deg, ${card.color} 0%, ${shadeHex(card.color, -45)} 100%)` } : {}) }}
-          >
-            {card.id === bestCardTodayId && (
-              <span className="absolute -top-2.5 left-4 bg-[#10b981] text-[#042c53] text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full flex items-center gap-1 z-10">
-                <i className="fa-solid fa-star" /> Melhor pra comprar hoje
-              </span>
-            )}
-            <div className="flex justify-between items-start relative z-10">
-              <div className="w-11 h-8 rounded-md" style={{ background: 'linear-gradient(135deg, #fde68a, #d97706)', boxShadow: 'inset 0 0 0 1px rgba(120,53,15,0.5)' }} />
-              {canEdit && (
-                <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openEdit(card)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar cartão" className="hover:text-yellow-300"><i className="fa-solid fa-pen" /></button>
-                  <button onClick={() => setDeleteCardId(card.id!)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir cartão" className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
-                </div>
-              )}
-            </div>
+      {/* GRID COM CARTÕES À ESQUERDA E FATURA À DIREITA (DESKTOP) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* COLUNA DOS CARTÕES */}
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {visible.map((card) => {
+              const used = usageByCard[card.id!] || 0;
+              const pct = card.limit > 0 ? (used / card.limit) * 100 : 0;
+              const isSelected = invoiceCard?.id === card.id;
 
-            <div className="mt-4 relative z-10" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
-              <div className="text-[10px] opacity-85 uppercase tracking-widest font-bold">Limite</div>
-              <div className="text-2xl font-mono">{formatCurrency(card.limit)}</div>
-              {(() => {
-                const used = usageByCard[card.id!] || 0;
-                const pct = card.limit > 0 ? Math.min(100, Math.max(0, (used / card.limit) * 100)) : 0;
-                return (
-                  <div className="mt-2">
-                    <div className="w-full h-1.5 bg-black/30 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-yellow-300' : 'bg-[#fde68a]'}`} style={{ width: `${pct}%` }} />
+              return (
+                <div
+                  key={card.id}
+                  onClick={() => selectCard(card)}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`group relative rounded-3xl p-6 text-white flex flex-col justify-between cursor-pointer transition-all duration-200 hover:-translate-y-1 ${
+                    isSelected ? 'ring-2 ring-pri ring-offset-2 ring-offset-background' : ''
+                  }`}
+                  style={{
+                    minHeight: '190px',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+                    background: card.color
+                      ? `linear-gradient(135deg, ${card.color} 0%, ${shadeHex(card.color, -35)} 100%)`
+                      : getBrandGradient(card.name),
+                  }}
+                >
+                  {/* Selo de Melhor para comprar hoje */}
+                  {card.id === bestCardTodayId && (
+                    <div className="absolute -top-3 left-6 z-10">
+                      <span className="bg-[#208b5e] text-white text-[11px] font-semibold px-3 py-0.5 rounded-full shadow-xs flex items-center gap-1.5">
+                        <i className="fa-solid fa-sparkles text-[10px]" /> Melhor para comprar hoje
+                      </span>
                     </div>
-                    <div className="text-[10px] opacity-85 mt-1">{formatCurrency(used)} de {formatCurrency(card.limit)} ({pct.toFixed(0)}%)</div>
-                  </div>
-                );
-              })()}
-            </div>
+                  )}
 
-            <div className="flex justify-between items-end relative z-10" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>
-              <div className="text-lg font-bold tracking-wide uppercase truncate mr-2">{card.name}</div>
-              <div className="text-[10px] text-right opacity-85 leading-tight shrink-0">
-                <div>Fecha dia {card.closeDay}</div>
-                <div>Vence dia {card.dueDay}</div>
-              </div>
-            </div>
+                  {/* Topo do Cartão: Nome e Final */}
+                  <div className="flex items-center justify-between gap-3">
+                    <strong className="text-xl font-bold font-heading tracking-wide truncate">
+                      {card.name}
+                    </strong>
+                    <span className="text-xs sm:text-sm font-mono tracking-wider opacity-90 shrink-0">
+                      •••• {getCardDigits(card)}
+                    </span>
+                  </div>
+
+                  {/* Meio: Limite Usado e Barra */}
+                  <div className="my-3">
+                    <div className="flex items-center justify-between text-xs font-medium opacity-90 mb-1.5">
+                      <span>Usado {formatCurrency(used)}</span>
+                      <span>Limite {formatCurrency(card.limit)}</span>
+                    </div>
+                    <div className="w-full h-2 bg-black/25 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-white rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Rodapé: Fechamento, Vencimento e Botões de Edição */}
+                  <div className="flex items-center justify-between text-xs opacity-90 pt-1">
+                    <span>Fecha dia {card.closeDay}</span>
+                    <div className="flex items-center gap-2">
+                      <span>Vence dia {card.dueDay}</span>
+                      {canEdit && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => openEdit(card)}
+                            onContextMenu={(e) => e.preventDefault()}
+                            aria-label="Editar cartão"
+                            className="w-6 h-6 rounded hover:bg-white/20 flex items-center justify-center transition-colors text-white"
+                          >
+                            <i className="fa-solid fa-pen text-[10px]" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteCardId(card.id!)}
+                            onContextMenu={(e) => e.preventDefault()}
+                            aria-label="Excluir cartão"
+                            className="w-6 h-6 rounded hover:bg-red-500/30 flex items-center justify-center transition-colors text-white"
+                          >
+                            <i className="fa-solid fa-trash text-[10px]" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
+
+          {visible.length > 0 && (
+            <p className="text-muted text-xs sm:text-sm mt-2">Toque em um cartão para ver a fatura.</p>
+          )}
+
+          {visible.length === 0 && (
+            <p className="text-muted text-sm mt-6">Nenhum cartão cadastrado.</p>
+          )}
+        </div>
+
+        {/* COLUNA DA FATURA (EXIBIDA AO LADO NO DESKTOP) */}
+        <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-6">
+          {invoiceCard ? (
+            renderInvoiceDetails()
+          ) : (
+            <div className="bg-card border border-border rounded-3xl p-8 text-center text-muted">
+              Selecione um cartão para visualizar a fatura.
+            </div>
+          )}
+        </div>
+
       </div>
 
-      {visible.length > 0 && <p className="text-[#8fa39a] text-sm mt-4">Clique num cartão pra ver a fatura.</p>}
-      {visible.length === 0 && <p className="text-[#8fa39a] mt-10">Nenhum cartão cadastrado.</p>}
+      {/* GAVETA / MODAL DE FATURA NO CELULAR (RADIX UI DIALOG) */}
+      <Dialog.Root open={mobileInvoiceOpen} onOpenChange={setMobileInvoiceOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in lg:hidden" />
+          <Dialog.Content className="fixed bottom-0 inset-x-0 max-h-[85vh] overflow-y-auto bg-card border-t border-border rounded-t-3xl p-6 text-ink shadow-2xl z-50 animate-in slide-in-from-bottom lg:hidden">
+            <div className="w-12 h-1 bg-border rounded-full mx-auto mb-4" />
+            <Dialog.Title className="sr-only">Fatura do Cartão</Dialog.Title>
+            {renderInvoiceDetails()}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
-          <form onSubmit={handleSubmit} className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white">
-            <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar' : 'Novo'} Cartão</h3>
-            <input placeholder="Nome do Cartão (Ex: Nubank)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-            <MoneyField placeholder="Limite Total" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} />
-            <div className="flex gap-4">
-              <NumberField min={1} max={31} placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({ ...form, closeDay: e.target.value })} className="w-1/2" />
-              <NumberField min={1} max={31} placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} className="w-1/2" />
-            </div>
-            <div>
-              <label className="text-xs uppercase font-bold text-[#8fa39a] block mb-2">Cor do cartão</label>
-              <div className="flex flex-wrap gap-2">
-                <Tooltip content="Automática (pelo nome do banco)">
-                  <button type="button" onClick={() => setForm({ ...form, color: '' })} aria-label="Cor automática pelo nome do banco" className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-[#8fa39a] bg-white/5 ${!form.color ? 'border-[#e3b04b]' : 'border-transparent'}`}>Auto</button>
-                </Tooltip>
-                {CARD_COLORS.map((c) => (
-                  <Tooltip key={c} content={`Cor ${c}`}>
-                    <button type="button" onClick={() => setForm({ ...form, color: c })} aria-label={`Cor ${c}`} className={`w-9 h-9 rounded-full border-2 ${form.color === c ? 'border-white scale-110' : 'border-transparent'} transition-transform`} style={{ background: `linear-gradient(135deg, ${c}, ${shadeHex(c, -45)})` }} />
+      {/* DIALOG DE CADASTRO / EDIÇÃO DE CARTÃO (RADIX UI) */}
+      <Dialog.Root open={showForm} onOpenChange={setShowForm}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 animate-in fade-in" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-card border border-border p-6 rounded-3xl text-ink shadow-2xl z-50 animate-in zoom-in-95">
+            <Dialog.Title className="text-xl font-bold font-heading mb-4 text-ink">
+              {editingId ? 'Editar Cartão' : 'Novo Cartão'}
+            </Dialog.Title>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs uppercase font-bold text-muted">Nome do Cartão</label>
+                <input
+                  placeholder="Ex: Nubank, Itaú"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  className="p-3 bg-card border border-border rounded-xl text-ink outline-none focus:border-pri transition-colors text-sm"
+                  required
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs uppercase font-bold text-muted">Limite Total</label>
+                <MoneyField
+                  placeholder="R$ 0,00"
+                  value={form.limit}
+                  onChange={(e) => setForm({ ...form, limit: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs uppercase font-bold text-muted">Dia Fechamento</label>
+                  <NumberField
+                    min={1}
+                    max={31}
+                    placeholder="Ex: 28"
+                    value={form.closeDay}
+                    onChange={(e) => setForm({ ...form, closeDay: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs uppercase font-bold text-muted">Dia Vencimento</label>
+                  <NumberField
+                    min={1}
+                    max={31}
+                    placeholder="Ex: 10"
+                    value={form.dueDay}
+                    onChange={(e) => setForm({ ...form, dueDay: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* SELETOR DE CORES DO WYND */}
+              <div className="flex flex-col gap-2 mt-1">
+                <label className="text-xs uppercase font-bold text-muted">Cor do cartão</label>
+                <div className="flex flex-wrap gap-2">
+                  <Tooltip content="Automática pelo banco">
+                    <button
+                      type="button"
+                      onClick={() => setForm({ ...form, color: '' })}
+                      onContextMenu={(e) => e.preventDefault()}
+                      aria-label="Cor automática pelo nome do banco"
+                      className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-muted bg-border/20 ${
+                        !form.color ? 'border-pri ring-2 ring-pri/30' : 'border-transparent'
+                      }`}
+                    >
+                      Auto
+                    </button>
                   </Tooltip>
-                ))}
+                  {CARD_COLORS.map((c) => (
+                    <Tooltip key={c} content={`Cor ${c}`}>
+                      <button
+                        type="button"
+                        onClick={() => setForm({ ...form, color: c })}
+                        onContextMenu={(e) => e.preventDefault()}
+                        aria-label={`Cor ${c}`}
+                        className={`w-8 h-8 rounded-full border-2 transition-all ${
+                          form.color === c ? 'border-white ring-2 ring-pri scale-110' : 'border-transparent'
+                        }`}
+                        style={{ background: `linear-gradient(135deg, ${c}, ${shadeHex(c, -35)})` }}
+                      />
+                    </Tooltip>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
-              <button type="submit" className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors">Salvar</button>
-            </div>
-          </form>
-        </div>
-      )}
 
-      {invoiceCard && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setInvoiceCard(null)}>
-          <div className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-md text-white" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-bold mb-2">Fatura: {invoiceCard.name}</h3>
-
-            <div className="flex items-center justify-center gap-3 my-3">
-              <button onClick={() => changeInvoiceMonth(-1)} onContextMenu={(e) => e.preventDefault()} aria-label="Mês anterior" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
-                <i className="fa-solid fa-chevron-left" />
-              </button>
-              <span className="font-semibold capitalize min-w-[140px] text-center">{formatMonthLabel(invoiceMonth)}</span>
-              <button onClick={() => changeInvoiceMonth(1)} onContextMenu={(e) => e.preventDefault()} aria-label="Próximo mês" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
-                <i className="fa-solid fa-chevron-right" />
-              </button>
-            </div>
-
-            {invoiceTxs.length === 0 ? (
-              <p className="text-[#8fa39a] text-center py-6">Nenhum lançamento nesta fatura.</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
-                {invoiceTxs.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between px-2 py-2 rounded-lg hover:bg-white/5">
-                    <div>
-                      <div className="font-medium text-sm">{tx.description}</div>
-                      <div className="text-xs text-[#8fa39a]">{formatDate(tx.date)}</div>
-                    </div>
-                    <div className={`font-mono font-bold ${tx.type === 'income' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {tx.type === 'income' ? '+ ' : '- '}{formatCurrency(tx.amount)}
-                    </div>
-                  </div>
-                ))}
+              <div className="flex gap-3 mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowForm(false)}
+                  className="flex-1 border border-border hover:bg-border/20 py-2.5 rounded-full font-semibold text-sm transition-colors text-ink"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-pri text-white font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
+                >
+                  Salvar
+                </button>
               </div>
-            )}
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
-            <div className="flex justify-between items-center border-t border-white/10 mt-3 pt-3">
-              <span className="text-[#8fa39a]">Total da fatura</span>
-              <strong className="font-mono text-lg">{formatCurrency(invoiceTotal)}</strong>
-            </div>
-
-            {!isPaid && (
-              <div className="mt-3">
-                <label className="flex items-center gap-2 text-sm text-[#f2f0ea] cursor-pointer">
-                  <input type="checkbox" checked={deductFromAccount} onChange={(e) => setDeductFromAccount(e.target.checked)} className="w-4 h-4 accent-[#e3b04b]" />
-                  Descontar de uma conta
-                </label>
-                {deductFromAccount && (
-                  <>
-                    <label className="text-xs uppercase font-bold text-[#8fa39a] mt-2 block">Pagar com qual conta?</label>
-                    <CustomSelect value={payFromAccount} onChange={(e) => setPayFromAccount(e.target.value)} className="mt-1">
-                      <option value="">Selecione a conta</option>
-                      {accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}
-                    </CustomSelect>
-                  </>
-                )}
-              </div>
-            )}
-            {isPaid && (() => {
-              const rec = paidInvoices.find((p) => p.id === paidRecordId);
-              const acc = accounts.find((a) => `acc_${a.id}` === rec?.deductedAccount);
-              return acc ? <p className="text-xs text-[#8fa39a] mt-2">Descontado da conta {acc.name}.</p> : null;
-            })()}
-
-            <div className="flex justify-between gap-3 mt-4">
-              <button onClick={togglePaid} disabled={!isPaid && deductFromAccount && !payFromAccount} className={`flex-1 py-3 rounded-xl font-bold transition-colors ${isPaid ? 'bg-white/5 hover:bg-white/10' : 'bg-[#e3b04b] text-black hover:bg-[#f5d78a] disabled:opacity-40 disabled:cursor-not-allowed'}`}>
-                <i className={`fa-solid ${isPaid ? 'fa-rotate-left' : 'fa-check'} mr-2`} />
-                {isPaid ? 'Reabrir fatura' : 'Marcar como paga'}
-              </button>
-              <button onClick={() => setInvoiceCard(null)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Fechar</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* CONFIRMAÇÃO DE EXCLUSÃO */}
       <ConfirmModal
         isOpen={!!deleteCardId}
         title={'Excluir cartão'}
