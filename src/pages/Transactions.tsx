@@ -9,6 +9,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys, generateId } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { DatePicker, MoneyField, NumberField, Tooltip } from '../components/ui';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
@@ -508,7 +509,7 @@ export default function Transactions() {
   }
 
     if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
-  if (error) return <PageError error={error as Error} title="Erro ao carregar transações" />;
+  if (error) return <PageError error={error as Error} title={'Erro ao carregar transações'} />;
 
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pb-24 pt-4 sm:pt-6 animate-in fade-in duration-500">
@@ -608,7 +609,7 @@ export default function Transactions() {
 
       {/* LISTA DE TRANSAÇÕES (Substituindo a antiga Tabela HTML) */}
       {viewMode === 'calendar' && !dayFilter ? null : visible.length === 0 ? (
-        <EmptyState icon="fa-receipt" title="Nenhuma transação encontrada" description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
+        <EmptyState icon="fa-receipt" title={'Nenhuma transação encontrada'} description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
       ) : (
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl shadow-xl overflow-hidden">
           {/* Cabeçalho visível só no PC */}
@@ -665,7 +666,11 @@ export default function Transactions() {
                   <div className="hidden md:flex flex-1 min-w-[200px] flex-col justify-center truncate">
                      <div className="flex items-center gap-2 text-[#f2f0ea] font-medium text-[0.95rem] truncate">
                        <span className="truncate">{tx.description}</span>
-                       {tx.groupId && <i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" title="Parcelamento" />}
+                       {tx.groupId && (
+                         <Tooltip content="Parcelamento">
+                           <span className="inline-flex"><i className="fa-solid fa-layer-group text-[0.7rem] text-[#e3b04b]" /></span>
+                         </Tooltip>
+                       )}
                        {Array.isArray(tx.tags) && tx.tags.map((t: string) => (<span key={t} className="text-[10px] font-bold bg-[#8b5cf6]/15 text-[#8b5cf6] px-1.5 py-0.5 rounded-full shrink-0">#{t}</span>))}
                      </div>
                      {formatForeignCurrency(tx) && (
@@ -688,7 +693,9 @@ export default function Transactions() {
                      {canEdit && (
                        <>
                          {!tx.transferId && !tx.paidCardId && (
-                           <button onClick={() => handleDuplicate(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#e3b04b]/20 hover:text-[#e3b04b] transition-colors flex items-center justify-center" title="Duplicar transação"><i className="fa-solid fa-copy" /></button>
+                           <Tooltip content="Duplicar transação">
+                             <button onClick={() => handleDuplicate(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#e3b04b]/20 hover:text-[#e3b04b] transition-colors flex items-center justify-center"><i className="fa-solid fa-copy" /></button>
+                           </Tooltip>
                          )}
                          <button onClick={() => openEdit(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] transition-colors flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
                          <button onClick={() => requestDelete(tx)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 transition-colors flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
@@ -732,16 +739,17 @@ export default function Transactions() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase font-bold text-[#8fa39a]">Data {paymentMode === 'installments' ? '(1ª)' : ''}</label>
-                <input type="date" {...register('date')} className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#8fa39a] focus:text-white focus:border-[#e3b04b] outline-none" />
+                <Controller name="date" control={control} render={({ field }) => (
+                  <DatePicker value={field.value} onChange={field.onChange} />
+                )} />
               </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-xs uppercase font-bold text-[#8fa39a]">Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total da compra)' : ''}</label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8fa39a] font-mono">R$</span>
-                <input type="number" step="0.01" {...register('amount')} className="w-full pl-10 pr-4 p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none font-mono text-lg" />
-              </div>
+              <Controller name="amount" control={control} render={({ field }) => (
+                <MoneyField value={field.value} onChange={(e) => field.onChange(e.target.value)} />
+              )} />
               {errors.amount && <span className="text-red-400 text-xs mt-1">{(errors.amount as any).message}</span>}
             </div>
 
@@ -749,8 +757,7 @@ export default function Transactions() {
               {watchedType !== 'transfer' && (
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs uppercase font-bold text-[#8fa39a]">Categoria</label>
-                  <input {...register('category')} list="tx-categories" placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
-                  <datalist id="tx-categories">{availableCategories.map((c) => (<option key={c} value={c} />))}</datalist>
+                  <input {...register('category')} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
                 </div>
               )}
               {watchedType === 'transfer' ? (
@@ -799,7 +806,7 @@ export default function Transactions() {
                   <div className="flex gap-3 mt-4 animate-in slide-in-from-top-2">
                     <div className="flex-1">
                       <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Parcelas</label>
-                      <input type="number" min="2" max="48" value={installmentsCount} onChange={(e) => setInstallmentsCount(parseInt(e.target.value) || 2)} className="w-full p-2.5 rounded-lg border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+                      <NumberField min={2} max={48} value={installmentsCount} onChange={(e) => setInstallmentsCount(parseInt(e.target.value) || 2)} />
                     </div>
                     <div className="flex-[2]">
                       <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Valor informado</label>
@@ -839,7 +846,9 @@ export default function Transactions() {
                           <label className="flex items-center gap-3 text-sm text-[#f2f0ea] cursor-pointer">
                             <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" /> {pName}
                           </label>
-                          <input type="number" step="0.01" disabled={!isChecked} value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} className="w-24 p-1.5 rounded-md bg-black/30 border border-white/10 text-right text-sm disabled:opacity-30 outline-none focus:border-[#e3b04b]" placeholder="0.00" />
+                          <div className="w-32">
+                            <MoneyField disabled={!isChecked} value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} placeholder="0,00" />
+                          </div>
                         </div>
                       );
                     })}
@@ -892,8 +901,8 @@ export default function Transactions() {
       {/* MODAL DETALHES, CONFIRMAÇÃO DE EXCLUSÃO E PARCELAMENTO */}
       {/* Como o Tailwind já está 100% nas listas e form, os modais menores continuam com classes de fallback ou você já aplica os visuais aqui se desejar */}
       
-      <ConfirmModal isOpen={!!deleteId} title="Excluir" message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
-      <ConfirmModal isOpen={confirmBulkDelete} title="Excluir selecionadas" message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
+      <ConfirmModal isOpen={!!deleteId} title={'Excluir'} message="Tem certeza que deseja excluir esta transação?" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
+      <ConfirmModal isOpen={confirmBulkDelete} title={'Excluir selecionadas'} message={`Excluir ${selectedIds.size} transação(ões)?`} confirmLabel="Excluir" onConfirm={handleConfirmBulkDelete} onCancel={() => setConfirmBulkDelete(false)} />
 
       {bulkEditOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50" onClick={() => setBulkEditOpen(false)}>
@@ -902,7 +911,7 @@ export default function Transactions() {
             <p className="text-xs text-[#8fa39a] -mt-2">Deixe em branco o que não quiser alterar.</p>
             <div>
               <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova categoria</label>
-              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} list="tx-categories" placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+              <input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} placeholder="Ex: Alimentação" className="w-full p-3 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
             </div>
             <div>
               <label className="text-[10px] uppercase font-bold text-[#8fa39a] block mb-1">Nova pessoa</label>
@@ -915,8 +924,8 @@ export default function Transactions() {
           </div>
         </div>
       )}
-      <ConfirmModal isOpen={!!transferDeleteTx} title="Excluir transferência" message="Isso remove as duas pontas da transferência (origem e destino). Deseja continuar?" confirmLabel="Excluir" onConfirm={handleConfirmDeleteTransfer} onCancel={() => setTransferDeleteTx(null)} />
-      <ConfirmModal isOpen={!!invoicePaymentDeleteTx} title="Excluir pagamento de fatura" message="Isso remove só o registro financeiro. A fatura vai continuar marcada como paga em Cartões, sem o desconto correspondente. Pra desfazer certo, use 'Reabrir fatura' lá. Excluir mesmo assim?" confirmLabel="Excluir" onConfirm={() => { if (invoicePaymentDeleteTx) deleteRecord(invoicePaymentDeleteTx.id, invoicePaymentDeleteTx.paymentMethod); setInvoicePaymentDeleteTx(null); }} onCancel={() => setInvoicePaymentDeleteTx(null)} />
+      <ConfirmModal isOpen={!!transferDeleteTx} title={'Excluir transferência'} message="Isso remove as duas pontas da transferência (origem e destino). Deseja continuar?" confirmLabel="Excluir" onConfirm={handleConfirmDeleteTransfer} onCancel={() => setTransferDeleteTx(null)} />
+      <ConfirmModal isOpen={!!invoicePaymentDeleteTx} title={'Excluir pagamento de fatura'} message="Isso remove só o registro financeiro. A fatura vai continuar marcada como paga em Cartões, sem o desconto correspondente. Pra desfazer certo, use 'Reabrir fatura' lá. Excluir mesmo assim?" confirmLabel="Excluir" onConfirm={() => { if (invoicePaymentDeleteTx) deleteRecord(invoicePaymentDeleteTx.id, invoicePaymentDeleteTx.paymentMethod); setInvoicePaymentDeleteTx(null); }} onCancel={() => setInvoicePaymentDeleteTx(null)} />
 
       {groupDeleteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setGroupDeleteTx(null)}>

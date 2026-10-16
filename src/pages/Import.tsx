@@ -6,6 +6,7 @@ import { formatCurrency, formatDate, getCardInvoiceMonth } from '../utils/format
 import { toast } from '../stores/useToastStore';
 import { EmptyState } from '../components/StateFeedback';
 import { CustomSelect } from '../components/CustomSelect';
+import { FileDropzone } from '../components/ui';
 import { Account, User, Transaction } from '../types';
 
 export default function Import() {
@@ -205,32 +206,15 @@ export default function Import() {
         <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Importar Extrato / Planilha</h2>
       </div>
 
-      <div
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault(); setDragOver(false);
-          if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
-        }}
-        className={`border-2 border-dashed rounded-3xl p-10 text-center mb-8 transition-all ${
-          dragOver ? 'border-[#3b82f6] bg-[#3b82f6]/10 scale-[1.02]' : 'border-white/20 bg-white/[0.02]'
-        }`}
-      >
-        <i className={`fa-solid fa-file-import text-5xl mb-4 ${dragOver ? 'text-[#3b82f6]' : 'text-[#8fa39a]'}`} />
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-2">Arraste e solte seu extrato aqui (CSV ou OFX)</h3>
-        <p className="text-sm text-[#8fa39a] mb-6">Compatível com extratos de Nubank, Itaú, Inter, Bradesco, C6 e planilhas de despesas</p>
-
-        <label className="inline-flex items-center gap-2 bg-[#e3b04b] hover:bg-[#f5d78a] text-[#1c1206] px-6 py-3 rounded-xl font-bold cursor-pointer transition-colors shadow-lg">
-          <i className="fa-solid fa-folder-open" /> Selecionar Arquivo
-          <input type="file" accept=".csv, .txt, .ofx" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} className="hidden" />
-        </label>
-
-        {file && (
-          <p className="mt-6 text-[#10b981] font-medium text-sm flex items-center justify-center gap-2">
-            <i className="fa-solid fa-check-circle" /> Arquivo selecionado: <strong>{file.name}</strong>
-          </p>
-        )}
-      </div>
+      <FileDropzone
+        accept=".csv, .txt, .ofx"
+        onFileSelect={handleFile}
+        label="Solte o extrato aqui"
+        hint="Compatível com extratos de Nubank, Itaú, Inter, Bradesco, C6 e planilhas CSV ou OFX"
+        buttonLabel="Escolher arquivo"
+        selectedFileName={file ? `Arquivo selecionado: ${file.name}` : undefined}
+        className="mb-8"
+      />
 
       {parsedRows.length > 0 && (
         <div className="animate-in slide-in-from-bottom-4">
@@ -305,7 +289,7 @@ export default function Import() {
       )}
 
       {!file && (
-        <EmptyState icon="fa-file-excel" title="Nenhum arquivo carregado" description="Selecione ou arraste um arquivo CSV ou OFX gerado pelo seu banco para visualizar as transações e confirmar a importação." />
+        <EmptyState icon="fa-file-excel" title={'Nenhum arquivo carregado'} description="Selecione ou arraste um arquivo CSV ou OFX gerado pelo seu banco para visualizar as transações e confirmar a importação." />
       )}
     </div>
   );

@@ -1,3 +1,284 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #F3F1E9;
+  --ink: #14261D;
+  --muted: #3F5046;
+  --card: #FCFBF7;
+  --border: #DDDACB;
+  --pri: #1F5A41;
+  --priSoft: #D8E8DC;
+  --priInk: #174632;
+  --spend: #C8553D;
+  --spendText: #B3442A;
+  --spendSoft: #F2D9D0;
+  --neutral: #EAE7DA;
+  --track: #D6D2C2;
+  --nav: #14261D;
+  --navMuted: #9DB0A4;
+  --navActBg: #2B4538;
+  --navActIcon: #A9D6BC;
+  --fab: #2F7A57;
+  --fabIcon: #FFFFFF;
+  --seg: #E6E3D5;
+  --segOn: #FCFBF7;
+  --heroStart: #1F5A41;
+  --heroEnd: #2F7A57;
+  --heroInk: #FFFFFF;
+  --heroMuted: #CFE6D8;
+  --wordA: #E0B04A;
+  --wordB: #C99A2A;
+
+  /* Compatibilidade com tokens existentes */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--card);
+  --text-primary: var(--ink);
+  --text-secondary: var(--muted);
+  --accent-primary: var(--pri);
+  --accent-hover: var(--priInk);
+  --success: var(--pri);
+  --danger: var(--spend);
+  --warning: var(--wordB);
+  --glass-bg: var(--card);
+  --glass-border: var(--border);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0A1110;
+  --ink: #E8F0EC;
+  --muted: #9DB2AA;
+  --card: #152120;
+  --border: #25332F;
+  --pri: #5ED9BF;
+  --priSoft: #123A33;
+  --priInk: #5ED9BF;
+  --spend: #FF8F73;
+  --spendText: #FF8F73;
+  --spendSoft: #3A2018;
+  --neutral: #17231F;
+  --track: #2A3A35;
+  --nav: #1B2B28;
+  --navMuted: #9DB2AA;
+  --navActBg: #1F3A33;
+  --navActIcon: #7FE0C8;
+  --fab: #3FC3A8;
+  --fabIcon: #0A1110;
+  --seg: #0F1917;
+  --segOn: #1F3A33;
+  --heroStart: #123A33;
+  --heroEnd: #1F5A4C;
+  --heroInk: #E8FBF4;
+  --heroMuted: #9FD8CB;
+  --wordA: #F8D77F;
+  --wordB: #D9A22E;
+
+  /* Compatibilidade com tokens existentes */
+  --bg-primary: var(--bg);
+  --bg-secondary: var(--card);
+  --text-primary: var(--ink);
+  --text-secondary: var(--muted);
+  --accent-primary: var(--pri);
+  --accent-hover: var(--priInk);
+  --success: var(--pri);
+  --danger: var(--spend);
+  --warning: var(--wordA);
+  --glass-bg: var(--card);
+  --glass-border: var(--border);
+}
+
+/* Barra de rolagem própria, global */
+html,
+body,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--track) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--track);
+  border-radius: 999px;
+}
+
+/* Base tipográfica e estrutural */
+html,
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'DM Sans', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  accent-color: var(--pri);
+}
+
+body {
+  overscroll-behavior: none;
+  margin: 0;
+  padding: 0;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
+}
+
+/* Remover visual nativo de campos e botões */
+input,
+textarea,
+button {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+  accent-color: var(--pri);
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: auto;
+  -webkit-appearance: auto;
+  -moz-appearance: auto;
+  accent-color: var(--pri);
+}
+
+button,
+nav,
+[role="tab"],
+[role="button"],
+a {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Autofill do Chrome estilizado com box-shadow inset na cor do campo */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--ink) !important;
+  -webkit-box-shadow: 0 0 0px 1000px var(--card) inset !important;
+  box-shadow: 0 0 0px 1000px var(--card) inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Foco visível por teclado em tudo */
+:focus-visible {
+  outline: 2px solid var(--pri) !important;
+  outline-offset: 2px;
+}
+
+/* Respeitar prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Adaptação automática de classes legadas quando o tema claro ("Floresta") está ativo,
+   garantindo contraste AA ao alternar data-theme no DevTools em todas as telas */
+:root:not([data-theme="dark"]) .bg-\[\#0b1210\],
+:root:not([data-theme="dark"]) .bg-\[\#0f1715\] {
+  background-color: var(--bg) !important;
+}
+
+:root:not([data-theme="dark"]) .bg-\[\#141d1a\],
+:root:not([data-theme="dark"]) .bg-\[\#1a2422\],
+:root:not([data-theme="dark"]) .bg-white\/\[0\.02\],
+:root:not([data-theme="dark"]) .bg-white\/\[0\.03\] {
+  background-color: var(--card) !important;
+}
+
+:root:not([data-theme="dark"]) .bg-white\/5,
+:root:not([data-theme="dark"]) .bg-white\/10,
+:root:not([data-theme="dark"]) .bg-black\/20,
+:root:not([data-theme="dark"]) .bg-black\/30,
+:root:not([data-theme="dark"]) .bg-black\/40 {
+  background-color: var(--neutral) !important;
+}
+
+:root:not([data-theme="dark"]) .text-\[\#f2f0ea\],
+:root:not([data-theme="dark"]) .text-\[\#e7ecea\],
+:root:not([data-theme="dark"]) .text-white:not(.bg-pri *):not(.bg-fab *):not(.bg-spend *):not(.bg-red-600 *):not(.bg-red-500 *) {
+  color: var(--ink) !important;
+}
+
+:root:not([data-theme="dark"]) .text-\[\#8fa39a\],
+:root:not([data-theme="dark"]) .text-\[\#9fb0a8\],
+:root:not([data-theme="dark"]) .text-\[\#5c6b66\],
+:root:not([data-theme="dark"]) .text-\[\#94a3b8\] {
+  color: var(--muted) !important;
+}
+
+:root:not([data-theme="dark"]) .border-white\/\[0\.05\],
+:root:not([data-theme="dark"]) .border-white\/\[0\.06\],
+:root:not([data-theme="dark"]) .border-white\/\[0\.07\],
+:root:not([data-theme="dark"]) .border-white\/\[0\.08\],
+:root:not([data-theme="dark"]) .border-white\/10,
+:root:not([data-theme="dark"]) .border-white\/15,
+:root:not([data-theme="dark"]) .border-white\/20 {
+  border-color: var(--border) !important;
+}
+
+/* Impressão: fundo branco, sem sidebar, sem botões e cartões de Relatórios em uma coluna */
+@media print {
+  aside,
+  nav,
+  header,
+  button,
+  .no-print,
+  [data-no-print="true"] {
+    display: none !important;
+  }
+
+  html,
+  body,
+  #root,
+  main {
+    background: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}

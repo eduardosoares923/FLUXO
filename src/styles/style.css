@@ -1,51 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* Estilos utilitários e componentes legados — variáveis e base estão em tailwind.css */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  /* Colors - Dark Theme (Default) */
-  color-scheme: dark;
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --accent-primary: #6366f1;
-  --accent-hover: #4f46e5;
-  --success: #10b981;
-  --danger: #ef4444;
-  --warning: #f59e0b;
-  
-  --glass-bg: rgba(30, 41, 59, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  
-  --radius-md: 0.5rem;
-  --radius-lg: 1rem;
-  --radius-xl: 1.5rem;
-  
-  --transition: all 0.3s ease;
-}
-
-[data-theme="light"] {
-  color-scheme: light;
-  --bg-primary: #f1f5f9;
-  --bg-secondary: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(0, 0, 0, 0.1);
-}
-
-/* O projeto desliga o preflight do Tailwind (corePlugins.preflight: false) pra não
-   quebrar telas antigas que dependem do estilo nativo do navegador. Isso significa que
-   qualquer <button> sem estilo explícito de borda mantém a borda 3D nativa do sistema
-   por baixo — era esse o contorno cinza/branco feio, não o outline de foco. As classes
-   .btn/.btn-primary/.form-control legadas já definem sua própria borda/fundo, então não
-   são afetadas (uma classe sempre vence um seletor de elemento puro em especificidade). */
 button {
   border: none;
   background: none;
@@ -56,19 +10,11 @@ button {
   cursor: pointer;
 }
 
-/* Impede o cursor de texto (I-beam) e a seleção ao passar o mouse ou clicar em títulos,
-   rótulos e botões — eles não são conteúdo pra copiar. Cobre também .uppercase porque é
-   a classe que os rótulos/títulos do app já usam (ex: "SALDO ATUAL"), sem afetar textos
-   de conteúdo real (valores, descrições) que o usuário pode querer selecionar. */
 button, label, h1, h2, h3, .uppercase, .no-select {
   -webkit-user-select: none;
   user-select: none;
-  cursor: default;
 }
 
-/* Remove o contorno padrão do navegador ao clicar (ficava um retângulo cinza/branco feio
-   em botões sobre o fundo escuro), mas mantém um contorno visível ao navegar por teclado
-   (acessibilidade) via :focus-visible. */
 button:focus,
 a:focus,
 [role="button"]:focus,
@@ -76,47 +22,32 @@ select:focus,
 input:focus {
   outline: none;
 }
+
 button:focus-visible,
 a:focus-visible,
 [role="button"]:focus-visible,
 select:focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--accent-primary);
+  outline: 2px solid var(--pri);
   outline-offset: 2px;
-}
-
-/* Scrollbar customizada pro tema escuro (a scrollbar padrão do navegador aparecia clara) */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 10px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
 }
 
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  font-family: 'Inter', sans-serif;
 }
 
 body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
 a {
-  color: var(--accent-primary);
+  color: var(--pri);
   text-decoration: none;
   transition: var(--transition);
 }
@@ -574,57 +505,6 @@ select.form-control option {
 }
 
 [data-theme="light"] select.form-control option {
-  background-color: #ffffff !important;
-  color: #0f172a !important;
-}
-
-/* Impressão (Relatórios etc): o navegador já oferece "Salvar como PDF" no diálogo de
-   impressão, então não precisamos de uma lib extra — só precisamos que o layout saia
-   decente: sem a navegação do app, ocupando a largura da folha, com contraste de papel. */
-@media print {
-  aside, nav, .no-print {
-    display: none !important;
-  }
-  main {
-    overflow: visible !important;
-    padding: 0 !important;
-    height: auto !important;
-    width: 100% !important;
-  }
-  html, body, .flex.h-screen {
-    height: auto !important;
-    overflow: visible !important;
-  }
-  /* O app usa cores fixas em muitos componentes (fundo escuro, texto claro) que seria
-     arriscado sobrescrever um por um; inverter o esquema de cor no papel preserva o
-     contraste original (fundo passa a claro, texto a escuro) sem tocar nos componentes. */
-  .flex.h-screen {
-    filter: invert(1) hue-rotate(180deg);
-    background: #ffffff !important;
-  }
-  * {
-    box-shadow: none !important;
-    text-shadow: none !important;
-  }
-}
-
-/* Autopreenchimento do navegador (login, senha salva, etc): o Chrome/Edge forçam um fundo
-   branco com texto preto que nenhuma cor de fundo normal consegue sobrescrever, só esse
-   truque de "empurrar" a cor de fundo pra dentro via box-shadow com transição gigante. */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
-  -webkit-text-fill-color: #f2f0ea !important;
-  -webkit-box-shadow: 0 0 0px 1000px #141d1a inset !important;
-  box-shadow: 0 0 0px 1000px #141d1a inset !important;
-  transition: background-color 9999s ease-in-out 0s;
-}
-[data-theme="light"] input:-webkit-autofill,
-[data-theme="light"] input:-webkit-autofill:hover,
-[data-theme="light"] input:-webkit-autofill:focus,
-[data-theme="light"] input:-webkit-autofill:active {
-  -webkit-text-fill-color: #0f172a !important;
-  -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
-  box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  background-color: var(--card) !important;
+  color: var(--ink) !important;
 }

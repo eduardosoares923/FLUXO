@@ -7,6 +7,7 @@ import { toPersonKeys } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
+import { Tooltip } from '../components/ui';
 import { toast } from '../stores/useToastStore';
 import { User } from '../types';
 
@@ -355,7 +356,7 @@ export default function Users() {
   }
 
   if (loading) return <PageLoading message="Carregando usuários..." />;
-  if (collectionError) return <PageError error={collectionError} title="Erro ao carregar usuários" />;
+  if (collectionError) return <PageError error={collectionError} title={'Erro ao carregar usuários'} />;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6 animate-in fade-in duration-500">
@@ -366,17 +367,19 @@ export default function Users() {
             <div className="mt-1.5 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-[#8fa39a]">
               <span>Código de convite da sua família:</span>
               <strong className="font-mono text-[#e3b04b] tracking-wider">{myInviteCode}</strong>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard?.writeText(myInviteCode);
-                  toast.success('Código de convite copiado!');
-                }}
-                className="text-[#8fa39a] hover:text-white transition-colors ml-1"
-                title="Copiar código de convite"
-              >
-                <i className="fa-regular fa-copy" />
-              </button>
+              <Tooltip content="Copiar código de convite">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(myInviteCode);
+                    toast.success('Código de convite copiado!');
+                  }}
+                  className="text-[#8fa39a] hover:text-white transition-colors ml-1"
+                  aria-label="Copiar código de convite"
+                >
+                  <i className="fa-regular fa-copy" />
+                </button>
+              </Tooltip>
             </div>
           )}
         </div>
@@ -469,7 +472,7 @@ export default function Users() {
       {users.length === 0 ? (
         <EmptyState
           icon="fa-users"
-          title="Nenhum usuário cadastrado"
+          title={'Nenhum usuário cadastrado'}
           description="Cadastre membros da equipe ou familiares com permissões personalizadas."
           actionLabel="Novo usuário"
           onAction={openNew}
@@ -490,7 +493,7 @@ export default function Users() {
                   <div className="text-xs text-[#8fa39a] truncate">@{u.username}</div>
                 </div>
               </div>
-              <div className="hidden md:block text-sm text-[#c9d2cf] truncate" title={u.email}>{u.email || '-'}</div>
+              <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.email || '-'}</div>
               <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.person || u.name}</div>
               <div className="hidden md:flex items-center gap-1.5 flex-wrap">
                 <span className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
@@ -502,31 +505,35 @@ export default function Users() {
                 )}
               </div>
               <div className="flex justify-end gap-1">
-                <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário" title="Editar usuário">
-                  <i className="fa-solid fa-pen text-[0.8rem]" />
-                </button>
-                {u.id !== session?.id && !u.superAdmin && session?.role === 'admin' && (
-                  <button
-                    onClick={() => handleToggleStatus(u)}
-                    className={`w-9 h-9 rounded-lg transition-colors flex items-center justify-center ${u.status === 'inativo' ? 'text-amber-400 hover:bg-emerald-500/15 hover:text-emerald-400' : 'text-[#8fa39a] hover:bg-amber-500/15 hover:text-amber-400'}`}
-                    aria-label={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
-                    title={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
-                  >
-                    <i className={`fa-solid ${u.status === 'inativo' ? 'fa-lock-open' : 'fa-lock'} text-[0.8rem]`} />
+                <Tooltip content="Editar usuário">
+                  <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário">
+                    <i className="fa-solid fa-pen text-[0.8rem]" />
                   </button>
+                </Tooltip>
+                {u.id !== session?.id && !u.superAdmin && session?.role === 'admin' && (
+                  <Tooltip content={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}>
+                    <button
+                      onClick={() => handleToggleStatus(u)}
+                      className={`w-9 h-9 rounded-lg transition-colors flex items-center justify-center ${u.status === 'inativo' ? 'text-amber-400 hover:bg-emerald-500/15 hover:text-emerald-400' : 'text-[#8fa39a] hover:bg-amber-500/15 hover:text-amber-400'}`}
+                      aria-label={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
+                    >
+                      <i className={`fa-solid ${u.status === 'inativo' ? 'fa-lock-open' : 'fa-lock'} text-[0.8rem]`} />
+                    </button>
+                  </Tooltip>
                 )}
                 {u.id !== session?.id && !u.superAdmin && (
-                  <button
-                    onClick={() => {
-                      setDeleteTarget(u);
-                      setDeleteConfirmText('');
-                    }}
-                    className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center"
-                    aria-label="Excluir usuário"
-                    title="Excluir usuário"
-                  >
-                    <i className="fa-solid fa-trash text-[0.8rem]" />
-                  </button>
+                  <Tooltip content="Excluir usuário">
+                    <button
+                      onClick={() => {
+                        setDeleteTarget(u);
+                        setDeleteConfirmText('');
+                      }}
+                      className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center"
+                      aria-label="Excluir usuário"
+                    >
+                      <i className="fa-solid fa-trash text-[0.8rem]" />
+                    </button>
+                  </Tooltip>
                 )}
               </div>
               <div className="md:hidden col-span-2 flex flex-wrap items-center gap-2 text-xs text-[#8fa39a]">
@@ -602,7 +609,7 @@ export default function Users() {
 
       <ConfirmModal
         isOpen={!!deleteOrphan}
-        title="Excluir login do Firebase"
+        title={'Excluir login do Firebase'}
         message={`Isso apaga de vez o login ${deleteOrphan?.email || ''} do Firebase. A pessoa não vai mais conseguir entrar. Continuar?`}
         confirmLabel="Excluir"
         onConfirm={handleConfirmDeleteOrphan}

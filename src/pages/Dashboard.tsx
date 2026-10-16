@@ -7,6 +7,8 @@ import { db } from '../firebase';
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { CustomSelect } from '../components/CustomSelect';
+import { Tooltip, MonthPicker } from '../components/ui';
+import { AndroidAppBanner } from '../components/AndroidAppBanner';
 import { Transaction, Account, User } from '../types';
 
 function getEffectiveAmount(tx: Transaction) { return parseFloat(String(tx.amount)) || 0; }
@@ -273,45 +275,33 @@ export default function Dashboard() {
 
   return (
     <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 pb-20 pt-4 sm:pt-6 animate-in fade-in duration-500">
+      <AndroidAppBanner />
       
       {/* HEADER RESPONSIVO */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 sm:mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] truncate w-full sm:w-auto">
+        <h2 className="font-display text-[34px] leading-tight font-bold text-ink truncate w-full sm:w-auto">
           Olá, {session.name.split(' ')[0]}
         </h2>
         <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
         {personOptions.length > 1 ? (
-          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="w-auto shrink-0" title="Filtrar painel por pessoa">
+          <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="w-auto shrink-0" ariaLabel="Filtrar painel por pessoa">
             <option value="all">Todos</option>
             {personOptions.map((name) => (<option key={name} value={name}>{name}</option>))}
           </CustomSelect>
         ) : personOptions.length === 1 ? (
-          // Quem só enxerga uma pessoa (usuário normal) não precisa de filtro nem de "Todos":
-          // mostra só a pessoa vinculada à conta.
-          <div className="flex items-center gap-2 px-4 h-10 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm shrink-0" title="Painel desta pessoa">
-            <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
-            <span className="truncate max-w-[160px]">{personOptions[0]}</span>
-          </div>
+          <Tooltip content="Painel desta pessoa">
+            <div className="flex items-center gap-2 px-4 h-11 rounded-[18px] border border-border bg-card text-ink text-sm shrink-0">
+              <i className="fa-solid fa-user text-muted text-xs" />
+              <span className="truncate max-w-[160px]">{personOptions[0]}</span>
+            </div>
+          </Tooltip>
         ) : null}
-        <button onClick={handleCopySummary} className="flex items-center gap-2 px-3 sm:px-4 h-10 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-bold text-xs sm:text-sm transition-colors shrink-0" title="Copiar resumo do mês pro WhatsApp">
-          <i className="fa-brands fa-whatsapp text-[#34d399]" /> <span className="hidden sm:inline">Copiar resumo</span>
-        </button>
-        <div className="flex items-center justify-between w-full sm:w-auto gap-2 bg-white/[0.03] border border-white/[0.08] p-1.5 sm:p-2 rounded-2xl shadow-lg">
-          <button onClick={goPrevMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors shrink-0">
-            <i className="fa-solid fa-chevron-left" />
+        <Tooltip content="Copiar resumo do mês para o WhatsApp">
+          <button onClick={handleCopySummary} onContextMenu={(e) => e.preventDefault()} aria-label="Copiar resumo do mês para o WhatsApp" className="flex items-center gap-2 px-3 sm:px-4 min-h-[44px] rounded-[18px] bg-card border border-border hover:bg-neutral text-ink font-bold text-xs sm:text-sm transition-colors shrink-0">
+            <i className="fa-brands fa-whatsapp text-pri" /> <span className="hidden sm:inline">Copiar resumo</span>
           </button>
-          <span className="font-bold text-[#f2f0ea] min-w-[110px] sm:min-w-[140px] text-center capitalize tracking-wide text-sm sm:text-base truncate">
-            {monthLabel}
-          </span>
-          <button onClick={goNextMonth} className="w-10 h-10 flex items-center justify-center rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] transition-colors shrink-0">
-            <i className="fa-solid fa-chevron-right" />
-          </button>
-          {!isCurrentMonth && (
-            <button onClick={goToday} className="px-3 sm:px-4 h-10 rounded-xl bg-[#e3b04b]/20 text-[#e3b04b] font-bold hover:bg-[#e3b04b]/30 transition-colors ml-1 sm:ml-2 text-sm">
-              Hoje
-            </button>
-          )}
-        </div>
+        </Tooltip>
+        <MonthPicker value={selectedPeriod} onChange={setSelectedPeriod} />
         </div>
       </div>
 
@@ -359,9 +349,11 @@ export default function Dashboard() {
         <div className="flex flex-col justify-center relative z-10 w-full">
           <span className="text-[#8fa39a] font-semibold tracking-widest uppercase text-xs sm:text-sm mb-2 flex items-center gap-2">
             <i className="fa-solid fa-wallet" /> Saldo atual
-            <button onClick={togglePrivacyMode} className="text-[#8fa39a] hover:text-white ml-1" title={privacyMode ? 'Mostrar valores' : 'Esconder valores'}>
-              <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
-            </button>
+            <Tooltip content={privacyMode ? 'Mostrar valores' : 'Esconder valores'}>
+              <button onClick={togglePrivacyMode} onContextMenu={(e) => e.preventDefault()} aria-label={privacyMode ? 'Mostrar valores' : 'Esconder valores'} className="text-[#8fa39a] hover:text-white ml-1">
+                <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
+              </button>
+            </Tooltip>
           </span>
           <strong className="text-[2rem] sm:text-5xl md:text-6xl font-black text-[#f2f0ea] font-mono tracking-tighter mb-4 drop-shadow-md break-all leading-none">
             {maskCurrency(animatedBalance, privacyMode)}

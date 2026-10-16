@@ -32,3 +32,6 @@ dist-ssr
 serviceAccountKey.json
 serviceAccountKey*.json
 *serviceAccount*.json
+
+# Local rules testing
+regras/

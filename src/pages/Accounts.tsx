@@ -5,6 +5,7 @@ import { formatCurrency, maskCurrency, normalize } from '../utils/format';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useUIStore } from '../stores/useUIStore';
 import { CustomSelect } from '../components/CustomSelect';
+import { MoneyField, Tooltip } from '../components/ui';
 import { Account, Person, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
@@ -72,9 +73,11 @@ export default function Accounts() {
           <button onClick={() => setTab('pessoas')} className={`px-4 py-2 rounded-xl font-bold text-sm transition-colors ${tab === 'pessoas' ? 'bg-[#e3b04b] text-black' : 'text-[#8fa39a] hover:text-white'}`}>Pessoas</button>
         </div>
         {tab === 'contas' && (
-          <button onClick={togglePrivacyMode} className="text-[#8fa39a] hover:text-white p-2" title={privacyMode ? 'Mostrar saldos' : 'Esconder saldos'}>
-            <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
-          </button>
+          <Tooltip content={privacyMode ? 'Mostrar saldos' : 'Esconder saldos'}>
+            <button onClick={togglePrivacyMode} onContextMenu={(e) => e.preventDefault()} aria-label={privacyMode ? 'Mostrar saldos' : 'Esconder saldos'} className="text-[#8fa39a] hover:text-white p-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
+              <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'}`} />
+            </button>
+          </Tooltip>
         )}
         {canEdit && tab === 'contas' && (
           <button onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true); }} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform"><i className="fa-solid fa-plus mr-2" />Nova Conta</button>
@@ -99,8 +102,8 @@ export default function Accounts() {
                   </div>
                   {canEdit && (
                     <div className="flex gap-2 text-[#8fa39a] shrink-0">
-                      <button onClick={() => openEdit(acc)} className="hover:text-white p-1"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => setDeleteAccountId(acc.id)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
+                      <button onClick={() => openEdit(acc)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar conta" className="hover:text-white p-2"><i className="fa-solid fa-pen" /></button>
+                      <button onClick={() => setDeleteAccountId(acc.id)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir conta" className="hover:text-red-400 p-2"><i className="fa-solid fa-trash" /></button>
                     </div>
                   )}
                 </div>
@@ -132,8 +135,8 @@ export default function Accounts() {
                   </div>
                   {canEdit && (
                     <div className="flex gap-2 text-[#8fa39a] shrink-0">
-                      <button onClick={() => openEditPerson(p)} className="hover:text-white p-1"><i className="fa-solid fa-pen" /></button>
-                      <button onClick={() => setDeletePersonId(p.id!)} className="hover:text-red-400 p-1"><i className="fa-solid fa-trash" /></button>
+                      <button onClick={() => openEditPerson(p)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar pessoa" className="hover:text-white p-2"><i className="fa-solid fa-pen" /></button>
+                      <button onClick={() => setDeletePersonId(p.id!)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir pessoa" className="hover:text-red-400 p-2"><i className="fa-solid fa-trash" /></button>
                     </div>
                   )}
                 </div>
@@ -152,7 +155,7 @@ export default function Accounts() {
             <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar Conta' : 'Nova Conta'}</h3>
             <input placeholder="Nome (Ex: Conta Corrente)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
             <input placeholder="Banco (Opcional)" value={form.bank} onChange={(e) => setForm({ ...form, bank: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
-            <input type="number" step="0.01" placeholder="Saldo Inicial" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+            <MoneyField placeholder="Saldo Inicial (R$ 0,00)" value={form.balance} onChange={(e) => setForm({ ...form, balance: e.target.value })} />
             <CustomSelect value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })}>
               <option value="">Geral (sem dono específico)</option>
               {personOptions.map((name) => (
@@ -186,7 +189,7 @@ export default function Accounts() {
 
       <ConfirmModal
         isOpen={!!deleteAccountId}
-        title="Excluir conta"
+        title={'Excluir conta'}
         message="Tem certeza que deseja excluir esta conta?"
         confirmLabel="Excluir"
         onConfirm={() => { if (deleteAccountId) deleteRecord(deleteAccountId); setDeleteAccountId(null); }}
@@ -194,7 +197,7 @@ export default function Accounts() {
       />
       <ConfirmModal
         isOpen={!!deletePersonId}
-        title="Excluir pessoa"
+        title={'Excluir pessoa'}
         message="Contas/transações já lançadas continuam com o nome como estava. Deseja excluir mesmo assim?"
         confirmLabel="Excluir"
         onConfirm={() => { if (deletePersonId) deletePerson(deletePersonId); setDeletePersonId(null); }}

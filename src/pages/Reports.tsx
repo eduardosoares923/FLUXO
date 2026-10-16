@@ -4,6 +4,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, parseTxDate } from '../utils/format';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { CustomSelect } from '../components/CustomSelect';
+import { MoneyField, NumberField, MonthPicker, Tooltip } from '../components/ui';
 import { toast } from '../stores/useToastStore';
 import { auth } from '../firebase';
 import { Transaction, Account, User } from '../types';
@@ -344,7 +345,7 @@ export default function Reports() {
       <div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" />
     </div>
   );
-  if (error) return <PageError error={error} title="Erro ao carregar relatórios" />;
+  if (error) return <PageError error={error} title={'Erro ao carregar relatórios'} />;
 
   const currentTotalExpense = metrics.expense + metrics.cardsTotal;
   const expenseDiff = prevMetrics.expense > 0 ? ((currentTotalExpense - prevMetrics.expense) / prevMetrics.expense) * 100 : 0;
@@ -353,32 +354,31 @@ export default function Reports() {
   return (
     <div className="animate-in fade-in duration-500 max-w-[1000px] mx-auto p-4 sm:p-6 pb-12">
       <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4 bg-white/[0.02] border border-white/[0.08] p-4 sm:p-6 rounded-3xl shadow-lg">
-        <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Relatórios</h2>
+        <h2 className="font-display text-[34px] leading-tight font-bold text-ink">Relatórios</h2>
         <p className="hidden print:block text-sm text-[#8fa39a]">{selectedMonth} &bull; {selectedPerson === 'todos' ? 'Todos (Consolidado)' : selectedPerson}</p>
         <div className="no-print flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="flex items-center gap-1 bg-black/20 border border-white/10 rounded-xl p-1">
-            <button onClick={() => setSelectedMonth(shiftMonth(selectedMonth, -1))} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8fa39a] hover:text-white hover:bg-white/10 transition-colors"><i className="fa-solid fa-chevron-left" /></button>
-            <span className="px-2 text-sm font-bold text-[#f2f0ea] capitalize whitespace-nowrap">{monthLabel(selectedMonth)}</span>
-            <button onClick={() => setSelectedMonth(shiftMonth(selectedMonth, 1))} className="w-9 h-9 flex items-center justify-center rounded-lg text-[#8fa39a] hover:text-white hover:bg-white/10 transition-colors"><i className="fa-solid fa-chevron-right" /></button>
-          </div>
+          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
           {availablePersons.length > 1 ? (
             <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none">
               <option value="todos">Todos (Consolidado)</option>
               {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
             </CustomSelect>
           ) : availablePersons.length === 1 ? (
-            // Quem só enxerga uma pessoa não precisa de filtro nem de "Todos": mostra só a pessoa da conta.
-            <div className="flex items-center gap-2 px-4 h-11 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm" title="Relatório desta pessoa">
-              <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
-              <span className="truncate max-w-[160px]">{availablePersons[0]}</span>
-            </div>
+            <Tooltip content="Relatório desta pessoa">
+              <div className="flex items-center gap-2 px-4 h-11 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm">
+                <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
+                <span className="truncate max-w-[160px]">{availablePersons[0]}</span>
+              </div>
+            </Tooltip>
           ) : null}
           <div className="relative">
-            <button onClick={() => setExportMenuOpen((v) => !v)} disabled={exportingExcel} className="h-11 px-4 flex items-center gap-2 rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors text-sm font-semibold disabled:opacity-60" title="Exportar relatório">
-              <i className={`fa-solid ${exportingExcel ? 'fa-spinner fa-spin' : 'fa-file-export'}`} />
-              <span>{exportingExcel ? 'Gerando...' : 'Exportar'}</span>
-              <i className="fa-solid fa-chevron-down text-[10px]" />
-            </button>
+            <Tooltip content="Exportar relatório">
+              <button onClick={() => setExportMenuOpen((v) => !v)} disabled={exportingExcel} aria-label="Exportar relatório" className="h-11 px-4 flex items-center gap-2 rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors text-sm font-semibold disabled:opacity-60">
+                <i className={`fa-solid ${exportingExcel ? 'fa-spinner fa-spin' : 'fa-file-export'}`} />
+                <span>{exportingExcel ? 'Gerando...' : 'Exportar'}</span>
+                <i className="fa-solid fa-chevron-down text-[10px]" />
+              </button>
+            </Tooltip>
             {exportMenuOpen && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
@@ -395,7 +395,9 @@ export default function Reports() {
               </>
             )}
           </div>
-          <button onClick={() => window.print()} className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors" title="Imprimir / PDF"><i className="fa-solid fa-print" /></button>
+          <Tooltip content="Imprimir ou salvar PDF">
+            <button onClick={() => window.print()} onContextMenu={(e) => e.preventDefault()} aria-label="Imprimir ou salvar PDF" className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors"><i className="fa-solid fa-print" /></button>
+          </Tooltip>
         </div>
       </div>
 
@@ -444,12 +446,14 @@ export default function Reports() {
               {metrics.commitment > 70 ? `Você comprometeu ${metrics.commitment.toFixed(0)}% da sua receita neste mês. Considere rever despesas.` : metrics.commitment < 50 ? `Você economizou ${formatCurrency(metrics.economy)} este mês. Ótimo momento para aportar.` : `Seus gastos representam ${metrics.commitment.toFixed(0)}% da receita. Sua saúde financeira segue equilibrada.`}
             </p>
           </div>
-          <div className="text-center shrink-0 pl-4 border-l border-white/10" title="Indicador simplificado baseado só no % de comprometimento de renda do mês — não é uma métrica financeira precisa.">
-            <div className={`text-3xl font-black font-mono ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
-              {Math.max(0, Math.min(100, Math.round(100 - metrics.commitment)))}
+          <Tooltip content="Indicador simplificado baseado na porcentagem de comprometimento de renda do mês.">
+            <div className="text-center shrink-0 pl-4 border-l border-white/10">
+              <div className={`text-3xl font-black font-mono ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
+                {Math.max(0, Math.min(100, Math.round(100 - metrics.commitment)))}
+              </div>
+              <div className="text-[9px] uppercase tracking-wider text-[#8fa39a] font-bold">Nota do mês</div>
             </div>
-            <div className="text-[9px] uppercase tracking-wider text-[#8fa39a] font-bold">Nota do mês</div>
-          </div>
+          </Tooltip>
         </div>
       )}
 
@@ -504,8 +508,8 @@ export default function Reports() {
           <div className="border-t border-white/10 pt-4">
             <p className="text-xs text-[#8fa39a] mb-3 flex items-center gap-2"><i className="fa-solid fa-circle-question" /> Simulador "Posso comprar?": compara o que você já tem parcelado com o que ficaria se somar essa compra. Não considera sua receita, é só uma comparação de comprometimento.</p>
             <div className="flex flex-col sm:flex-row gap-3">
-              <input type="number" step="0.01" placeholder="Valor da compra" value={simAmount} onChange={(e) => setSimAmount(e.target.value)} className="flex-1 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
-              <input type="number" min="1" max="24" placeholder="Em quantas vezes" value={simInstallments} onChange={(e) => setSimInstallments(parseInt(e.target.value) || 1)} className="w-full sm:w-40 p-2.5 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] focus:border-[#e3b04b] outline-none" />
+              <MoneyField placeholder="Valor da compra" value={simAmount} onChange={(e) => setSimAmount(e.target.value)} className="flex-1" />
+              <NumberField min={1} max={24} placeholder="Em quantas vezes" value={simInstallments} onChange={(e) => setSimInstallments(parseInt(e.target.value) || 1)} className="w-full sm:w-40" />
             </div>
           </div>
         </div>
@@ -522,7 +526,7 @@ export default function Reports() {
       </Suspense>
 
       {currentTxs.length === 0 && (
-        <EmptyState icon="fa-chart-simple" title="Sem dados para este período" description="Selecione outro mês ou lance transações para visualizar as análises financeiras." />
+        <EmptyState icon="fa-chart-simple" title={'Sem dados para este período'} description="Selecione outro mês ou lance transações para visualizar as análises financeiras." />
       )}
     </div>
   );

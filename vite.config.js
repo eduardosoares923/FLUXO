@@ -14,11 +14,11 @@ export default defineConfig({
       },
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: 'Wynd - Controle Financeiro',
+        name: 'Wynd Controle Financeiro',
         short_name: 'Wynd',
         description: 'Controle financeiro pessoal e familiar',
-        theme_color: '#141d1a',
-        background_color: '#141d1a',
+        theme_color: '#F3F1E9',
+        background_color: '#F3F1E9',
         display: 'standalone',
         start_url: '/',
         icons: [
@@ -36,6 +36,7 @@ export default defineConfig({
           if (id.includes('node_modules')) {
             if (id.includes('firebase')) return 'firebase';
             if (id.includes('recharts') || id.includes('d3-')) return 'charts';
+            if (id.includes('@radix-ui')) return 'radix';
             if (id.includes('react-dom') || id.includes('react-router') || id.includes('@tanstack')) return 'vendor';
           }
         },

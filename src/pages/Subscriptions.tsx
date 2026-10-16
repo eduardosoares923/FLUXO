@@ -6,6 +6,7 @@ import { formatCurrency, getCardInvoiceMonth, toPersonKeys } from '../utils/form
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
+import { MoneyField, NumberField, Tooltip } from '../components/ui';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
 
@@ -241,19 +242,21 @@ export default function Subscriptions() {
   }
 
     if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
-  if (error) return <PageError error={error as Error} title="Erro ao carregar assinaturas" />;
+  if (error) return <PageError error={error as Error} title={'Erro ao carregar assinaturas'} />;
 
   return (
     <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6 animate-in fade-in">
       
       {/* CABEÇALHO */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl sm:text-3xl font-bold text-[#f2f0ea]">Assinaturas</h2>
+        <h2 className="font-display text-[34px] leading-tight font-bold text-ink">Fixas</h2>
         {canEdit && (
           <div className="flex gap-2">
-            <button onClick={handleLaunchMonth} className="bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-2" title="Lançar todas as assinaturas ativas do mês de uma vez">
-              <i className="fa-solid fa-bolt" /> <span className="hidden sm:inline">Lançar mês</span>
-            </button>
+            <Tooltip content="Lançar todas as assinaturas ativas do mês de uma vez">
+              <button onClick={handleLaunchMonth} aria-label="Lançar todas as assinaturas ativas do mês de uma vez" className="bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-2">
+                <i className="fa-solid fa-bolt" /> <span className="hidden sm:inline">Lançar mês</span>
+              </button>
+            </Tooltip>
             <button onClick={openNew} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2">
               <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nova Assinatura</span>
             </button>
@@ -297,7 +300,7 @@ export default function Subscriptions() {
 
       {/* GRID DE CARTÕES DE ASSINATURA */}
       {visible.length === 0 ? (
-        <EmptyState icon="fa-rotate" title="Nenhuma assinatura" description="Cadastre seus pagamentos recorrentes (Spotify, Netflix, Conta de Luz)." />
+        <EmptyState icon="fa-rotate" title={'Nenhuma assinatura'} description="Cadastre seus pagamentos recorrentes (Spotify, Netflix, Conta de Luz)." />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {visible.map((s) => (
@@ -308,9 +311,11 @@ export default function Subscriptions() {
                 </div>
                 {canEdit && (
                   <div className="flex gap-1.5 bg-black/20 p-1.5 rounded-xl border border-white/5">
-                    <button onClick={() => handleTogglePause(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white flex items-center justify-center" title={s.status === 'pausada' ? 'Reativar' : 'Pausar'}><i className={`fa-solid ${s.status === 'pausada' ? 'fa-play' : 'fa-pause'}`} /></button>
-                    <button onClick={() => openEdit(s)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
-                    <button onClick={() => setDeleteId(s.id)} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
+                    <Tooltip content={s.status === 'pausada' ? 'Reativar' : 'Pausar'}>
+                      <button onClick={() => handleTogglePause(s)} onContextMenu={(e) => e.preventDefault()} aria-label={s.status === 'pausada' ? 'Reativar' : 'Pausar'} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white flex items-center justify-center"><i className={`fa-solid ${s.status === 'pausada' ? 'fa-play' : 'fa-pause'}`} /></button>
+                    </Tooltip>
+                    <button onClick={() => openEdit(s)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar assinatura" className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
+                    <button onClick={() => setDeleteId(s.id)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir assinatura" className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
                   </div>
                 )}
               </div>
@@ -335,8 +340,32 @@ export default function Subscriptions() {
             {(errors.name as any) && <span className="text-red-400 text-xs mt-[-10px]">{(errors.name as any).message}</span>}
             
             <div className="flex gap-4">
-              <input type="number" step="0.01" placeholder="Valor Mensal" {...register('amount')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
-              <input type="number" min="1" max="31" placeholder="Dia do Vencimento" {...register('billingDay')} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
+              <Controller
+                name="amount"
+                control={control}
+                render={({ field }) => (
+                  <MoneyField
+                    placeholder="Valor Mensal"
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    className="w-1/2"
+                  />
+                )}
+              />
+              <Controller
+                name="billingDay"
+                control={control}
+                render={({ field }) => (
+                  <NumberField
+                    min={1}
+                    max={31}
+                    placeholder="Dia do Vencimento"
+                    value={field.value}
+                    onChange={(e) => field.onChange(e.target.value)}
+                    className="w-1/2"
+                  />
+                )}
+              />
             </div>
             {originalAmount !== null && (() => {
               const novo = parseFloat(watchedAmount as string) || 0;
@@ -378,7 +407,15 @@ export default function Subscriptions() {
                           <label className="flex items-center gap-3 text-sm text-white cursor-pointer">
                             <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" /> {pName}
                           </label>
-                          <input type="number" step="0.01" disabled={!isChecked} value={splitItems[pName] || ''} onChange={(e) => handleSplitValueChange(pName, e.target.value)} className="w-24 p-1.5 rounded-md bg-black/30 border border-white/10 text-right text-sm disabled:opacity-30 outline-none focus:border-[#e3b04b]" placeholder="0.00" />
+                          <div className="w-32">
+                            <MoneyField
+                              disabled={!isChecked}
+                              value={splitItems[pName] || ''}
+                              onChange={(e) => handleSplitValueChange(pName, e.target.value)}
+                              placeholder="R$ 0,00"
+                              className="text-right text-xs"
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -402,7 +439,7 @@ export default function Subscriptions() {
       )}
 
       {/* CONFIRMAÇÃO DE EXCLUSÃO BÁSICA */}
-      <ConfirmModal isOpen={!!deleteId} title="Excluir Assinatura" message="Tem certeza que deseja excluir esta assinatura? (Não afeta cobranças já geradas)" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
+      <ConfirmModal isOpen={!!deleteId} title={'Excluir Assinatura'} message="Tem certeza que deseja excluir esta assinatura? (Não afeta cobranças já geradas)" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
     </div>
   );
 }

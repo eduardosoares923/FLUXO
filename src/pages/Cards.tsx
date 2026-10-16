@@ -5,6 +5,7 @@ import { formatCurrency, formatDate, getCardInvoiceMonth, normalize, toPersonKey
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
+import { MoneyField, NumberField, Tooltip } from '../components/ui';
 import { Account, Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '', color: '' };
@@ -197,6 +198,7 @@ export default function Cards() {
           <div
             key={card.id}
             onClick={() => openInvoice(card)}
+            onContextMenu={(e) => e.preventDefault()}
             className={`${card.color ? '' : getBrandBg(card.name)} aspect-[1.6/1] rounded-2xl p-6 text-white flex flex-col justify-between hover:-translate-y-1 transition-transform cursor-pointer relative ${card.id === bestCardTodayId ? 'ring-2 ring-[#34d399]' : ''}`}
             style={{ boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15), 0 12px 24px rgba(0,0,0,0.35)', ...(card.color ? { background: `linear-gradient(135deg, ${card.color} 0%, ${shadeHex(card.color, -45)} 100%)` } : {}) }}
           >
@@ -209,8 +211,8 @@ export default function Cards() {
               <div className="w-11 h-8 rounded-md" style={{ background: 'linear-gradient(135deg, #fde68a, #d97706)', boxShadow: 'inset 0 0 0 1px rgba(120,53,15,0.5)' }} />
               {canEdit && (
                 <div className="flex gap-3" onClick={(e) => e.stopPropagation()}>
-                  <button onClick={() => openEdit(card)} className="hover:text-yellow-300"><i className="fa-solid fa-pen" /></button>
-                  <button onClick={() => setDeleteCardId(card.id!)} className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
+                  <button onClick={() => openEdit(card)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar cartão" className="hover:text-yellow-300"><i className="fa-solid fa-pen" /></button>
+                  <button onClick={() => setDeleteCardId(card.id!)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir cartão" className="hover:text-red-300"><i className="fa-solid fa-trash" /></button>
                 </div>
               )}
             </div>
@@ -251,17 +253,21 @@ export default function Cards() {
           <form onSubmit={handleSubmit} className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-sm flex flex-col gap-4 text-white">
             <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar' : 'Novo'} Cartão</h3>
             <input placeholder="Nome do Cartão (Ex: Nubank)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-            <input type="number" step="0.01" placeholder="Limite Total" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+            <MoneyField placeholder="Limite Total" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} />
             <div className="flex gap-4">
-              <input type="number" placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({ ...form, closeDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
-              <input type="number" placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} className="w-1/2 p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" required />
+              <NumberField min={1} max={31} placeholder="Dia Fechamento" value={form.closeDay} onChange={(e) => setForm({ ...form, closeDay: e.target.value })} className="w-1/2" />
+              <NumberField min={1} max={31} placeholder="Dia Vencimento" value={form.dueDay} onChange={(e) => setForm({ ...form, dueDay: e.target.value })} className="w-1/2" />
             </div>
             <div>
               <label className="text-xs uppercase font-bold text-[#8fa39a] block mb-2">Cor do cartão</label>
               <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => setForm({ ...form, color: '' })} title="Automática (pelo nome do banco)" className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-[#8fa39a] bg-white/5 ${!form.color ? 'border-[#e3b04b]' : 'border-transparent'}`}>Auto</button>
+                <Tooltip content="Automática (pelo nome do banco)">
+                  <button type="button" onClick={() => setForm({ ...form, color: '' })} aria-label="Cor automática pelo nome do banco" className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-[10px] font-bold text-[#8fa39a] bg-white/5 ${!form.color ? 'border-[#e3b04b]' : 'border-transparent'}`}>Auto</button>
+                </Tooltip>
                 {CARD_COLORS.map((c) => (
-                  <button key={c} type="button" onClick={() => setForm({ ...form, color: c })} title={c} className={`w-9 h-9 rounded-full border-2 ${form.color === c ? 'border-white scale-110' : 'border-transparent'} transition-transform`} style={{ background: `linear-gradient(135deg, ${c}, ${shadeHex(c, -45)})` }} />
+                  <Tooltip key={c} content={`Cor ${c}`}>
+                    <button type="button" onClick={() => setForm({ ...form, color: c })} aria-label={`Cor ${c}`} className={`w-9 h-9 rounded-full border-2 ${form.color === c ? 'border-white scale-110' : 'border-transparent'} transition-transform`} style={{ background: `linear-gradient(135deg, ${c}, ${shadeHex(c, -45)})` }} />
+                  </Tooltip>
                 ))}
               </div>
             </div>
@@ -279,11 +285,11 @@ export default function Cards() {
             <h3 className="text-xl font-bold mb-2">Fatura: {invoiceCard.name}</h3>
 
             <div className="flex items-center justify-center gap-3 my-3">
-              <button onClick={() => changeInvoiceMonth(-1)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
+              <button onClick={() => changeInvoiceMonth(-1)} onContextMenu={(e) => e.preventDefault()} aria-label="Mês anterior" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
                 <i className="fa-solid fa-chevron-left" />
               </button>
               <span className="font-semibold capitalize min-w-[140px] text-center">{formatMonthLabel(invoiceMonth)}</span>
-              <button onClick={() => changeInvoiceMonth(1)} className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
+              <button onClick={() => changeInvoiceMonth(1)} onContextMenu={(e) => e.preventDefault()} aria-label="Próximo mês" className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center">
                 <i className="fa-solid fa-chevron-right" />
               </button>
             </div>
@@ -347,7 +353,7 @@ export default function Cards() {
 
       <ConfirmModal
         isOpen={!!deleteCardId}
-        title="Excluir cartão"
+        title={'Excluir cartão'}
         message="Tem certeza que deseja excluir este cartão?"
         confirmLabel="Excluir"
         onConfirm={() => { if (deleteCardId) deleteRecord(deleteCardId); setDeleteCardId(null); }}

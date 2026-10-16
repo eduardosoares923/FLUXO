@@ -41,9 +41,11 @@ export default function App() {
                 <Route path="/cards" element={<Cards />} />
                 <Route path="/transactions" element={<Transactions />} />
                 <Route path="/subscriptions" element={<Subscriptions />} />
+                <Route path="/goals" element={<Reports />} />
                 <Route path="/reports" element={<Reports />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/help" element={<Settings />} />
                 <Route path="/import" element={<Import />} />
               </Route>
             </Route>

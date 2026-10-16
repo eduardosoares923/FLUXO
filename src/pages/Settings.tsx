@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
-import { useUIStore } from '../stores/useUIStore';
+import { useUIStore, THEME_OPTIONS, ThemeMode } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
+import { MoneyField, FileDropzone, Tooltip } from '../components/ui';
 import { PageLoading } from '../components/StateFeedback';
 import { auth, db } from '../firebase';
 import { User } from '../types';
@@ -28,7 +29,7 @@ export default function Settings() {
     hasPermission: (r: string, a?: string) => boolean;
     logout: () => Promise<void>;
   };
-  const { theme, toggleTheme } = useUIStore();
+  const { theme, themeMode, setThemeMode } = useUIStore();
 
   const { data: accounts, saveRecord: saveAccount } = useCollection('accounts');
   const { data: cards, saveRecord: saveCard } = useCollection('cards');
@@ -271,12 +272,23 @@ export default function Settings() {
         <div className="pt-6 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <strong className="block text-[#f2f0ea] mb-1">Tema da Interface</strong>
-            <span className="text-sm text-[#8fa39a]">Atualmente em modo {theme === 'dark' ? 'Escuro' : 'Claro'}</span>
+            <span className="text-sm text-[#8fa39a]">
+              Atualmente em modo {theme === 'dark' ? 'Verde calmo, escuro' : 'Floresta, claro'}
+            </span>
           </div>
-          <button onClick={toggleTheme} className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-5 py-2.5 rounded-xl font-medium transition-colors border border-white/10">
-            <i className={`fa-solid ${theme === 'dark' ? 'fa-sun text-yellow-400' : 'fa-moon text-blue-400'}`} />
-            Alternar para {theme === 'dark' ? 'Claro' : 'Escuro'}
-          </button>
+          <div className="w-full sm:w-64">
+            <CustomSelect
+              value={themeMode}
+              onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
+              ariaLabel="Escolher tema da interface"
+            >
+              {THEME_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </CustomSelect>
+          </div>
         </div>
       </div>
 
@@ -311,10 +323,14 @@ export default function Settings() {
                     <option value="" disabled>Ícone</option>
                     {ICON_OPTIONS.map((ic) => (<option key={ic} value={ic}>{ic.replace('fa-', '')}</option>))}
                   </CustomSelect>
-                  <input type="color" value={categoryStyles[cat]?.color || '#e3b04b'} onChange={(e) => handleCategoryStyleChange(cat, 'color', e.target.value)} className="w-6 h-6 rounded-md cursor-pointer bg-transparent border border-white/20" title="Cor da categoria" />
-                  <button type="button" onClick={() => handleRemoveCategory(cat)} className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none" title="Remover categoria">
-                    <i className="fa-solid fa-xmark" />
-                  </button>
+                  <Tooltip content="Cor da categoria">
+                    <input type="color" aria-label="Cor da categoria" value={categoryStyles[cat]?.color || '#e3b04b'} onChange={(e) => handleCategoryStyleChange(cat, 'color', e.target.value)} className="w-6 h-6 rounded-md cursor-pointer bg-transparent border border-white/20" />
+                  </Tooltip>
+                  <Tooltip content="Remover categoria">
+                    <button type="button" onClick={() => handleRemoveCategory(cat)} onContextMenu={(e) => e.preventDefault()} aria-label="Remover categoria" className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none">
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  </Tooltip>
                 </>
               )}
             </span>
@@ -337,17 +353,15 @@ export default function Settings() {
           {categories.map((cat) => (
             <div key={cat} className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
               <span className="flex-1 text-sm font-medium text-[#f2f0ea] truncate">{cat}</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="Sem meta"
-                value={budgets[cat] || ''}
-                onChange={(e) => handleBudgetChange(cat, e.target.value)}
-                onBlur={() => handleBudgetSave(cat)}
-                disabled={!canManage}
-                className="w-28 p-2 rounded-lg bg-black/40 border border-white/10 text-[#f2f0ea] text-right outline-none focus:border-[#f59e0b] disabled:opacity-50"
-              />
+              <div className="w-36" onBlur={() => handleBudgetSave(cat)}>
+                <MoneyField
+                  placeholder="Sem meta"
+                  value={budgets[cat] || ''}
+                  onChange={(e) => handleBudgetChange(cat, e.target.value)}
+                  disabled={!canManage}
+                  className="text-right text-xs"
+                />
+              </div>
             </div>
           ))}
         </div>
@@ -364,16 +378,25 @@ export default function Settings() {
         </h3>
         <p className="text-sm text-[#8fa39a] mb-6">Exporte uma cópia completa de suas contas, cartões, transações, assinaturas, pessoas e faturas pagas em JSON, ou restaure um backup anterior.</p>
 
-        <div className="flex flex-col sm:flex-row gap-4">
-          <button onClick={handleExportBackup} className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium border border-white/10 transition-colors">
-            <i className="fa-solid fa-download" /> Exportar Backup Completo
-          </button>
+        <div className="flex flex-col gap-4">
+          <div>
+            <button onClick={handleExportBackup} className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium border border-white/10 transition-colors">
+              <i className="fa-solid fa-download" /> Exportar Backup Completo
+            </button>
+          </div>
 
           {canManage && (
-            <label className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white font-medium border border-white/10 transition-colors cursor-pointer">
-              <i className="fa-solid fa-upload" /> Restaurar Backup (JSON)
-              <input type="file" accept=".json" onChange={handleFileSelected} className="hidden" disabled={isRestoring} />
-            </label>
+            <FileDropzone
+              accept=".json"
+              disabled={isRestoring}
+              label="Solte o arquivo de backup (.json) aqui"
+              buttonLabel="Escolher arquivo"
+              selectedFileName={restoreFile?.name}
+              onFileSelect={(file) => {
+                setRestoreFile(file);
+                setRestoreModalOpen(true);
+              }}
+            />
           )}
         </div>
       </div>
@@ -536,7 +559,7 @@ export default function Settings() {
         </div>
       )}
 
-      <ConfirmModal isOpen={restoreModalOpen} title="Restaurar Backup de Dados" message={`Deseja restaurar os dados do arquivo "${restoreFile?.name}"? Os registros contidos no backup serão importados e mesclados no sistema.`} confirmLabel="Confirmar Restauração" onConfirm={handleConfirmRestore} onCancel={() => { setRestoreModalOpen(false); setRestoreFile(null); }} />
+      <ConfirmModal isOpen={restoreModalOpen} title={'Restaurar Backup de Dados'} message={`Deseja restaurar os dados do arquivo "${restoreFile?.name}"? Os registros contidos no backup serão importados e mesclados no sistema.`} confirmLabel="Confirmar Restauração" onConfirm={handleConfirmRestore} onCancel={() => { setRestoreModalOpen(false); setRestoreFile(null); }} />
     </div>
   );
 }
