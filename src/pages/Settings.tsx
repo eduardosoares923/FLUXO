@@ -7,7 +7,7 @@ import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
 import { PageLoading } from '../components/StateFeedback';
-import { db } from '../firebase';
+import { auth, db } from '../firebase';
 import { User } from '../types';
 
 const DEFAULT_CATEGORIES = [
@@ -23,7 +23,11 @@ const ICON_OPTIONS = [
 ];
 
 export default function Settings() {
-  const { session, hasPermission } = useAuth() as { session: User; hasPermission: (r: string, a?: string) => boolean };
+  const { session, hasPermission, logout } = useAuth() as {
+    session: User;
+    hasPermission: (r: string, a?: string) => boolean;
+    logout: () => Promise<void>;
+  };
   const { theme, toggleTheme } = useUIStore();
 
   const { data: accounts, saveRecord: saveAccount } = useCollection('accounts');
@@ -42,6 +46,15 @@ export default function Settings() {
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [restoreModalOpen, setRestoreModalOpen] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+
+  // Mudar de família
+  const [joinFamilyCode, setJoinFamilyCode] = useState('');
+  const [requestingFamilyChange, setRequestingFamilyChange] = useState(false);
+
+  // Zona de Perigo: Excluir minha conta
+  const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false);
+  const [deleteConfirmWord, setDeleteConfirmWord] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const canManage = hasPermission('config_system');
 
@@ -364,6 +377,164 @@ export default function Settings() {
           )}
         </div>
       </div>
+
+      {!session?.superAdmin && (
+        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mt-8 shadow-xl relative overflow-hidden">
+          <div className="w-1 absolute top-0 bottom-0 left-0 bg-amber-400" />
+          <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+              <i className="fa-solid fa-people-roof" />
+            </div>
+            Mudar de Família
+          </h3>
+          <p className="text-sm text-[#8fa39a] mb-3">
+            Se você deseja sair do seu grupo atual e entrar em outra família, informe o código de convite abaixo. O administrador da família de destino precisará aprovar sua entrada.
+          </p>
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300 font-medium mb-4">
+            <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+            Atenção: Seus dados anteriores não serão levados para a nova família.
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={joinFamilyCode}
+              onChange={(e) => setJoinFamilyCode(e.target.value)}
+              placeholder="Código de convite da nova família (ex: A1B2C3D4)"
+              className="flex-1 p-3 rounded-xl border border-white/10 bg-[#141d1a] text-[#f2f0ea] uppercase font-mono text-sm outline-none focus:border-amber-400"
+            />
+            <button
+              type="button"
+              disabled={requestingFamilyChange || joinFamilyCode.trim().length < 4}
+              onClick={async () => {
+                if (!session?.id) return;
+                setRequestingFamilyChange(true);
+                try {
+                  const idToken = await auth.currentUser?.getIdToken();
+                  const res = await fetch('/api/manage-users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                    body: JSON.stringify({
+                      action: 'change-family',
+                      uid: session.id,
+                      inviteCode: joinFamilyCode.trim(),
+                    }),
+                  });
+                  const data = await res.json();
+                  if (!res.ok) throw new Error(data.error || 'Erro ao solicitar mudança de família.');
+                  toast.success(data.message || 'Solicitação enviada! Aguarde a aprovação do administrador da família.');
+                  setJoinFamilyCode('');
+                } catch (err: any) {
+                  toast.error(err.message || 'Erro ao solicitar mudança de família.');
+                } finally {
+                  setRequestingFamilyChange(false);
+                }
+              }}
+              className="px-5 py-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+            >
+              {requestingFamilyChange ? 'Enviando...' : 'Solicitar Entrada'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!session?.superAdmin && (
+        <div className="bg-red-500/[0.03] border border-red-500/25 rounded-3xl p-6 sm:p-8 mt-8 shadow-xl relative overflow-hidden">
+          <div className="w-1 absolute top-0 bottom-0 left-0 bg-red-500" />
+          <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center">
+              <i className="fa-solid fa-triangle-exclamation" />
+            </div>
+            Zona de Perigo — Excluir minha conta
+          </h3>
+          <p className="text-sm text-[#8fa39a] mb-6">
+            Ao excluir sua conta, seu acesso ao Wynd e todos os seus lançamentos, contas, cartões e assinaturas serão apagados permanentemente. Esta ação não pode ser desfeita.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteConfirmWord('');
+              setDeleteAccountModalOpen(true);
+            }}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 font-bold border border-red-500/30 transition-colors"
+          >
+            <i className="fa-solid fa-user-xmark" /> Excluir minha conta
+          </button>
+        </div>
+      )}
+
+      {deleteAccountModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => {
+            if (!isDeletingAccount) {
+              setDeleteAccountModalOpen(false);
+              setDeleteConfirmWord('');
+            }
+          }}
+        >
+          <div
+            className="bg-[#141d1a] border border-red-500/30 rounded-2xl p-6 sm:p-7 w-full max-w-[460px] shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-bold text-[#f2f0ea] flex items-center gap-2 mb-2">
+              <i className="fa-solid fa-triangle-exclamation text-red-400" />
+              Confirmar exclusão permanente da conta
+            </h3>
+            <p className="text-sm text-[#c9d2cf] mb-3">
+              Esta ação apagará seu login e todos os seus registros financeiros (transações, contas, cartões, assinaturas e metas). Se você tiver outros membros na sua família, será necessário removê-los ou movê-los antes.
+            </p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#8fa39a] mb-1.5">
+              Para confirmar, digite <span className="text-red-400">EXCLUIR</span> abaixo:
+            </label>
+            <input
+              type="text"
+              value={deleteConfirmWord}
+              onChange={(e) => setDeleteConfirmWord(e.target.value)}
+              placeholder="EXCLUIR"
+              className="w-full p-3 rounded-xl border border-white/10 bg-black/30 text-[#f2f0ea] outline-none focus:border-red-400 mb-5 font-mono uppercase"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={() => {
+                  setDeleteAccountModalOpen(false);
+                  setDeleteConfirmWord('');
+                }}
+                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[#8fa39a] hover:text-white transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount || deleteConfirmWord.trim().toUpperCase() !== 'EXCLUIR'}
+                onClick={async () => {
+                  if (!session?.id) return;
+                  setIsDeletingAccount(true);
+                  try {
+                    const idToken = await auth.currentUser?.getIdToken();
+                    const res = await fetch('/api/manage-users', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+                      body: JSON.stringify({ action: 'delete', uid: session.id }),
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Não foi possível excluir sua conta.');
+                    toast.success('Sua conta e seus dados foram excluídos.');
+                    await logout();
+                  } catch (err: any) {
+                    toast.error(err.message || 'Erro ao excluir conta.');
+                    setIsDeletingAccount(false);
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+              >
+                {isDeletingAccount ? 'Excluindo...' : 'Excluir permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ConfirmModal isOpen={restoreModalOpen} title="Restaurar Backup de Dados" message={`Deseja restaurar os dados do arquivo "${restoreFile?.name}"? Os registros contidos no backup serão importados e mesclados no sistema.`} confirmLabel="Confirmar Restauração" onConfirm={handleConfirmRestore} onCancel={() => { setRestoreModalOpen(false); setRestoreFile(null); }} />
     </div>

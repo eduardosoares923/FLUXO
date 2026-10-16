@@ -68,10 +68,14 @@ export interface User {
   role: 'admin' | 'gerente' | 'viewer' | 'usuario' | string;
   person?: string;
   avatar?: string;
-  status?: string;
+  status?: 'ativo' | 'inativo' | 'pendente' | string;
   familyId?: string;
   superAdmin?: boolean;
   photo?: string;
+  inviteCode?: string;
+  usageType?: 'individual' | 'family';
+  requestedInvite?: string;
+  pendingFamilyId?: string | null;
 }
 
 export interface Card {

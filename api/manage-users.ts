@@ -1,14 +1,15 @@
-// Vercel Serverless Function: gerencia a ligação entre o Firebase Authentication
-// (onde ficam os logins) e a coleção "users" do Firestore (o cadastro que o app
-// mostra). O navegador não consegue listar nem apagar logins do Authentication,
-// só o Admin SDK no servidor, por isso isso fica aqui.
+// Vercel Serverless Function: gerencia usuários, aprovações de cadastro, mudança de família,
+// preparação de dados legados e exclusão completa (Auth + Firestore + dados financeiros).
 //
-// Ações (POST com { action, uid }):
-//   - "list-orphans": logins que existem no Authentication mas não têm cadastro em "users" (só superAdmin)
-//   - "link":         cria o cadastro em "users" pra um desses logins como chefe de família (só superAdmin)
-//   - "delete":       apaga outro usuário (superAdmin ou admin da mesma família) ou a própria conta ("Excluir minha conta")
-//
-// Usa a mesma variável de ambiente FIREBASE_SERVICE_ACCOUNT do create-user.ts.
+// Ações (POST com { action, uid, ... }):
+//   - "list-orphans":  logins no Authentication sem doc em "users" (só superAdmin)
+//   - "link":          vincula login órfão como chefe de família (só superAdmin)
+//   - "list-pending":  lista cadastros pendentes ou pedidos de entrada na família (superAdmin vê todos; chefe vê os da própria família)
+//   - "approve":       aprova cadastro pendente ou mudança de família (validado no servidor)
+//   - "reject":        recusa e apaga cadastro pendente ou cancela pedido de mudança de família (validado no servidor)
+//   - "change-family": muda usuário de família sem migrar dados antigos (superAdmin aplica direto; usuário pede aprovação ao chefe de destino)
+//   - "prepare-data":  preenche familyId e ownerUid em registros antigos que ainda não têm o campo
+//   - "delete":        apaga usuário e todos os seus dados nas 9 coleções (própria conta ou admin da família/superAdmin)
 
 import type { App } from 'firebase-admin/app';
 import type { Firestore, DocumentReference } from 'firebase-admin/firestore';
@@ -27,9 +28,6 @@ const SCOPED_COLLECTIONS = [
   'tags',
 ];
 
-// Carrega o firebase-admin só quando a função é chamada, e não no topo do arquivo.
-// Se o carregamento falhar na Vercel, o erro volta como JSON legível pra tela, em vez
-// de derrubar a função inteira com um 500 sem explicação nenhuma.
 async function loadFirebaseAdmin() {
   const [appMod, authMod, firestoreMod] = await Promise.all([
     import('firebase-admin/app'),
@@ -44,8 +42,6 @@ function describeError(err: any): string {
   return `${code}${(err && err.message) || String(err)}`;
 }
 
-// Tipos mínimos da requisição/resposta da Vercel, declarados aqui pra não precisar
-// instalar o pacote @vercel/node só por causa deles.
 interface ApiRequest {
   method?: string;
   headers: Record<string, string | string[] | undefined>;
@@ -98,6 +94,56 @@ async function deleteRefsInBatches(db: Firestore, refs: DocumentReference[]) {
   }
 }
 
+async function deleteUserFinancialData(db: Firestore, uid: string, includeFamilyDocs: boolean) {
+  for (const colName of SCOPED_COLLECTIONS) {
+    const refMap = new Map<string, DocumentReference>();
+    const byOwner = await db.collection(colName).where('ownerUid', '==', uid).get();
+    byOwner.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+
+    if (includeFamilyDocs) {
+      const byFamily = await db.collection(colName).where('familyId', '==', uid).get();
+      byFamily.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+    }
+
+    if (refMap.size > 0) {
+      await deleteRefsInBatches(db, [...refMap.values()]);
+    }
+  }
+}
+
+async function resolveFamilyByInvite(db: Firestore, inviteInput: string): Promise<string> {
+  const clean = String(inviteInput || '').trim();
+  if (!clean) return '';
+  const upperCode = clean.toUpperCase().replace(/^WYND-/, '');
+  const lowerClean = clean.toLowerCase();
+
+  const byCode = await db.collection('users').where('inviteCode', '==', upperCode).limit(5).get();
+  const codeHead = byCode.docs.find((d) => {
+    const data = d.data();
+    return data.role === 'admin' && (data.familyId === d.id || !data.familyId);
+  });
+  if (codeHead) return codeHead.id;
+
+  if (lowerClean.includes('@')) {
+    const byEmail = await db.collection('users').where('email', '==', lowerClean).limit(5).get();
+    const emailHead = byEmail.docs.find((d) => {
+      const data = d.data();
+      return data.role === 'admin' && (data.familyId === d.id || !data.familyId);
+    });
+    if (emailHead) return emailHead.id;
+  }
+
+  const adminsSnap = await db.collection('users').where('role', '==', 'admin').get();
+  const matched = adminsSnap.docs.find((d) => {
+    const data = d.data();
+    const isHead = !data.familyId || data.familyId === d.id;
+    if (!isHead) return false;
+    const derived = d.id.slice(0, 8).toUpperCase();
+    return derived === upperCode || d.id === clean;
+  });
+  return matched ? matched.id : '';
+}
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
@@ -109,19 +155,137 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Quem chama precisa estar logado e ativo
+    // Quem chama precisa estar logado e ativo (não pode ser 'inativo' nem 'pendente')
     const idToken = getBearerToken(req);
     if (!idToken) return res.status(401).json({ error: 'Token de autenticação ausente' });
     const decoded = await auth.verifyIdToken(idToken);
     const callerDoc = await db.collection('users').doc(decoded.uid).get();
     const callerData = callerDoc.data() || {};
-    if (!callerDoc.exists || callerData.status === 'inativo') {
+    if (!callerDoc.exists || callerData.status === 'inativo' || callerData.status === 'pendente') {
       return res.status(403).json({ error: 'Usuário sem acesso ativo' });
     }
 
     const isSuperAdmin = callerData.superAdmin === true;
-    const { action, uid } = req.body || {};
+    const callerFamilyId = callerData.familyId || decoded.uid;
+    const isCallerFamilyHead = callerData.role === 'admin' && callerFamilyId === decoded.uid;
 
+    const { action, uid, inviteCode, targetFamilyId } = req.body || {};
+
+    // -----------------------------------------------------------------------
+    // 1. LISTAR PENDENTES (superAdmin vê todos; chefe de família vê os da própria família)
+    // -----------------------------------------------------------------------
+    if (action === 'list-pending') {
+      if (!isSuperAdmin && !isCallerFamilyHead) {
+        return res.status(403).json({ error: 'Sem permissão para listar aprovações pendentes' });
+      }
+
+      const pendingSnap = await db.collection('users').where('status', '==', 'pendente').get();
+      const pendingList: any[] = [];
+
+      pendingSnap.docs.forEach((d) => {
+        const data = d.data();
+        const item = { id: d.id, ...data, requestKind: 'signup' };
+        if (isSuperAdmin) {
+          pendingList.push(item);
+        } else if (isCallerFamilyHead && data.familyId === callerFamilyId && d.id !== callerFamilyId) {
+          pendingList.push(item);
+        }
+      });
+
+      // Também busca pedidos de mudança de família (usuários que têm pendingFamilyId preenchido)
+      if (isSuperAdmin) {
+        const allUsersSnap = await db.collection('users').get();
+        allUsersSnap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.pendingFamilyId && data.status !== 'pendente') {
+            pendingList.push({ id: d.id, ...data, requestKind: 'change-family' });
+          }
+        });
+      } else if (isCallerFamilyHead) {
+        const transferSnap = await db.collection('users').where('pendingFamilyId', '==', callerFamilyId).get();
+        transferSnap.docs.forEach((d) => {
+          const data = d.data();
+          if (data.status !== 'pendente') {
+            pendingList.push({ id: d.id, ...data, requestKind: 'change-family' });
+          }
+        });
+      }
+
+      return res.status(200).json({ pending: pendingList });
+    }
+
+    // -----------------------------------------------------------------------
+    // 2. PREPARAR DADOS (migração de familyId e ownerUid em documentos antigos)
+    // -----------------------------------------------------------------------
+    if (action === 'prepare-data') {
+      if (!isSuperAdmin && !isCallerFamilyHead) {
+        return res.status(403).json({ error: 'Apenas administradores podem preparar os dados' });
+      }
+      const defaultFamilyId = callerFamilyId;
+      const usersSnap = await db.collection('users').get();
+      const personToUid = new Map<string, string>();
+      let updatedUsers = 0;
+
+      for (const uDoc of usersSnap.docs) {
+        const u = uDoc.data();
+        const keys = toPersonKeys([u.person, u.name, u.username].filter(Boolean));
+        keys.forEach((k) => {
+          if (!personToUid.has(k)) personToUid.set(k, uDoc.id);
+        });
+        if (!u.familyId) {
+          const inferredFamily = u.role === 'admin' ? uDoc.id : defaultFamilyId;
+          await uDoc.ref.set(
+            {
+              familyId: inferredFamily,
+              inviteCode: u.role === 'admin' ? uDoc.id.slice(0, 8).toUpperCase() : '',
+            },
+            { merge: true }
+          );
+          updatedUsers++;
+        }
+      }
+
+      let updatedDocs = 0;
+      for (const colName of SCOPED_COLLECTIONS) {
+        const snap = await db.collection(colName).get();
+        let batch = db.batch();
+        let countInBatch = 0;
+
+        for (const d of snap.docs) {
+          const data = d.data();
+          if (!data.familyId || !data.ownerUid) {
+            const patch: Record<string, any> = {};
+            if (!data.familyId) patch.familyId = defaultFamilyId;
+            if (!data.ownerUid) {
+              const pKey = normalize(data.person || data.owner || '');
+              const firstKey = pKey.split(',')[0]?.trim();
+              patch.ownerUid = (firstKey && personToUid.get(firstKey)) || defaultFamilyId;
+            }
+            if (!Array.isArray(data.sharedWith)) {
+              patch.sharedWith = [];
+            }
+            batch.set(d.ref, patch, { merge: true });
+            countInBatch++;
+            updatedDocs++;
+
+            if (countInBatch >= 400) {
+              await batch.commit();
+              batch = db.batch();
+              countInBatch = 0;
+            }
+          }
+        }
+        if (countInBatch > 0) {
+          await batch.commit();
+        }
+      }
+
+      return res.status(200).json({ success: true, updatedUsers, updatedDocs });
+    }
+
+    // -----------------------------------------------------------------------
+    // 3. LISTAR ÓRFÃOS (somente superAdmin)
+    // -----------------------------------------------------------------------
     if (action === 'list-orphans') {
       if (!isSuperAdmin) {
         return res.status(403).json({ error: 'Apenas o administrador geral pode listar logins órfãos' });
@@ -150,6 +314,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     if (!uid) return res.status(400).json({ error: 'Informe o usuário (uid)' });
 
+    // -----------------------------------------------------------------------
+    // 4. VINCULAR ÓRFÃO (somente superAdmin)
+    // -----------------------------------------------------------------------
     if (action === 'link') {
       if (!isSuperAdmin) {
         return res.status(403).json({ error: 'Apenas o administrador geral pode vincular logins órfãos' });
@@ -176,6 +343,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         personKeys: toPersonKeys([name, username].filter(Boolean)),
         allowedPersonKeys: [],
         familyId: uid,
+        inviteCode: uid.slice(0, 8).toUpperCase(),
         createdAt: new Date().toISOString(),
       };
       await db.collection('users').doc(uid).set(record);
@@ -194,6 +362,174 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(200).json({ success: true, user: record });
     }
 
+    // -----------------------------------------------------------------------
+    // 5. APROVAR CADASTRO PENDENTE OU MUDANÇA DE FAMÍLIA (validado no servidor)
+    // -----------------------------------------------------------------------
+    if (action === 'approve') {
+      const targetDoc = await db.collection('users').doc(uid).get();
+      if (!targetDoc.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
+      const targetData = targetDoc.data() || {};
+
+      // Caso A: aprovação de mudança de família em conta já existente
+      if (targetData.pendingFamilyId && targetData.status !== 'pendente') {
+        const destFamily = String(targetData.pendingFamilyId);
+        const canApproveTransfer = isSuperAdmin || (isCallerFamilyHead && callerFamilyId === destFamily);
+        if (!canApproveTransfer) {
+          return res.status(403).json({ error: 'Apenas o chefe da família de destino ou o administrador geral pode aprovar esta entrada' });
+        }
+        await targetDoc.ref.set(
+          {
+            familyId: destFamily,
+            role: destFamily === uid ? 'admin' : 'usuario',
+            pendingFamilyId: null,
+            pendingInviteCode: null,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+        return res.status(200).json({ success: true });
+      }
+
+      // Caso B: aprovação de conta recém-criada (status === 'pendente')
+      const isIndividualRequest = targetData.usageType === 'individual' || targetData.familyId === uid;
+      const isSameFamilyRequest = Boolean(targetData.familyId) && targetData.familyId !== uid && targetData.familyId === callerFamilyId;
+
+      if (isIndividualRequest && !isSuperAdmin) {
+        return res.status(403).json({ error: 'Apenas o administrador geral pode aprovar cadastros de uso individual' });
+      }
+      if (!isIndividualRequest && !isSuperAdmin && !(isCallerFamilyHead && isSameFamilyRequest)) {
+        return res.status(403).json({ error: 'Você só pode aprovar solicitações destinadas à sua própria família' });
+      }
+
+      const approvedFamilyId = targetData.familyId || (isSuperAdmin && targetFamilyId ? String(targetFamilyId) : uid);
+      const approvedRole = approvedFamilyId === uid ? 'admin' : (targetData.role || 'usuario');
+
+      await targetDoc.ref.set(
+        {
+          status: 'ativo',
+          familyId: approvedFamilyId,
+          role: approvedRole,
+          inviteCode: approvedFamilyId === uid ? uid.slice(0, 8).toUpperCase() : '',
+          approvedByUid: decoded.uid,
+          approvedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      return res.status(200).json({ success: true });
+    }
+
+    // -----------------------------------------------------------------------
+    // 6. RECUSAR CADASTRO PENDENTE OU MUDANÇA DE FAMÍLIA (validado no servidor)
+    // -----------------------------------------------------------------------
+    if (action === 'reject') {
+      const targetDoc = await db.collection('users').doc(uid).get();
+      if (!targetDoc.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
+      const targetData = targetDoc.data() || {};
+
+      // Se era apenas pedido de mudança de família numa conta já ativa, limpa o pedido
+      if (targetData.pendingFamilyId && targetData.status !== 'pendente') {
+        const destFamily = String(targetData.pendingFamilyId);
+        const canRejectTransfer = isSuperAdmin || (isCallerFamilyHead && callerFamilyId === destFamily);
+        if (!canRejectTransfer) {
+          return res.status(403).json({ error: 'Sem permissão para recusar esta solicitação' });
+        }
+        await targetDoc.ref.set({ pendingFamilyId: null, pendingInviteCode: null }, { merge: true });
+        return res.status(200).json({ success: true });
+      }
+
+      if (targetData.status !== 'pendente') {
+        return res.status(400).json({ error: 'Este usuário já está ativo. Use a opção de excluir usuário.' });
+      }
+
+      const isIndividualRequest = targetData.usageType === 'individual' || targetData.familyId === uid;
+      const isSameFamilyRequest = Boolean(targetData.familyId) && targetData.familyId !== uid && targetData.familyId === callerFamilyId;
+
+      if (isIndividualRequest && !isSuperAdmin) {
+        return res.status(403).json({ error: 'Apenas o administrador geral pode recusar cadastros de uso individual' });
+      }
+      if (!isIndividualRequest && !isSuperAdmin && !(isCallerFamilyHead && isSameFamilyRequest)) {
+        return res.status(403).json({ error: 'Você só pode recusar solicitações da sua própria família' });
+      }
+
+      await deleteUserFinancialData(db, uid, false);
+
+      let email = String(targetData.email || '');
+      try {
+        const authUser = await auth.getUser(uid);
+        email = email || authUser.email || '';
+        await auth.deleteUser(uid);
+      } catch (e: any) {
+        if (e.code !== 'auth/user-not-found') throw e;
+      }
+
+      await targetDoc.ref.delete();
+
+      if (email) {
+        const lookups = await db.collection('user_lookup').where('email', '==', email.toLowerCase()).get();
+        await Promise.all(lookups.docs.map((d) => d.ref.delete()));
+      }
+
+      return res.status(200).json({ success: true });
+    }
+
+    // -----------------------------------------------------------------------
+    // 7. MUDAR DE FAMÍLIA (superAdmin muda direto; usuário solicita aprovação ao chefe de destino)
+    //    NÃO migra dados antigos automaticamente.
+    // -----------------------------------------------------------------------
+    if (action === 'change-family') {
+      const targetDoc = await db.collection('users').doc(uid).get();
+      if (!targetDoc.exists) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+      let resolvedDest = typeof targetFamilyId === 'string' ? targetFamilyId.trim() : '';
+      if (!resolvedDest && typeof inviteCode === 'string' && inviteCode.trim()) {
+        resolvedDest = await resolveFamilyByInvite(db, inviteCode.trim());
+      }
+      if (!resolvedDest) {
+        return res.status(400).json({ error: 'Código de convite ou família de destino não encontrado' });
+      }
+
+      if (isSuperAdmin) {
+        await targetDoc.ref.set(
+          {
+            familyId: resolvedDest,
+            role: resolvedDest === uid ? 'admin' : 'usuario',
+            pendingFamilyId: null,
+            pendingInviteCode: null,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+        return res.status(200).json({
+          success: true,
+          status: 'applied',
+          message: 'Família atualizada pelo administrador geral. Os dados anteriores não foram migrados.',
+        });
+      }
+
+      if (uid !== decoded.uid) {
+        return res.status(403).json({ error: 'Apenas o próprio usuário ou o administrador geral pode solicitar mudança de família' });
+      }
+
+      await targetDoc.ref.set(
+        {
+          pendingFamilyId: resolvedDest,
+          pendingInviteCode: String(inviteCode || '').trim(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+
+      return res.status(200).json({
+        success: true,
+        status: 'pending',
+        message: 'Pedido enviado ao administrador da nova família. Seus dados anteriores não serão levados para a nova família.',
+      });
+    }
+
+    // -----------------------------------------------------------------------
+    // 8. EXCLUIR CONTA (própria conta ou exclusão por admin/superAdmin)
+    // -----------------------------------------------------------------------
     if (action === 'delete') {
       // Caso 1: exclusão da PRÓPRIA conta ("Excluir minha conta")
       if (uid === decoded.uid) {
@@ -213,20 +549,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           }
         }
 
-        for (const colName of SCOPED_COLLECTIONS) {
-          const refMap = new Map<string, DocumentReference>();
-          const byOwner = await db.collection(colName).where('ownerUid', '==', uid).get();
-          byOwner.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-
-          if (isFamilyHead) {
-            const byFamily = await db.collection(colName).where('familyId', '==', uid).get();
-            byFamily.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-          }
-
-          if (refMap.size > 0) {
-            await deleteRefsInBatches(db, [...refMap.values()]);
-          }
-        }
+        await deleteUserFinancialData(db, uid, isFamilyHead);
 
         let selfEmail = String(callerData.email || '');
         try {
@@ -247,7 +570,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         return res.status(200).json({ success: true });
       }
 
-      // Caso 2: exclusão de OUTRA pessoa
+      // Caso 2: exclusão de OUTRA pessoa pelo admin da família ou superAdmin
       const userDoc = await db.collection('users').doc(uid).get();
       const targetData = userDoc.exists ? userDoc.data() || {} : {};
 
@@ -266,6 +589,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         return res.status(403).json({ error: 'Sem permissão para excluir este usuário' });
       }
 
+      // Apaga também os dados financeiros pertencentes a esse usuário para não deixar órfãos
+      const targetIsOwnFamilyHead = userDoc.exists && targetData.familyId === uid;
+      if (targetIsOwnFamilyHead) {
+        const otherMembersSnap = await db.collection('users').where('familyId', '==', uid).get();
+        const hasOtherMembers = otherMembersSnap.docs.some((d) => d.id !== uid);
+        if (hasOtherMembers) {
+          return res.status(409).json({ error: 'Este usuário é chefe de uma família que ainda possui outros membros. Remova ou mova os membros antes.' });
+        }
+      }
+      await deleteUserFinancialData(db, uid, Boolean(targetIsOwnFamilyHead));
+
       let email = userDoc.exists ? targetData.email || '' : '';
 
       try {
@@ -273,13 +607,11 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         email = email || authUser.email || '';
         await auth.deleteUser(uid);
       } catch (e: any) {
-        // Se o login já não existe mais, segue apagando o resto normalmente
         if (e.code !== 'auth/user-not-found') throw e;
       }
 
       if (userDoc.exists) await db.collection('users').doc(uid).delete();
 
-      // Remove os atalhos de login (usuário/e-mail/CPF) que apontavam pra esse e-mail
       if (email) {
         const lookups = await db.collection('user_lookup').where('email', '==', String(email).toLowerCase()).get();
         await Promise.all(lookups.docs.map((d) => d.ref.delete()));

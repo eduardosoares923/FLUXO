@@ -92,8 +92,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const decoded = await auth.verifyIdToken(idToken);
     const callerDoc = await db.collection('users').doc(decoded.uid).get();
     const callerData = callerDoc.data() || {};
-    if (!callerDoc.exists || callerData.role !== 'admin' || callerData.status === 'inativo') {
-      return res.status(403).json({ error: 'Só administradores podem criar usuários' });
+    if (!callerDoc.exists || callerData.role !== 'admin' || callerData.status === 'inativo' || callerData.status === 'pendente') {
+      return res.status(403).json({ error: 'Só administradores ativos podem criar usuários' });
     }
 
     const callerFamilyId = callerData.familyId || decoded.uid;

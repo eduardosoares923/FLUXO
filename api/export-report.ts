@@ -781,7 +781,7 @@ export function createHandler(deps: Deps) {
         if (found) { userId = found.id; userData = found.data; }
       }
       if (!userData) return res.status(403).json({ error: 'Usuário sem cadastro no sistema' });
-      if (userData.status === 'inativo') return res.status(403).json({ error: 'Usuário inativo' });
+      if (userData.status === 'inativo' || userData.status === 'pendente') return res.status(403).json({ error: 'Usuário sem acesso ativo' });
 
       const session = buildSession(userId, userData, decoded.email);
       if (!makeAccess(session).hasPermission('reports')) {
@@ -870,7 +870,7 @@ const realDeps: Deps = {
   async getCollection(name, session) {
     const { db } = await firebase();
     const col = db.collection(name);
-    const q = session?.familyId && !session?.superAdmin && SCOPED_NAMES.has(name)
+    const q = session?.familyId && SCOPED_NAMES.has(name)
       ? col.where('familyId', '==', session.familyId)
       : col;
     const snap = await q.get();

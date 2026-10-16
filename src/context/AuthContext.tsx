@@ -53,10 +53,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
 
       if (userData) {
+        if (userData.status === 'pendente') {
+          await signOut(auth);
+          setSession(null);
+          return 'pendente';
+        }
         if (userData.status === 'inativo') {
           await signOut(auth);
           setSession(null);
-          return;
+          return 'inativo';
         }
         const newSession: User = {
           id: userDocId,
@@ -69,19 +74,23 @@ export function AuthProvider({ children }: AuthProviderProps) {
           familyId: typeof userData.familyId === 'string' ? userData.familyId : '',
           superAdmin: userData.superAdmin === true,
           photo: typeof userData.photo === 'string' ? userData.photo : undefined,
+          inviteCode: typeof userData.inviteCode === 'string' ? userData.inviteCode : undefined,
         };
         // Propriedades dinâmicas de permissões que não ficam no User base:
         (newSession as any).permissions = resolvePermissions(newSession.role, userData.permissions);
         (newSession as any).allowedPersons = userData.allowedPersons || null;
         
         setSession(newSession);
+        return 'ativo';
       } else {
         await signOut(auth);
         setSession(null);
+        return 'missing';
       }
     } catch (e) {
       console.error('Erro ao sincronizar sessão:', e);
       setSession(null);
+      return 'error';
     }
   }, []);
 
@@ -126,7 +135,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (!authEmail) throw { code: 'auth/user-not-found' };
 
     const cred = await signInWithEmailAndPassword(auth, authEmail, password);
-    await syncSessionFromFirestore(cred.user.uid, authEmail);
+    const status = await syncSessionFromFirestore(cred.user.uid, authEmail);
+    if (status === 'pendente') throw { code: 'auth/account-pending' };
+    if (status === 'inativo') throw { code: 'auth/account-blocked' };
+    if (status === 'missing') throw { code: 'auth/user-not-found' };
     return cred.user;
   }, [syncSessionFromFirestore]);
 
