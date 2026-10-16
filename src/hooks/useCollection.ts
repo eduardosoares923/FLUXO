@@ -116,7 +116,7 @@ export function useCollection<T = any>(collectionName: string) {
         const idx = prev.findIndex((it: any) => String(it.id) === String(rec.id));
         if (idx >= 0) {
           const copy = [...prev];
-          copy[idx] = rec as unknown as T;
+          copy[idx] = { ...(copy[idx] as any), ...rec } as unknown as T;
           return copy;
         }
         return [...prev, rec as unknown as T];

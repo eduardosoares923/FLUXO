@@ -100,6 +100,8 @@ export function buildSession(userId: string, userData: any, authEmail?: string):
     email: userData.email || authEmail || '',
     role: userData.role || 'viewer',
     person: userData.person || userData.name || 'Eu',
+    familyId: typeof userData.familyId === 'string' ? userData.familyId : '',
+    superAdmin: userData.superAdmin === true,
   };
   session.permissions = resolvePermissions(session.role, userData.permissions);
   session.allowedPersons = userData.allowedPersons || null;
@@ -121,6 +123,12 @@ export function makeAccess(session: any) {
 
   const canAccessPerson = (personName?: string | null, tx: any = null) => {
     if (!session) return false;
+    if (session.familyId && tx && tx.familyId && tx.familyId !== session.familyId) return false;
+    if (session.familyId && session.id !== session.familyId && tx) {
+      if (tx.ownerUid && String(tx.ownerUid) === String(session.id)) return true;
+      if (Array.isArray(tx.sharedWith) && tx.sharedWith.includes(session.id)) return true;
+      if (tx.ownerUid && String(tx.ownerUid) !== String(session.id)) return false;
+    }
     if (session.role === 'admin') return true;
     if (tx && tx.userId && String(tx.userId) === String(session.id)) return true;
     if (!personName) return true;
@@ -727,7 +735,7 @@ export interface Deps {
   verifyIdToken(token: string): Promise<{ uid: string; email?: string }>;
   getUserById(uid: string): Promise<any | null>;
   findUserByEmail(email: string): Promise<{ id: string; data: any } | null>;
-  getCollection(name: string): Promise<any[]>;
+  getCollection(name: string, session?: any): Promise<any[]>;
   loadExcel(): Promise<any>;
   now(): Date;
 }
@@ -788,7 +796,9 @@ export function createHandler(deps: Deps) {
       if (format !== 'xlsx') return res.status(400).json({ error: 'Formato não suportado' });
 
       const [transactions, accounts, cards] = await Promise.all([
-        deps.getCollection('transactions'), deps.getCollection('accounts'), deps.getCollection('cards'),
+        deps.getCollection('transactions', session),
+        deps.getCollection('accounts', session),
+        deps.getCollection('cards', session),
       ]);
       const now = deps.now();
       const report = computeReport({ transactions, accounts, session, month, person, now });
@@ -839,6 +849,8 @@ async function firebase() {
   return { auth: authMod.getAuth(app), db: firestoreMod.getFirestore(app) };
 }
 
+const SCOPED_NAMES = new Set(['transactions', 'accounts', 'cards', 'subscriptions', 'paidInvoices', 'reminders', 'goals', 'settlements', 'tags']);
+
 const realDeps: Deps = {
   async verifyIdToken(token) {
     const { auth } = await firebase();
@@ -855,9 +867,13 @@ const realDeps: Deps = {
     const qs = await db.collection('users').where('email', '==', email).get();
     return qs.empty ? null : { id: qs.docs[0].id, data: qs.docs[0].data() };
   },
-  async getCollection(name) {
+  async getCollection(name, session) {
     const { db } = await firebase();
-    const snap = await db.collection(name).get();
+    const col = db.collection(name);
+    const q = session?.familyId && !session?.superAdmin && SCOPED_NAMES.has(name)
+      ? col.where('familyId', '==', session.familyId)
+      : col;
+    const snap = await q.get();
     return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
   },
   async loadExcel() {

@@ -223,6 +223,17 @@ export default function Users() {
     }
   }
 
+  async function handleToggleStatus(u: User) {
+    if (!u.id || u.id === session?.id) return;
+    const nextStatus = u.status === 'inativo' ? 'ativo' : 'inativo';
+    try {
+      await saveRecord({ id: u.id, status: nextStatus });
+      toast.success(nextStatus === 'inativo' ? `${u.name} foi bloqueado.` : `${u.name} foi desbloqueado.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao alterar status do usuário.');
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteId) return;
     try {
@@ -262,11 +273,11 @@ export default function Users() {
         />
       ) : (
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl overflow-hidden">
-          <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_120px_96px] gap-4 px-5 py-3 border-b border-white/[0.06] text-[11px] uppercase tracking-wider font-bold text-[#5c6b66]">
+          <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_140px_120px] gap-4 px-5 py-3 border-b border-white/[0.06] text-[11px] uppercase tracking-wider font-bold text-[#5c6b66]">
             <span>Usuário</span><span>E-mail</span><span>Pessoa</span><span>Acesso</span><span className="text-right">Ações</span>
           </div>
           {users.map((u) => (
-            <div key={u.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_120px_96px] gap-x-4 gap-y-2 items-center px-5 py-4 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
+            <div key={u.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_140px_120px] gap-x-4 gap-y-2 items-center px-5 py-4 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-[#e3b04b]/15 text-[#e3b04b] flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
                   {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : (u.name || '?').slice(0, 2).toUpperCase()}
@@ -285,11 +296,21 @@ export default function Users() {
                 )}
               </div>
               <div className="flex justify-end gap-1">
-                <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário">
+                <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário" title="Editar usuário">
                   <i className="fa-solid fa-pen text-[0.8rem]" />
                 </button>
+                {u.id !== session?.id && session?.role === 'admin' && (
+                  <button
+                    onClick={() => handleToggleStatus(u)}
+                    className={`w-9 h-9 rounded-lg transition-colors flex items-center justify-center ${u.status === 'inativo' ? 'text-amber-400 hover:bg-emerald-500/15 hover:text-emerald-400' : 'text-[#8fa39a] hover:bg-amber-500/15 hover:text-amber-400'}`}
+                    aria-label={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
+                    title={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
+                  >
+                    <i className={`fa-solid ${u.status === 'inativo' ? 'fa-lock-open' : 'fa-lock'} text-[0.8rem]`} />
+                  </button>
+                )}
                 {u.id !== session?.id && (
-                  <button onClick={() => setDeleteId(u.id || null)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center" aria-label="Excluir usuário">
+                  <button onClick={() => setDeleteId(u.id || null)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center" aria-label="Excluir usuário" title="Excluir usuário">
                     <i className="fa-solid fa-trash text-[0.8rem]" />
                   </button>
                 )}

@@ -92,6 +92,8 @@ export function buildSession(userId: string, userData: any, authEmail?: string):
     email: userData.email || authEmail || '',
     role: userData.role || 'viewer',
     person: userData.person || userData.name || 'Eu',
+    familyId: typeof userData.familyId === 'string' ? userData.familyId : '',
+    superAdmin: userData.superAdmin === true,
   };
   session.permissions = resolvePermissions(session.role, userData.permissions);
   session.allowedPersons = userData.allowedPersons || null;
@@ -113,6 +115,12 @@ export function makeAccess(session: any) {
 
   const canAccessPerson = (personName?: string | null, tx: any = null) => {
     if (!session) return false;
+    if (session.familyId && tx && tx.familyId && tx.familyId !== session.familyId) return false;
+    if (session.familyId && session.id !== session.familyId && tx) {
+      if (tx.ownerUid && String(tx.ownerUid) === String(session.id)) return true;
+      if (Array.isArray(tx.sharedWith) && tx.sharedWith.includes(session.id)) return true;
+      if (tx.ownerUid && String(tx.ownerUid) !== String(session.id)) return false;
+    }
     if (session.role === 'admin') return true;
     if (tx && tx.userId && String(tx.userId) === String(session.id)) return true;
     if (!personName) return true;
@@ -703,7 +711,7 @@ export interface Deps {
   verifyIdToken(token: string): Promise<{ uid: string; email?: string }>;
   getUserById(uid: string): Promise<any | null>;
   findUserByEmail(email: string): Promise<{ id: string; data: any } | null>;
-  getCollection(name: string): Promise<any[]>;
+  getCollection(name: string, session?: any): Promise<any[]>;
   getDocData(collection: string, id: string): Promise<any | null>;
   loadExcel(): Promise<any>;
   loadJSZip(): Promise<any>;
@@ -750,8 +758,8 @@ export function createHandler(deps: Deps) {
       const now = deps.now();
 
       if (body.action === 'template') {
-        const [accounts, cards, persons, cats] = await Promise.all([deps.getCollection('accounts'), deps.getCollection('cards'), deps.getCollection('persons'), deps.getDocData('settings', 'categories')]);
-        const payments = ['Conta Principal', ...accounts.filter((a) => session.role === 'admin' || canAccessPerson(a.owner)).map((a) => `Conta: ${a.name}`), ...cards.filter((c) => session.role === 'admin' || canAccessPerson(c.owner)).map((c) => `Cartão: ${c.name}`)];
+        const [accounts, cards, persons, cats] = await Promise.all([deps.getCollection('accounts', session), deps.getCollection('cards', session), deps.getCollection('persons', session), deps.getDocData('settings', 'categories')]);
+        const payments = ['Conta Principal', ...accounts.filter((a) => canAccessPerson(a.owner, a)).map((a) => `Conta: ${a.name}`), ...cards.filter((c) => canAccessPerson(c.owner, c)).map((c) => `Cartão: ${c.name}`)];
         const names = persons.map((p) => (p.name || '').trim()).filter(Boolean);
         const baseNames = names.length ? names : DEFAULT_PERSONS;
         const personsList = baseNames.filter((p) => session.role === 'admin' || canAccessPerson(p));
@@ -775,7 +783,7 @@ export function createHandler(deps: Deps) {
         if (err instanceof ImportError) return res.status(422).json({ error: err.message });
         throw err;
       }
-      const transactions = await deps.getCollection('transactions');
+      const transactions = await deps.getCollection('transactions', session);
       const visible = transactions.filter((tx) => canAccessPerson(tx.person, tx));
       markDuplicates(parsed.rows, visible);
       const valid = parsed.rows.filter((r) => !r.fatal);
@@ -823,11 +831,21 @@ async function firebase() {
   return { auth: authMod.getAuth(app), db: firestoreMod.getFirestore(app) };
 }
 
+const SCOPED_NAMES = new Set(['transactions', 'accounts', 'cards', 'subscriptions', 'paidInvoices', 'reminders', 'goals', 'settlements', 'tags']);
+
 const realDeps: Deps = {
   async verifyIdToken(token) { const { auth } = await firebase(); const d = await auth.verifyIdToken(token); return { uid: d.uid, email: d.email }; },
   async getUserById(uid) { const { db } = await firebase(); const snap = await db.collection('users').doc(uid).get(); return snap.exists ? snap.data() : null; },
   async findUserByEmail(email) { const { db } = await firebase(); const qs = await db.collection('users').where('email', '==', email).get(); return qs.empty ? null : { id: qs.docs[0].id, data: qs.docs[0].data() }; },
-  async getCollection(name) { const { db } = await firebase(); const snap = await db.collection(name).get(); return snap.docs.map((d) => ({ ...d.data(), id: d.id })); },
+  async getCollection(name, session) {
+    const { db } = await firebase();
+    const col = db.collection(name);
+    const q = session?.familyId && !session?.superAdmin && SCOPED_NAMES.has(name)
+      ? col.where('familyId', '==', session.familyId)
+      : col;
+    const snap = await q.get();
+    return snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+  },
   async getDocData(collection, id) { const { db } = await firebase(); const snap = await db.collection(collection).doc(id).get(); return snap.exists ? snap.data() : null; },
   async loadExcel() { const mod: any = await import('exceljs'); return mod.default || mod; },
   async loadJSZip() { const mod: any = await import('jszip'); return mod.default || mod; },
