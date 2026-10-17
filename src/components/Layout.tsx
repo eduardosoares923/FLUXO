@@ -202,7 +202,7 @@ const SIDEBAR_ITEMS: MenuItem[] = [
   { to: '/subscriptions', label: 'Fixas', icon: 'fixas', module: 'subscriptions' },
   { to: '/goals', label: 'Metas', icon: 'metas', module: 'reports' },
   { to: '/reports', label: 'Relatórios', icon: 'relatorios', module: 'reports' },
-  { to: '/import', label: 'Ferramentas', icon: 'ferramentas', module: 'transactions' },
+  { to: '/tools', label: 'Ferramentas', icon: 'ferramentas', module: 'transactions' },
   { to: '/users', label: 'Usuários', icon: 'usuarios', module: 'manage_users', adminOnly: true },
   { to: '/settings', label: 'Configurações', icon: 'configuracoes', module: 'config_system' },
   { to: '/help', label: 'Ajuda', icon: 'ajuda', module: null },
@@ -213,7 +213,8 @@ const MOBILE_MORE_ITEMS: MenuItem[] = [
   { to: '/subscriptions', label: 'Fixas', icon: 'fixas', module: 'subscriptions' },
   { to: '/goals', label: 'Metas', icon: 'metas', module: 'reports' },
   { to: '/reports', label: 'Relatórios', icon: 'relatorios', module: 'reports' },
-  { to: '/import', label: 'Ferramentas', icon: 'ferramentas', module: 'transactions' },
+  { to: '/tools', label: 'Ferramentas', icon: 'ferramentas', module: 'transactions' },
+  { to: '/import', label: 'Importar', icon: 'ferramentas', module: 'transactions' },
   { to: '/users', label: 'Usuários', icon: 'usuarios', module: 'manage_users', adminOnly: true },
   { to: '/settings', label: 'Configurações', icon: 'configuracoes', module: 'config_system' },
   { to: '/help', label: 'Ajuda', icon: 'ajuda', module: null },
@@ -227,13 +228,14 @@ const PAGE_TITLES: Record<string, string> = {
   '/subscriptions': 'Fixas',
   '/goals': 'Metas',
   '/reports': 'Relatórios',
-  '/import': 'Ferramentas',
+  '/tools': 'Ferramentas',
+  '/import': 'Importar',
   '/users': 'Usuários',
   '/settings': 'Configurações',
   '/help': 'Ajuda',
 };
 
-const ROUTES_WITH_MONTH = new Set(['/', '/transactions', '/cards', '/reports', '/goals']);
+const ROUTES_WITH_MONTH = new Set(['/', '/transactions', '/cards', '/subscriptions', '/reports', '/goals']);
 
 export function ProtectedRoute() {
   const { session, loading } = useAuth() as { session: User | null; loading: boolean };

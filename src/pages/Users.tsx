@@ -1,772 +1,1224 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { useAuth, upsertUserLookup } from '../context/AuthContext';
+import React, { useState, useMemo } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useCollection } from '../hooks/useCollection';
-import { auth } from '../firebase';
-import { toPersonKeys } from '../utils/format';
-import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { CustomSelect } from '../components/CustomSelect';
-import { Tooltip } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { User, Person } from '../types';
 import { toast } from '../stores/useToastStore';
-import { User } from '../types';
+import { db, auth } from '../firebase';
+import {
+  collection,
+  getDocs,
+  writeBatch,
+  doc,
+  updateDoc,
+  deleteField,
+} from 'firebase/firestore';
+import { normalize } from '../utils/format';
+import { Select } from '../components/ui/Select';
 
-interface UserFormValues {
-  name: string;
-  username: string;
-  email: string;
-  cpf?: string;
-  password?: string;
-  role: 'admin' | 'gerente' | 'usuario' | 'viewer';
-  person?: string;
-  allowedPersons?: string;
-}
+export function Users() {
+  const { data: users, update, remove } = useCollection<User>(
+    'users',
+    {},
+    { unscoped: true }
+  );
+  const { data: persons, add: addPerson, remove: removePerson } =
+    useCollection<Person>('persons');
+  const { session } = useAuth();
 
-interface PendingUser extends User {
-  requestKind?: 'signup' | 'change-family';
-}
+  const isAdmin = session?.role === 'admin' || session?.superAdmin === true;
+  const isSuperAdmin = session?.superAdmin === true;
+  const myFamilyId = session?.familyId || session?.id || '';
 
-export default function Users() {
-  const { session, hasPermission } = useAuth() as { session: User; hasPermission: (mod: string) => boolean };
-  const { data: users, loading, error: collectionError, saveRecord } = useCollection<User>('users');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [migratingScope, setMigratingScope] = useState(false);
+  const [newFamilyTarget, setNewFamilyTarget] = useState<string>('');
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [error, setError] = useState('');
-
-  // Exclusão de outro usuário com confirmação extra (digitar EXCLUIR)
-  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  // Double confirmation delete dialog state
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingUser, setDeletingUser] = useState(false);
 
-  // Solicitações pendentes de aprovação (cadastro novo ou entrada em família)
-  const [pendingUsers, setPendingUsers] = useState<PendingUser[]>([]);
-  const [pendingBusy, setPendingBusy] = useState<string | null>(null);
-  const [loadingPending, setLoadingPending] = useState(false);
+  // People manager dialog state
+  const [isPersonsOpen, setIsPersonsOpen] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
 
-  // Mudança de família pelo superAdmin no modal de edição
-  const [newFamilyInvite, setNewFamilyInvite] = useState('');
-  const [changingFamily, setChangingFamily] = useState(false);
-
-  // Preparação/migração de dados legados
-  const [preparingData, setPreparingData] = useState(false);
-
-  // Logins que existem no Firebase Authentication mas não têm cadastro no sistema (só superAdmin)
-  interface OrphanLogin { uid: string; email: string; name: string; createdAt: string | null; lastSignIn: string | null; }
-  const [orphans, setOrphans] = useState<OrphanLogin[]>([]);
-  const [orphanBusy, setOrphanBusy] = useState<string | null>(null);
-  const [deleteOrphan, setDeleteOrphan] = useState<OrphanLogin | null>(null);
-  const [orphanError, setOrphanError] = useState('');
+  // Orphan Firebase Auth logins check
   const [checkingOrphans, setCheckingOrphans] = useState(false);
+  const [orphanError, setOrphanError] = useState<string | null>(null);
+  const [orphanAccounts, setOrphanAccounts] = useState<
+    {
+      uid: string;
+      email: string;
+      username: string;
+      displayName: string;
+      createdAt: string;
+    }[] | null
+  >(null);
+  const [orphanToDelete, setOrphanToDelete] = useState<{
+    uid: string;
+    label: string;
+  } | null>(null);
 
-  const isFamilyHead = session?.role === 'admin' && (!session?.familyId || session?.familyId === session?.id);
-  const canApproveRequests = Boolean(session?.superAdmin || isFamilyHead);
-  const myInviteCode = (session?.inviteCode || (session?.familyId || session?.id || '').slice(0, 8)).toUpperCase();
+  // User form fields
+  const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState('usuario');
+  const [person, setPerson] = useState('');
+  const [status, setStatus] = useState('ativo');
 
-  const callManageUsers = useCallback(async (action: string, uid?: string, extra: Record<string, any> = {}) => {
-    const idToken = await auth.currentUser?.getIdToken();
-    const response = await fetch('/api/manage-users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-      body: JSON.stringify({ action, uid, ...extra }),
+  const myUserDoc = useMemo(
+    () => (users || []).find((u) => u.id === session?.id),
+    [users, session?.id]
+  );
+
+  const myInviteCode = useMemo(() => {
+    if (myUserDoc?.inviteCode) return myUserDoc.inviteCode;
+    const raw = (myFamilyId || session?.username || 'WYND2026')
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toUpperCase();
+    return raw.slice(0, 6).padEnd(6, '8');
+  }, [myUserDoc, myFamilyId, session?.username]);
+
+  const generateNewInviteCode = async () => {
+    if (!session?.id) return;
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    try {
+      await update(session.id, { inviteCode: code });
+      toast.success('Novo código de convite gerado.');
+    } catch {
+      toast.error('Erro ao gerar código de convite.');
+    }
+  };
+
+  const handleCopyInviteCode = async () => {
+    try {
+      await navigator.clipboard.writeText(myInviteCode);
+      toast.success('Código copiado para a área de transferência.');
+    } catch {
+      toast.error('Não foi possível copiar o código automaticamente.');
+    }
+  };
+
+  // Pending requests (new signups + family switch requests)
+  const pendingRequests = useMemo(() => {
+    if (!isAdmin) return [];
+    return (users || []).filter((u) => {
+      const isNewPending =
+        u.status === 'pendente' &&
+        (isSuperAdmin ||
+          (u.requestedInvite &&
+            u.requestedInvite.toUpperCase() === myInviteCode.toUpperCase()));
+      const isSwitchPending =
+        Boolean(u.pendingFamilyId) &&
+        (isSuperAdmin || u.pendingFamilyId === myFamilyId);
+      return isNewPending || isSwitchPending;
     });
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) {
-      throw new Error(`A função /api/manage-users não respondeu (status ${response.status}). Verifique se o deploy da pasta api terminou na Vercel.`);
-    }
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || `Erro no servidor (status ${response.status})`);
-    return result;
-  }, []);
+  }, [users, isAdmin, isSuperAdmin, myInviteCode, myFamilyId]);
 
-  const loadPending = useCallback(async () => {
-    if (!canApproveRequests) return;
-    setLoadingPending(true);
+  // Active / blocked users with access
+  const familyUsers = useMemo(() => {
+    return (users || [])
+      .filter((u) => {
+        if (u.status === 'pendente') return false;
+        if (isSuperAdmin) return true;
+        const uFam = u.familyId || u.id;
+        return uFam === myFamilyId;
+      })
+      .sort((a, b) => {
+        if (a.id === session?.id) return -1;
+        if (b.id === session?.id) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+  }, [users, isSuperAdmin, myFamilyId, session?.id]);
+
+  const handleApproveRequest = async (u: User) => {
+    if (!u.id) return;
     try {
-      const result = await callManageUsers('list-pending');
-      setPendingUsers(result.pending || []);
-    } catch (err: any) {
-      console.error('Erro ao buscar cadastros pendentes:', err);
-    } finally {
-      setLoadingPending(false);
+      if (u.pendingFamilyId) {
+        const targetFamily = u.pendingFamilyId;
+        await updateDoc(doc(db, 'users', u.id), {
+          familyId: targetFamily,
+          pendingFamilyId: deleteField(),
+        });
+        toast.success(`${u.name} agora faz parte da família.`);
+        return;
+      }
+
+      const joinMyFamily =
+        u.usageType === 'family' &&
+        u.requestedInvite &&
+        u.requestedInvite.toUpperCase() === myInviteCode.toUpperCase();
+
+      const assignedFamilyId = joinMyFamily ? myFamilyId : u.id;
+      const assignedRole = joinMyFamily ? 'usuario' : 'admin';
+
+      await update(u.id, {
+        status: 'ativo',
+        familyId: assignedFamilyId,
+        role: assignedRole,
+      });
+
+      if (joinMyFamily && u.name) {
+        const exists = (persons || []).some(
+          (p) => normalize(p.name) === normalize(u.name)
+        );
+        if (!exists) {
+          await addPerson({
+            name: u.name.trim(),
+            personKey: normalize(u.name),
+          });
+        }
+      }
+
+      toast.success(`Acesso de ${u.name} aprovado.`);
+    } catch {
+      toast.error('Erro ao aprovar solicitação.');
     }
-  }, [callManageUsers, canApproveRequests]);
+  };
 
-  const loadOrphans = useCallback(async () => {
-    setCheckingOrphans(true);
-    setOrphanError('');
+  const handleRejectRequest = async (u: User) => {
+    if (!u.id) return;
     try {
-      const result = await callManageUsers('list-orphans');
-      setOrphans(result.orphans || []);
-    } catch (err: any) {
-      console.error('Erro ao listar logins sem cadastro:', err);
-      setOrphanError(err.message || 'Erro ao consultar os logins do Firebase.');
-    } finally {
-      setCheckingOrphans(false);
+      if (u.pendingFamilyId) {
+        await updateDoc(doc(db, 'users', u.id), {
+          pendingFamilyId: deleteField(),
+        });
+        toast.info(`Mudança de família de ${u.name} recusada.`);
+        return;
+      }
+      await update(u.id, { status: 'inativo' });
+      toast.info(`Solicitação de ${u.name} recusada.`);
+    } catch {
+      toast.error('Erro ao recusar solicitação.');
     }
-  }, [callManageUsers]);
+  };
 
-  useEffect(() => {
-    if (canApproveRequests) loadPending();
-  }, [canApproveRequests, loadPending]);
-
-  useEffect(() => {
-    if (session?.superAdmin) loadOrphans();
-  }, [session?.superAdmin, loadOrphans]);
-
-  async function handleApprovePending(p: PendingUser) {
-    if (!p.id) return;
-    setPendingBusy(p.id);
+  const handleToggleBlock = async (u: User) => {
+    if (!u.id || u.id === session?.id) return;
+    const nextStatus = u.status === 'inativo' ? 'ativo' : 'inativo';
     try {
-      await callManageUsers('approve', p.id);
+      await update(u.id, { status: nextStatus });
       toast.success(
-        p.requestKind === 'change-family'
-          ? `Entrada de ${p.name || p.email} na família aprovada!`
-          : `Cadastro de ${p.name || p.email} aprovado!`
+        nextStatus === 'inativo'
+          ? `${u.name} foi bloqueado.`
+          : `${u.name} foi desbloqueado.`
       );
-      await loadPending();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao aprovar solicitação.');
-    } finally {
-      setPendingBusy(null);
+    } catch {
+      toast.error('Não foi possível alterar o bloqueio.');
     }
-  }
+  };
 
-  async function handleRejectPending(p: PendingUser) {
-    if (!p.id) return;
-    setPendingBusy(p.id);
-    try {
-      await callManageUsers('reject', p.id);
-      toast.info(
-        p.requestKind === 'change-family'
-          ? `Solicitação de mudança de família recusada.`
-          : `Cadastro de ${p.name || p.email} recusado e removido.`
-      );
-      await loadPending();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao recusar solicitação.');
-    } finally {
-      setPendingBusy(null);
+  const openNewUserModal = () => {
+    setEditingUser(null);
+    setName('');
+    setUsername('');
+    setEmail('');
+    setPassword('');
+    setRole('usuario');
+    setPerson(persons[0]?.name || '');
+    setStatus('ativo');
+    setNewFamilyTarget('');
+    setIsModalOpen(true);
+  };
+
+  const openEditUserModal = (u: User) => {
+    setEditingUser(u);
+    setName(u.name || '');
+    setUsername(u.username || '');
+    setEmail(u.email || '');
+    setPassword('');
+    setRole(u.role || 'usuario');
+    setPerson(u.person || '');
+    setStatus(u.status || 'ativo');
+    setNewFamilyTarget(u.familyId || u.id || '');
+    setIsModalOpen(true);
+  };
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || !username.trim()) {
+      toast.warning('Preencha nome e nome de usuário.');
+      return;
     }
-  }
 
-  async function handlePrepareData() {
-    setPreparingData(true);
+    setSubmitting(true);
     try {
-      const res = await callManageUsers('prepare-data');
-      toast.success(`Dados preparados! (${res.updatedUsers || 0} usuários e ${res.updatedDocs || 0} registros atualizados)`);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao preparar dados.');
-    } finally {
-      setPreparingData(false);
-    }
-  }
+      if (editingUser?.id) {
+        await update(editingUser.id, {
+          name: name.trim(),
+          username: username.trim().toLowerCase(),
+          email: email.trim().toLowerCase(),
+          role,
+          person,
+          status,
+        });
 
-  async function handleLinkOrphan(o: OrphanLogin) {
-    setOrphanBusy(o.uid);
-    try {
-      await callManageUsers('link', o.uid);
-      toast.success(`${o.email || o.name} agora faz parte do sistema.`);
-      await loadOrphans();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao vincular login.');
-    } finally {
-      setOrphanBusy(null);
-    }
-  }
-
-  async function handleConfirmDeleteOrphan() {
-    if (!deleteOrphan) return;
-    const o = deleteOrphan;
-    setDeleteOrphan(null);
-    setOrphanBusy(o.uid);
-    try {
-      await callManageUsers('delete', o.uid);
-      toast.success('Login excluído do Firebase.');
-      await loadOrphans();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao excluir login.');
-    } finally {
-      setOrphanBusy(null);
-    }
-  }
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    watch,
-    control,
-    formState: { errors, isSubmitting },
-  } = useForm<UserFormValues>({
-    defaultValues: {
-      name: '',
-      username: '',
-      email: '',
-      cpf: '',
-      password: '',
-      role: 'usuario',
-      person: '',
-      allowedPersons: '',
-    },
-  });
-
-  const watchedRole = watch('role');
-
-  if (!hasPermission('manage_users')) {
-    return <p className="text-center py-12 text-[#8fa39a]">Você não tem permissão para acessar esta página.</p>;
-  }
-
-  function openNew() {
-    reset({
-      name: '', username: '', email: '', cpf: '', password: '', role: 'usuario', person: '', allowedPersons: '',
-    });
-    setEditingId(null);
-    setNewFamilyInvite('');
-    setError('');
-    setShowForm(true);
-  }
-
-  function openEdit(u: any) {
-    reset({
-      name: u.name || '',
-      username: u.username || '',
-      email: u.email || '',
-      cpf: u.cpf || '',
-      password: '',
-      role: u.role || 'usuario',
-      person: u.person || u.name || '',
-      allowedPersons: Array.isArray(u.allowedPersons) ? u.allowedPersons.join(', ') : u.allowedPersons || '',
-    });
-    setEditingId(u.id);
-    setNewFamilyInvite('');
-    setError('');
-    setShowForm(true);
-  }
-
-  async function handleSuperAdminChangeFamily() {
-    if (!editingId || !newFamilyInvite.trim()) return;
-    setChangingFamily(true);
-    try {
-      const res = await callManageUsers('change-family', editingId, { inviteCode: newFamilyInvite.trim() });
-      toast.success(res.message || 'Família alterada com sucesso.');
-      setNewFamilyInvite('');
-      setShowForm(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao alterar família do usuário.');
-    } finally {
-      setChangingFamily(false);
-    }
-  }
-
-  async function onSubmit(data: UserFormValues) {
-    setError('');
-    try {
-      if (!editingId) {
-        if (!data.password || data.password.length < 6) {
-          setError('A senha deve ter pelo menos 6 caracteres.');
-          return;
+        if (password.trim()) {
+          const fbUser = auth?.currentUser;
+          if (fbUser) {
+            const idToken = await fbUser.getIdToken();
+            await fetch('/api/manage-users', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({
+                action: 'updatePassword',
+                uid: editingUser.id,
+                password: password.trim(),
+              }),
+            });
+          }
         }
 
-        const idToken = await auth.currentUser?.getIdToken();
-        const response = await fetch('/api/create-user', {
+        toast.success('Usuário atualizado.');
+      } else {
+        if (!password || password.length < 6) {
+          toast.warning('A senha inicial deve ter pelo menos 6 caracteres.');
+          setSubmitting(false);
+          return;
+        }
+        const fbUser = auth?.currentUser;
+        if (!fbUser) {
+          toast.error('Sessão expirada. Entre novamente.');
+          setSubmitting(false);
+          return;
+        }
+        const idToken = await fbUser.getIdToken();
+        const resp = await fetch('/api/create-user', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${idToken}`,
           },
           body: JSON.stringify({
-            name: data.name.trim(),
-            username: data.username.trim(),
-            email: data.email.trim().toLowerCase(),
-            cpf: data.cpf?.trim() || '',
-            password: data.password,
-            role: data.role,
-            person: data.person?.trim() || data.name.trim(),
-            allowedPersons: data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '',
+            name: name.trim(),
+            username: username.trim().toLowerCase(),
+            email: email.trim().toLowerCase(),
+            password,
+            role,
+            person,
+            status,
+            familyId: myFamilyId,
           }),
         });
-
-        const result = await response.json();
-        if (!response.ok) {
-          setError(result.error || 'Erro ao criar usuário.');
+        const data = await resp.json();
+        if (!resp.ok) {
+          toast.error(data?.error || 'Não foi possível criar o usuário.');
+          setSubmitting(false);
           return;
         }
-
-        toast.success('Usuário criado com sucesso!');
-        setShowForm(false);
-        return;
+        toast.success('Novo usuário criado.');
       }
-
-      const person = data.person?.trim() || data.name.trim();
-      const allowedPersons = data.role === 'gerente' ? data.allowedPersons?.trim() || '' : '';
-      const isEditingSelf = editingId === session?.id && !session?.superAdmin;
-
-      const record: any = {
-        id: editingId,
-        name: data.name.trim(),
-        username: data.username.trim(),
-        email: data.email.trim().toLowerCase(),
-        cpf: data.cpf?.trim() || '',
-        personKeys: toPersonKeys([person, data.name, data.username].filter(Boolean)),
-        allowedPersonKeys: allowedPersons ? toPersonKeys(allowedPersons) : [],
-      };
-      if (!isEditingSelf) {
-        record.role = data.role;
-        record.person = person;
-        record.allowedPersons = allowedPersons;
-      }
-
-      await saveRecord(record);
-      await upsertUserLookup(record);
-      toast.success('Usuário atualizado com sucesso!');
-      setShowForm(false);
-    } catch (err: any) {
-      console.error('Erro ao salvar usuário:', err);
-      setError(err.message || 'Erro ao salvar usuário.');
+      setIsModalOpen(false);
+    } catch {
       toast.error('Erro ao salvar usuário.');
+    } finally {
+      setSubmitting(false);
     }
-  }
+  };
 
-  async function handleToggleStatus(u: User) {
-    if (!u.id || u.id === session?.id || u.superAdmin) return;
-    const nextStatus = u.status === 'inativo' ? 'ativo' : 'inativo';
-    try {
-      await saveRecord({ id: u.id, status: nextStatus });
-      toast.success(nextStatus === 'inativo' ? `${u.name} foi bloqueado.` : `${u.name} foi desbloqueado.`);
-      await loadPending();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao alterar status do usuário.');
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete?.id || deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR') {
+      return;
     }
-  }
-
-  async function handleConfirmDelete() {
-    if (!deleteTarget?.id || deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR') return;
     setDeletingUser(true);
     try {
-      await callManageUsers('delete', deleteTarget.id);
-      toast.success('Usuário e dados vinculados excluídos do sistema.');
-      setDeleteTarget(null);
+      const fbUser = auth?.currentUser;
+      if (fbUser) {
+        const idToken = await fbUser.getIdToken();
+        await fetch('/api/manage-users', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            action: 'deleteUser',
+            uid: userToDelete.id,
+          }),
+        });
+      }
+      await remove(userToDelete.id);
+      toast.success(`Usuário "${userToDelete.name}" excluído.`);
+      setUserToDelete(null);
       setDeleteConfirmText('');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao excluir usuário.');
+    } catch {
+      toast.error('Erro ao excluir usuário.');
     } finally {
       setDeletingUser(false);
     }
-  }
+  };
 
-  if (loading) return <PageLoading message="Carregando usuários..." />;
-  if (collectionError) return <PageError error={collectionError} title={'Erro ao carregar usuários'} />;
+  const handleMoveUserFamily = async () => {
+    if (!isSuperAdmin || !editingUser?.id || !newFamilyTarget) return;
+    const resolvedFamilyId =
+      newFamilyTarget === '__SOLO__' ? editingUser.id : newFamilyTarget;
+    try {
+      await update(editingUser.id, { familyId: resolvedFamilyId });
+      toast.success('Família do usuário atualizada.');
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Erro ao mover usuário de família.');
+    }
+  };
+
+  const prepareDatabaseScope = async () => {
+    if (!isSuperAdmin || migratingScope) return;
+    setMigratingScope(true);
+    try {
+      const allUsersSnap = await getDocs(collection(db, 'users'));
+      const userByName: Record<string, { uid: string; familyId: string }> = {};
+      let batch = writeBatch(db);
+      let ops = 0;
+
+      allUsersSnap.docs.forEach((d) => {
+        const data = d.data() as any;
+        const famId = data.familyId || myFamilyId || d.id;
+        if (!data.familyId) {
+          batch.update(doc(db, 'users', d.id), { familyId: famId });
+          ops++;
+        }
+        if (data.name) userByName[normalize(data.name)] = { uid: d.id, familyId: famId };
+        if (data.person) userByName[normalize(data.person)] = { uid: d.id, familyId: famId };
+        if (data.username) userByName[normalize(data.username)] = { uid: d.id, familyId: famId };
+      });
+
+      const cols = [
+        'accounts',
+        'cards',
+        'transactions',
+        'subscriptions',
+        'persons',
+        'paid_invoices',
+        'settings',
+        'goals',
+        'tags',
+      ];
+
+      for (const colName of cols) {
+        const snap = await getDocs(collection(db, colName));
+        for (const d of snap.docs) {
+          const data = d.data() as any;
+          if (data.familyId && data.ownerUid) continue;
+          const ownerName = normalize(data.owner || data.person || data.createdBy || '');
+          const match = userByName[ownerName];
+          const ownerUid = data.ownerUid || match?.uid || session?.id || '';
+          const familyId = data.familyId || match?.familyId || myFamilyId;
+          batch.update(doc(db, colName, d.id), { familyId, ownerUid });
+          ops++;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            ops = 0;
+          }
+        }
+      }
+
+      if (ops > 0) await batch.commit();
+      toast.success('Dados preparados e vinculados com sucesso.');
+    } catch {
+      toast.error('Erro ao preparar dados.');
+    } finally {
+      setMigratingScope(false);
+    }
+  };
+
+  const checkOrphanLogins = async () => {
+    if (!isAdmin || checkingOrphans) return;
+    const fbUser = auth?.currentUser;
+    if (!fbUser) return;
+    setCheckingOrphans(true);
+    setOrphanError(null);
+    try {
+      const idToken = await fbUser.getIdToken();
+      const resp = await fetch('/api/manage-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ action: 'listAuthUsers' }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        setOrphanError(data?.error || 'Erro ao verificar logins.');
+        return;
+      }
+      const firestoreIds = new Set((users || []).map((u) => u.id));
+      const firestoreUsernames = new Set(
+        (users || []).map((u) => (u.username || '').toLowerCase())
+      );
+      const orphans = (data.authUsers || []).filter(
+        (au: any) =>
+          !firestoreIds.has(au.uid) &&
+          (!au.username || !firestoreUsernames.has(au.username.toLowerCase()))
+      );
+      setOrphanAccounts(orphans);
+      if (orphans.length === 0) {
+        toast.success('Nenhum login solto encontrado no Firebase.');
+      }
+    } catch {
+      setOrphanError('Falha ao consultar a função manage-users.');
+    } finally {
+      setCheckingOrphans(false);
+    }
+  };
+
+  const confirmFreeOrphan = async () => {
+    if (!orphanToDelete) return;
+    const fbUser = auth?.currentUser;
+    if (!fbUser) return;
+    try {
+      const idToken = await fbUser.getIdToken();
+      const resp = await fetch('/api/manage-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          action: 'deleteUser',
+          uid: orphanToDelete.uid,
+        }),
+      });
+      if (resp.ok) {
+        setOrphanAccounts((prev) =>
+          prev ? prev.filter((a) => a.uid !== orphanToDelete.uid) : null
+        );
+        toast.success(`Login "${orphanToDelete.label}" liberado.`);
+      } else {
+        toast.error('Não foi possível liberar o login.');
+      }
+    } catch {
+      toast.error('Erro ao liberar login.');
+    } finally {
+      setOrphanToDelete(null);
+    }
+  };
+
+  const handleAddPerson = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPersonName.trim()) return;
+    const clean = newPersonName.trim();
+    if ((persons || []).some((p) => normalize(p.name) === normalize(clean))) {
+      toast.warning('Essa pessoa já está cadastrada.');
+      return;
+    }
+    await addPerson({ name: clean, personKey: normalize(clean) });
+    setNewPersonName('');
+    toast.success(`Pessoa "${clean}" adicionada.`);
+  };
+
+  const getRoleLabel = (r?: string) => {
+    if (r === 'admin') return 'Administrador';
+    if (r === 'gerente') return 'Gerente';
+    return 'Membro';
+  };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6 animate-in fade-in duration-500">
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-[1.6rem] font-bold text-[#f2f0ea]">Equipe e Usuários</h2>
-          {isFamilyHead && myInviteCode && (
-            <div className="mt-1.5 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-[#8fa39a]">
-              <span>Código de convite da sua família:</span>
-              <strong className="font-mono text-[#e3b04b] tracking-wider">{myInviteCode}</strong>
-              <Tooltip content="Copiar código de convite">
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(myInviteCode);
-                    toast.success('Código de convite copiado!');
-                  }}
-                  className="text-[#8fa39a] hover:text-white transition-colors ml-1"
-                  aria-label="Copiar código de convite"
-                >
-                  <i className="fa-regular fa-copy" />
-                </button>
-              </Tooltip>
-            </div>
+    <div className="space-y-5 pb-8">
+      {/* Top action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setIsPersonsOpen(true)}
+              className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-xs hover:border-pri/40 transition-colors"
+            >
+              Pessoas ({persons.length})
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              type="button"
+              disabled={checkingOrphans}
+              onClick={checkOrphanLogins}
+              className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-muted hover:text-ink font-bold text-xs hover:border-pri/40 transition-colors disabled:opacity-50"
+            >
+              {checkingOrphans ? 'Verificando...' : 'Verificar logins'}
+            </button>
           )}
         </div>
 
-        <div className="flex items-center gap-2.5">
-          {canApproveRequests && (
+        <div className="flex items-center gap-2.5 ml-auto">
+          {isSuperAdmin && (
             <button
               type="button"
-              onClick={loadPending}
-              disabled={loadingPending}
-              className="px-3.5 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-[#c9d2cf] transition-colors disabled:opacity-50"
+              disabled={migratingScope}
+              onClick={prepareDatabaseScope}
+              className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-sm hover:border-pri/40 transition-colors disabled:opacity-50"
             >
-              <i className={`fa-solid fa-user-clock mr-1.5 ${loadingPending ? 'fa-spin' : ''}`} />
-              {loadingPending ? 'Consultando...' : 'Atualizar Pendentes'}
+              {migratingScope ? 'Preparando...' : 'Preparar dados'}
             </button>
           )}
-          <button
-            className="flex items-center gap-2 bg-gradient-to-br from-[#f5d78a] to-[#e3b04b] text-[#1c1206] px-4 py-2.5 rounded-xl font-bold transition-all hover:scale-105 shadow-[0_4px_14px_rgba(227,176,75,0.25)]"
-            onClick={openNew}
-          >
-            <i className="fa-solid fa-plus text-sm" /> Novo Usuário
-          </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={openNewUserModal}
+              className="px-4 min-h-[44px] rounded-[18px] bg-fab text-fabIcon font-bold text-sm flex items-center gap-2 shadow-sm hover:opacity-95 transition-opacity"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span>Novo usuário</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Seção de Aprovação de Cadastros Pendentes (superAdmin vê todos; chefe da família vê os da própria família) */}
-      {canApproveRequests && pendingUsers.length > 0 && (
-        <div className="mb-8 bg-amber-500/[0.05] border border-amber-500/25 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-amber-500/15 flex items-center justify-between">
-            <div>
-              <h3 className="font-bold text-[#f2f0ea] flex items-center gap-2">
-                <i className="fa-solid fa-clock text-amber-400" />
-                Solicitações aguardando aprovação ({pendingUsers.length})
-              </h3>
-              <p className="text-xs text-[#8fa39a] mt-0.5">
-                Estes usuários solicitaram acesso e permanecem bloqueados até que você aprove ou recuse.
-              </p>
-            </div>
-          </div>
-          {pendingUsers.map((p) => (
-            <div
-              key={`${p.id}_${p.requestKind}`}
-              className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.4fr)_auto] gap-x-4 gap-y-2 items-center px-5 py-3.5 border-b border-white/[0.04] last:border-0"
+      {/* Orphan diagnostics alert if triggered */}
+      {orphanError && (
+        <div className="rounded-[20px] bg-spendSoft border border-spend/30 p-4 text-xs text-spendText font-semibold">
+          {orphanError}
+        </div>
+      )}
+
+      {orphanAccounts && orphanAccounts.length > 0 && (
+        <div className="rounded-[24px] bg-card border border-border p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-display text-sm font-bold text-ink">
+              Logins sem ficha no Wynd ({orphanAccounts.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => setOrphanAccounts(null)}
+              className="text-xs font-bold text-muted hover:text-ink"
             >
-              <div className="min-w-0">
-                <div className="font-bold text-[#f2f0ea] truncate">{p.name}</div>
-                <div className="text-xs text-[#8fa39a] truncate">{p.email}</div>
-              </div>
-              <div className="text-xs text-[#c9d2cf]">
-                {p.requestKind === 'change-family' ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-blue-500/20 text-blue-300 font-bold">
-                    Mudança de família
-                  </span>
-                ) : p.usageType === 'family' ? (
-                  <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 font-bold">
-                    Entrar em família {p.requestedInvite ? `(${p.requestedInvite})` : ''}
-                  </span>
-                ) : (
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 font-bold">
-                    Uso individual
-                  </span>
-                )}
-              </div>
-              <div className="hidden md:block text-xs text-[#8fa39a]">
-                {p.familyId ? `Família: ${p.familyId.slice(0, 8).toUpperCase()}` : 'Sem família vinculada'}
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  disabled={pendingBusy === p.id}
-                  onClick={() => handleApprovePending(p)}
-                  className="px-3.5 h-9 rounded-lg bg-emerald-500 text-[#062117] text-xs font-extrabold hover:bg-emerald-400 transition-colors disabled:opacity-50"
-                >
-                  {pendingBusy === p.id ? '...' : 'Aprovar'}
-                </button>
-                <button
-                  type="button"
-                  disabled={pendingBusy === p.id}
-                  onClick={() => handleRejectPending(p)}
-                  className="px-3.5 h-9 rounded-lg bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold hover:bg-red-500/25 transition-colors disabled:opacity-50"
-                >
-                  Recusar
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {users.length === 0 ? (
-        <EmptyState
-          icon="fa-users"
-          title={'Nenhum usuário cadastrado'}
-          description="Cadastre membros da equipe ou familiares com permissões personalizadas."
-          actionLabel="Novo usuário"
-          onAction={openNew}
-        />
-      ) : (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-2xl overflow-hidden">
-          <div className="hidden md:grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_160px_120px] gap-4 px-5 py-3 border-b border-white/[0.06] text-[11px] uppercase tracking-wider font-bold text-[#5c6b66]">
-            <span>Usuário</span><span>E-mail</span><span>Pessoa</span><span>Acesso</span><span className="text-right">Ações</span>
+              Fechar
+            </button>
           </div>
-          {users.map((u) => (
-            <div key={u.id} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1.2fr)_160px_120px] gap-x-4 gap-y-2 items-center px-5 py-4 border-b border-white/[0.04] last:border-0 hover:bg-white/[0.03] transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-[#e3b04b]/15 text-[#e3b04b] flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
-                  {u.avatar ? <img src={u.avatar} alt={u.name} className="w-full h-full object-cover" /> : (u.name || '?').slice(0, 2).toUpperCase()}
+          <div className="divide-y divide-border">
+            {orphanAccounts.map((oa) => (
+              <div
+                key={oa.uid}
+                className="py-2.5 flex items-center justify-between gap-3"
+              >
+                <div className="text-xs">
+                  <span className="font-bold text-ink">
+                    {oa.username || oa.email}
+                  </span>
+                  <span className="text-muted ml-2">{oa.email}</span>
                 </div>
-                <div className="min-w-0">
-                  <div className="font-bold text-[#f2f0ea] truncate">{u.name}</div>
-                  <div className="text-xs text-[#8fa39a] truncate">@{u.username}</div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOrphanToDelete({
+                      uid: oa.uid,
+                      label: oa.username || oa.email,
+                    })
+                  }
+                  className="px-3 min-h-[36px] rounded-[12px] bg-spendSoft text-spendText text-xs font-bold"
+                >
+                  Liberar login
+                </button>
               </div>
-              <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.email || '-'}</div>
-              <div className="hidden md:block text-sm text-[#c9d2cf] truncate">{u.person || u.name}</div>
-              <div className="hidden md:flex items-center gap-1.5 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
-                {u.status === 'inativo' && (
-                  <span className="px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] bg-red-500/20 text-red-400">Bloqueado</span>
-                )}
-                {u.status === 'pendente' && (
-                  <span className="px-2.5 py-1 rounded-lg font-bold uppercase tracking-wider text-[0.65rem] bg-amber-500/20 text-amber-300">Pendente</span>
-                )}
-              </div>
-              <div className="flex justify-end gap-1">
-                <Tooltip content="Editar usuário">
-                  <button onClick={() => openEdit(u)} className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-[#e3b04b] transition-colors flex items-center justify-center" aria-label="Editar usuário">
-                    <i className="fa-solid fa-pen text-[0.8rem]" />
-                  </button>
-                </Tooltip>
-                {u.id !== session?.id && !u.superAdmin && session?.role === 'admin' && (
-                  <Tooltip content={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}>
-                    <button
-                      onClick={() => handleToggleStatus(u)}
-                      className={`w-9 h-9 rounded-lg transition-colors flex items-center justify-center ${u.status === 'inativo' ? 'text-amber-400 hover:bg-emerald-500/15 hover:text-emerald-400' : 'text-[#8fa39a] hover:bg-amber-500/15 hover:text-amber-400'}`}
-                      aria-label={u.status === 'inativo' ? 'Desbloquear usuário' : 'Bloquear usuário'}
-                    >
-                      <i className={`fa-solid ${u.status === 'inativo' ? 'fa-lock-open' : 'fa-lock'} text-[0.8rem]`} />
-                    </button>
-                  </Tooltip>
-                )}
-                {u.id !== session?.id && !u.superAdmin && (
-                  <Tooltip content="Excluir usuário">
-                    <button
-                      onClick={() => {
-                        setDeleteTarget(u);
-                        setDeleteConfirmText('');
-                      }}
-                      className="w-9 h-9 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-red-400 transition-colors flex items-center justify-center"
-                      aria-label="Excluir usuário"
-                    >
-                      <i className="fa-solid fa-trash text-[0.8rem]" />
-                    </button>
-                  </Tooltip>
-                )}
-              </div>
-              <div className="md:hidden col-span-2 flex flex-wrap items-center gap-2 text-xs text-[#8fa39a]">
-                <span className="truncate">{u.email || 'sem e-mail'}</span>
-                <span>&bull;</span>
-                <span>{u.person || u.name}</span>
-                <span className={`px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] ${u.role === 'admin' ? 'bg-[#e3b04b]/20 text-[#e3b04b]' : u.role === 'gerente' ? 'bg-[#4d8dff]/20 text-[#4d8dff]' : 'bg-white/10 text-[#8fa39a]'}`}>{u.role}</span>
-                {u.status === 'inativo' && (
-                  <span className="px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] bg-red-500/20 text-red-400">Bloqueado</span>
-                )}
-                {u.status === 'pendente' && (
-                  <span className="px-2 py-0.5 rounded-md font-bold uppercase text-[0.6rem] bg-amber-500/20 text-amber-300">Pendente</span>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
 
-      {session?.superAdmin && (
-        <div className="mt-6 flex flex-wrap items-center gap-3 text-xs">
-          <button onClick={loadOrphans} disabled={checkingOrphans} className="px-3 h-9 rounded-lg bg-white/5 text-[#8fa39a] font-bold hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50">
-            <i className={`fa-solid fa-rotate mr-1.5 ${checkingOrphans ? 'fa-spin' : ''}`} />
-            {checkingOrphans ? 'Verificando...' : 'Verificar logins do Firebase'}
-          </button>
-          <button onClick={handlePrepareData} disabled={preparingData} className="px-3 h-9 rounded-lg bg-[#e3b04b]/15 text-[#e3b04b] font-bold hover:bg-[#e3b04b]/25 transition-colors disabled:opacity-50">
-            <i className={`fa-solid fa-wand-magic-sparkles mr-1.5 ${preparingData ? 'fa-spin' : ''}`} />
-            {preparingData ? 'Preparando dados...' : 'Preparar dados (preencher familyId)'}
-          </button>
-          {!checkingOrphans && !orphanError && orphans.length === 0 && (
-            <span className="text-[#34d399]"><i className="fa-solid fa-check mr-1" />Todos os logins do Firebase têm cadastro no sistema.</span>
+      {/* Card 1: Código de convite */}
+      <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="font-display text-base font-bold text-ink">
+              Código de convite
+            </h2>
+            <p className="text-xs text-muted mt-0.5">
+              Compartilhe com quem vai dividir as finanças com você
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="px-5 min-h-[44px] inline-flex items-center justify-center rounded-[16px] bg-neutral border border-border font-display text-base md:text-lg font-bold tracking-[0.22em] text-ink select-all">
+              {myInviteCode}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCopyInviteCode}
+              className="px-4 min-h-[44px] rounded-[16px] bg-priSoft text-priInk font-bold text-xs md:text-sm hover:opacity-90 transition-opacity"
+            >
+              Copiar código
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={generateNewInviteCode}
+                aria-label="Gerar outro código"
+                className="w-11 h-11 rounded-[16px] bg-neutral text-muted hover:text-ink flex items-center justify-center transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                  <path d="M3 3v5h5" />
+                  <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                  <path d="M16 16h5v5" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="pt-3 border-t border-border text-xs text-muted">
+          Quem usar este código entra em Solicitações até você aprovar.
+        </div>
+      </div>
+
+      {/* Card 2: Solicitações */}
+      {isAdmin && (
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs">
+          <div className="flex items-center justify-between gap-2 pb-4 border-b border-border">
+            <h2 className="font-display text-base font-bold text-ink">
+              Solicitações
+            </h2>
+            <span className="text-xs font-bold text-pri">
+              {pendingRequests.length === 0
+                ? 'Nenhuma solicitação pendente'
+                : `${pendingRequests.length} ${
+                    pendingRequests.length === 1
+                      ? 'pessoa esperando aprovação'
+                      : 'pessoas esperando aprovação'
+                  }`}
+            </span>
+          </div>
+
+          {pendingRequests.length === 0 ? (
+            <p className="text-xs text-muted py-6 text-center">
+              Quando alguém pedir para entrar na família, o pedido aparece aqui.
+            </p>
+          ) : (
+            <div className="divide-y divide-border">
+              {pendingRequests.map((u) => {
+                const initial = (u.name || u.username || 'U')
+                  .trim()
+                  .charAt(0)
+                  .toUpperCase();
+                const isSwitch = Boolean(u.pendingFamilyId);
+                const isFamilyInvite =
+                  isSwitch ||
+                  (u.usageType === 'family' && Boolean(u.requestedInvite));
+
+                return (
+                  <div
+                    key={u.id}
+                    className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-full bg-priSoft text-priInk font-display font-bold text-sm flex items-center justify-center shrink-0">
+                        {initial}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-ink truncate">
+                          {u.name}
+                        </div>
+                        <div className="text-xs text-muted truncate mt-0.5">
+                          {u.username}
+                          {isSwitch
+                            ? ', pediu para mudar para esta família'
+                            : isFamilyInvite
+                              ? `, quer entrar com o código ${u.requestedInvite || myInviteCode}`
+                              : ', pediu cadastro para uso próprio'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:justify-end pl-13 sm:pl-0">
+                      <span
+                        className={`px-3 py-1 rounded-pill text-[11px] font-bold ${
+                          isFamilyInvite
+                            ? 'bg-priSoft text-priInk'
+                            : 'bg-neutral text-ink'
+                        }`}
+                      >
+                        {isSwitch
+                          ? 'Mudança de família'
+                          : isFamilyInvite
+                            ? 'Entrar na família'
+                            : 'Uso individual'}
+                      </span>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRejectRequest(u)}
+                        className="px-4 min-h-[38px] rounded-[14px] bg-card border border-border text-ink text-xs font-bold hover:bg-neutral transition-colors"
+                      >
+                        Recusar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleApproveRequest(u)}
+                        className="px-4 min-h-[38px] rounded-[14px] bg-fab text-fabIcon text-xs font-bold hover:opacity-95 transition-opacity"
+                      >
+                        Aprovar
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {session?.superAdmin && orphanError && (
-        <div className="mt-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-300">
-          <i className="fa-solid fa-circle-exclamation mr-2" />{orphanError}
+      {/* Card 3: Pessoas com acesso */}
+      <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs">
+        <div className="pb-4 border-b border-border">
+          <h2 className="font-display text-base font-bold text-ink">
+            Pessoas com acesso
+          </h2>
         </div>
-      )}
 
-      {session?.superAdmin && orphans.length > 0 && (
-        <div className="mt-8 bg-[#e3b04b]/[0.04] border border-[#e3b04b]/20 rounded-2xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-[#e3b04b]/10">
-            <h3 className="font-bold text-[#f2f0ea] flex items-center gap-2">
-              <i className="fa-solid fa-triangle-exclamation text-[#e3b04b]" />
-              Logins no Firebase sem cadastro no sistema ({orphans.length})
-            </h3>
-            <p className="text-xs text-[#8fa39a] mt-1">
-              Essas contas conseguem existir no Firebase mas não aparecem aqui. Vincule pra trazer pro sistema, ou exclua se for conta antiga.
-            </p>
-          </div>
-          {orphans.map((o) => (
-            <div key={o.uid} className="grid grid-cols-[1fr_auto] md:grid-cols-[minmax(0,2fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto] gap-x-4 gap-y-1 items-center px-5 py-3 border-b border-white/[0.04] last:border-0">
-              <div className="min-w-0">
-                <div className="font-semibold text-[#f2f0ea] truncate">{o.email || '(sem e-mail)'}</div>
-                <div className="text-xs text-[#8fa39a] truncate">{o.name || 'Sem nome'}</div>
-              </div>
-              <div className="hidden md:block text-xs text-[#8fa39a]">Criado em {o.createdAt ? new Date(o.createdAt).toLocaleDateString('pt-BR') : '-'}</div>
-              <div className="hidden md:block text-xs text-[#8fa39a]">Último acesso: {o.lastSignIn ? new Date(o.lastSignIn).toLocaleDateString('pt-BR') : 'nunca'}</div>
-              <div className="flex justify-end gap-2">
-                <button disabled={orphanBusy === o.uid} onClick={() => handleLinkOrphan(o)} className="px-3 h-9 rounded-lg bg-[#e3b04b] text-black text-xs font-bold hover:bg-[#f5d78a] transition-colors disabled:opacity-50">
-                  {orphanBusy === o.uid ? '...' : 'Vincular'}
-                </button>
-                <button disabled={orphanBusy === o.uid} onClick={() => setDeleteOrphan(o)} className="px-3 h-9 rounded-lg bg-white/5 text-[#8fa39a] text-xs font-bold hover:bg-red-500/20 hover:text-red-400 transition-colors disabled:opacity-50">
-                  Excluir
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+        <div className="divide-y divide-border">
+          {familyUsers.map((u) => {
+            const isMe = u.id === session?.id;
+            const isBlocked = u.status === 'inativo';
+            const initial = (u.name || u.username || 'U')
+              .trim()
+              .charAt(0)
+              .toUpperCase();
 
-      <ConfirmModal
-        isOpen={!!deleteOrphan}
-        title={'Excluir login do Firebase'}
-        message={`Isso apaga de vez o login ${deleteOrphan?.email || ''} do Firebase. A pessoa não vai mais conseguir entrar. Continuar?`}
-        confirmLabel="Excluir"
-        onConfirm={handleConfirmDeleteOrphan}
-        onCancel={() => setDeleteOrphan(null)}
-      />
-
-      {showForm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setShowForm(false)}>
-          <form className="bg-[#141d1a] border border-white/10 rounded-[20px] p-6 sm:p-8 w-full max-w-[540px] flex flex-col gap-4 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-2">{editingId ? 'Editar Usuário' : 'Novo Usuário'}</h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="sm:col-span-2">
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Nome Completo</label>
-                <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('name')} />
-                {errors.name && <span className="text-red-400 text-xs mt-1 block">{errors.name.message}</span>}
-              </div>
-
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Usuário (login)</label>
-                <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('username')} />
-              </div>
-
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">E-mail</label>
-                <input type="email" className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none disabled:opacity-50" {...register('email')} disabled={!!editingId} />
-              </div>
-
-              {!editingId && (
-                <div>
-                  <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Senha Inicial</label>
-                  <input type="password" className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('password')} />
+            return (
+              <div
+                key={u.id}
+                className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div
+                    className={`w-10 h-10 rounded-full font-display font-bold text-sm flex items-center justify-center shrink-0 ${
+                      isBlocked
+                        ? 'bg-neutral text-muted'
+                        : 'bg-priSoft text-priInk'
+                    }`}
+                  >
+                    {initial}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-sm text-ink truncate">
+                      {u.name}
+                    </div>
+                    <div className="text-xs text-muted truncate mt-0.5">
+                      {u.username}
+                      {u.email ? `, ${u.email}` : ''}
+                    </div>
+                  </div>
                 </div>
-              )}
 
-              <div>
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Cargo</label>
-                <Controller name="role" control={control} render={({ field }) => (
-                  <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
-                    <option value="usuario">Usuário Normal</option>
-                    <option value="gerente">Gerente</option>
-                    <option value="viewer">Visualizador</option>
-                    {(session?.superAdmin || field.value === 'admin') && (
-                      <option value="admin">Administrador</option>
-                    )}
-                  </CustomSelect>
-                )} />
-              </div>
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end pl-13 sm:pl-0">
+                  {isMe && (
+                    <span className="px-2.5 py-1 rounded-pill bg-priSoft text-priInk text-[11px] font-bold">
+                      Você
+                    </span>
+                  )}
 
-              <div className="sm:col-span-2">
-                <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase">Pessoa Financeira Vinculada</label>
-                <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-[#e3b04b] outline-none" {...register('person')} placeholder="Ex: Nome da pessoa que receberá os lançamentos" />
-              </div>
+                  {isBlocked ? (
+                    <span className="px-2.5 py-1 rounded-pill bg-spendSoft text-spendText text-[11px] font-bold">
+                      Bloqueado
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-pill bg-neutral text-ink text-[11px] font-bold">
+                      {getRoleLabel(u.role)}
+                    </span>
+                  )}
 
-              {watchedRole === 'gerente' && (
-                <div className="sm:col-span-2">
-                  <label className="block text-[0.8rem] font-semibold text-[#8fa39a] mb-1.5 uppercase text-blue-400">Pessoas Permitidas (Modo Gerente)</label>
-                  <input className="w-full p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] focus:border-blue-400 outline-none" {...register('allowedPersons')} placeholder="Ex: Eduardo, Maria (vazio = vê todos)" />
-                </div>
-              )}
-
-              {editingId && session?.superAdmin && (
-                <div className="sm:col-span-2 pt-3 border-t border-white/[0.08]">
-                  <label className="block text-[0.75rem] font-semibold text-amber-400 mb-1 uppercase">Mover Usuário de Família (SuperAdmin)</label>
-                  <p className="text-xs text-[#8fa39a] mb-2">
-                    Aviso: Seus dados anteriores não serão levados para a nova família. A migração de lançamentos antigos é manual.
-                  </p>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={newFamilyInvite}
-                      onChange={(e) => setNewFamilyInvite(e.target.value)}
-                      placeholder="Código de convite ou UID da nova família"
-                      className="flex-1 p-2.5 rounded-xl border border-white/[0.08] bg-white/[0.02] text-[#f2f0ea] text-sm focus:border-amber-400 outline-none"
-                    />
+                  {isAdmin && !isMe && (
                     <button
                       type="button"
-                      disabled={changingFamily || !newFamilyInvite.trim()}
-                      onClick={handleSuperAdminChangeFamily}
-                      className="px-4 py-2 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                      onClick={() => handleToggleBlock(u)}
+                      className="px-3.5 min-h-[38px] rounded-[14px] bg-card border border-border text-xs font-bold text-ink hover:bg-neutral transition-colors"
                     >
-                      {changingFamily ? 'Movendo...' : 'Mover Família'}
+                      {isBlocked ? 'Desbloquear' : 'Bloquear'}
+                    </button>
+                  )}
+
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      aria-label={`Editar ${u.name}`}
+                      onClick={() => openEditUserModal(u)}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  )}
+
+                  {isAdmin && !isMe && (
+                    <button
+                      type="button"
+                      aria-label={`Excluir ${u.name}`}
+                      onClick={() => {
+                        setUserToDelete(u);
+                        setDeleteConfirmText('');
+                      }}
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-spend hover:bg-spendSoft transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 6h18" />
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Modal Novo / Editar Usuário */}
+      <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/55 backdrop-blur-xs" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100vw-24px)] max-w-[480px] max-h-[90vh] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-[26px] bg-card border border-border p-6 text-ink shadow-2xl focus:outline-none">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="font-display text-lg font-bold text-ink">
+                {editingUser ? 'Editar usuário' : 'Novo usuário'}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Fechar"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="sr-only">
+              Dados de acesso e perfil do usuário.
+            </Dialog.Description>
+
+            <form onSubmit={handleSaveUser} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted mb-1">Nome</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Nome completo"
+                  className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1">
+                    Usuário (login)
+                  </label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="ex: ana.silva"
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1">E-mail</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="email@exemplo.com"
+                    className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-muted mb-1">
+                  {editingUser ? 'Nova senha (opcional)' : 'Senha inicial'}
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={
+                    editingUser
+                      ? 'Deixe em branco para manter a atual'
+                      : 'Mínimo de 6 caracteres'
+                  }
+                  className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1">Cargo</label>
+                  <Select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value)}
+                    ariaLabel="Cargo"
+                  >
+                    <option value="usuario">Membro</option>
+                    <option value="gerente">Gerente</option>
+                    <option value="admin">Administrador</option>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1">
+                    Pessoa vinculada
+                  </label>
+                  <Select
+                    value={person}
+                    onChange={(e) => setPerson(e.target.value)}
+                    ariaLabel="Pessoa vinculada"
+                  >
+                    <option value="">Nenhuma</option>
+                    {persons.map((p) => (
+                      <option key={p.id || p.name} value={p.name}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              {isSuperAdmin && editingUser && (
+                <div className="rounded-[18px] bg-neutral p-3.5 space-y-2.5">
+                  <div className="text-xs font-bold text-ink">
+                    Mover usuário de família (Super Admin)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <Select
+                        size="sm"
+                        value={newFamilyTarget}
+                        onChange={(e) => setNewFamilyTarget(e.target.value)}
+                        ariaLabel="Escolher família"
+                      >
+                        <option value="__SOLO__">
+                          Família própria (individual)
+                        </option>
+                        {(users || [])
+                          .filter((u) => u.role === 'admin' || u.id === u.familyId)
+                          .map((u) => {
+                            const fId = u.familyId || u.id || '';
+                            return (
+                              <option key={u.id} value={fId}>
+                                Família de {u.name} ({u.username})
+                              </option>
+                            );
+                          })}
+                      </Select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleMoveUserFamily}
+                      className="px-3.5 min-h-[38px] rounded-[14px] bg-priSoft text-priInk text-xs font-bold"
+                    >
+                      Mover
                     </button>
                   </div>
                 </div>
               )}
-            </div>
 
-            {error && <div className="p-3 mt-2 rounded-lg bg-red-500/20 border border-red-500/50 text-red-200 text-sm">{error}</div>}
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 min-h-[44px] rounded-[18px] bg-neutral text-ink font-bold text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-5 min-h-[44px] rounded-[18px] bg-fab text-fabIcon font-bold text-sm disabled:opacity-50"
+                >
+                  {submitting ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
 
-            <div className="flex justify-end gap-3 mt-2 pt-4 border-t border-white/[0.06]">
-              <button type="button" className="px-5 py-2.5 rounded-xl text-[#8fa39a] font-medium hover:text-white transition-colors" onClick={() => setShowForm(false)}>Cancelar</button>
-              <button type="submit" className="px-6 py-2.5 rounded-xl bg-[#e3b04b] text-[#1c1206] font-bold transition-all hover:scale-105" disabled={isSubmitting}>
-                {isSubmitting ? 'Salvando...' : 'Salvar Usuário'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {/* Double confirmation Delete User Dialog (typing EXCLUIR) */}
+      <Dialog.Root
+        open={Boolean(userToDelete)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUserToDelete(null);
+            setDeleteConfirmText('');
+          }
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-xs" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100vw-32px)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-[26px] bg-card border border-spend p-6 text-ink shadow-2xl focus:outline-none space-y-4">
+            <Dialog.Title className="font-display text-lg font-bold text-spendText">
+              Excluir usuário
+            </Dialog.Title>
+            <Dialog.Description className="text-xs text-muted leading-relaxed">
+              Isso remove o acesso de{' '}
+              <span className="font-bold text-ink">{userToDelete?.name}</span> ao Wynd.
+              Para confirmar, digite <span className="font-bold text-ink">EXCLUIR</span>{' '}
+              abaixo.
+            </Dialog.Description>
 
-      {/* Modal de confirmação extra para exclusão de outro usuário pelo admin */}
-      {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => {
-            if (!deletingUser) {
-              setDeleteTarget(null);
-              setDeleteConfirmText('');
-            }
-          }}
-        >
-          <div
-            className="bg-[#141d1a] border border-red-500/30 rounded-2xl p-6 sm:p-7 w-full max-w-[460px] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold text-[#f2f0ea] flex items-center gap-2 mb-2">
-              <i className="fa-solid fa-triangle-exclamation text-red-400" />
-              Excluir usuário permanentemente
-            </h3>
-            <p className="text-sm text-[#c9d2cf] mb-3">
-              Você está prestes a excluir <strong>{deleteTarget.name}</strong> ({deleteTarget.email}).
-              Isso apagará o login no Firebase, o cadastro e todos os lançamentos, contas e cartões pertencentes a este usuário.
-            </p>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#8fa39a] mb-1.5">
-              Digite <span className="text-red-400">EXCLUIR</span> para confirmar:
-            </label>
             <input
               type="text"
               value={deleteConfirmText}
               onChange={(e) => setDeleteConfirmText(e.target.value)}
-              placeholder="EXCLUIR"
-              className="w-full p-3 rounded-xl border border-white/10 bg-black/30 text-[#f2f0ea] outline-none focus:border-red-400 mb-5 font-mono uppercase"
+              placeholder="Digite EXCLUIR"
+              aria-label="Digite EXCLUIR para confirmar"
+              className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-spend"
             />
-            <div className="flex justify-end gap-3">
+
+            <div className="flex justify-end gap-2.5">
               <button
                 type="button"
-                disabled={deletingUser}
                 onClick={() => {
-                  setDeleteTarget(null);
+                  setUserToDelete(null);
                   setDeleteConfirmText('');
                 }}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[#8fa39a] hover:text-white transition-colors"
+                className="px-4 min-h-[44px] rounded-[18px] bg-neutral text-ink font-bold text-sm"
               >
                 Cancelar
               </button>
               <button
                 type="button"
-                disabled={deletingUser || deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR'}
-                onClick={handleConfirmDelete}
-                className="px-5 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                disabled={
+                  deletingUser ||
+                  deleteConfirmText.trim().toUpperCase() !== 'EXCLUIR'
+                }
+                onClick={handleConfirmDeleteUser}
+                className="px-5 min-h-[44px] rounded-[18px] bg-spend text-white font-bold text-sm disabled:opacity-40"
               >
-                {deletingUser ? 'Excluindo...' : 'Confirmar Exclusão'}
+                {deletingUser ? 'Excluindo...' : 'Excluir usuário'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Free Orphan Login Dialog */}
+      <Dialog.Root
+        open={Boolean(orphanToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setOrphanToDelete(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/60 backdrop-blur-xs" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100vw-32px)] max-w-[400px] -translate-x-1/2 -translate-y-1/2 rounded-[26px] bg-card border border-border p-6 text-ink shadow-2xl focus:outline-none space-y-4">
+            <Dialog.Title className="font-display text-lg font-bold text-ink">
+              Liberar login do Firebase
+            </Dialog.Title>
+            <Dialog.Description className="text-xs text-muted leading-relaxed">
+              Deseja remover o login solto{' '}
+              <span className="font-bold text-ink">{orphanToDelete?.label}</span> para
+              que ele possa ser cadastrado novamente?
+            </Dialog.Description>
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setOrphanToDelete(null)}
+                className="px-4 min-h-[44px] rounded-[18px] bg-neutral text-ink font-bold text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmFreeOrphan}
+                className="px-4 min-h-[44px] rounded-[18px] bg-spend text-white font-bold text-sm"
+              >
+                Liberar
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Manage Persons Dialog */}
+      <Dialog.Root open={isPersonsOpen} onOpenChange={setIsPersonsOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/55 backdrop-blur-xs" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100vw-24px)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 rounded-[26px] bg-card border border-border p-6 text-ink shadow-2xl focus:outline-none space-y-4">
+            <div className="flex items-center justify-between">
+              <Dialog.Title className="font-display text-lg font-bold text-ink">
+                Pessoas da família
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Fechar"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </Dialog.Close>
+            </div>
+            <Dialog.Description className="text-xs text-muted">
+              Nomes disponíveis para associar lançamentos e dividir despesas.
+            </Dialog.Description>
+
+            <form onSubmit={handleAddPerson} className="flex gap-2">
+              <input
+                type="text"
+                value={newPersonName}
+                onChange={(e) => setNewPersonName(e.target.value)}
+                placeholder="Nome da pessoa"
+                className="flex-1 min-h-[42px] px-3.5 py-2 rounded-[16px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+              />
+              <button
+                type="submit"
+                className="px-4 min-h-[42px] rounded-[16px] bg-priSoft text-priInk font-bold text-xs"
+              >
+                Adicionar
+              </button>
+            </form>
+
+            <div className="divide-y divide-border max-h-60 overflow-y-auto">
+              {persons.map((p) => (
+                <div
+                  key={p.id}
+                  className="py-2.5 flex items-center justify-between text-sm"
+                >
+                  <span className="font-semibold text-ink">{p.name}</span>
+                  {p.id && (
+                    <button
+                      type="button"
+                      onClick={() => removePerson(p.id!)}
+                      className="text-xs font-bold text-spendText hover:underline"
+                    >
+                      Remover
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
+
+export default Users;

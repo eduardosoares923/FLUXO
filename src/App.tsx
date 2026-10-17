@@ -12,9 +12,12 @@ const Accounts = lazy(() => import('./pages/Accounts'));
 const Cards = lazy(() => import('./pages/Cards'));
 const Transactions = lazy(() => import('./pages/Transactions'));
 const Subscriptions = lazy(() => import('./pages/Subscriptions'));
+const Goals = lazy(() => import('./pages/Goals'));
 const Reports = lazy(() => import('./pages/Reports'));
+const Tools = lazy(() => import('./pages/Tools'));
 const Users = lazy(() => import('./pages/Users'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Help = lazy(() => import('./pages/Help'));
 const Import = lazy(() => import('./pages/Import'));
 
 export default function App() {
@@ -41,11 +44,12 @@ export default function App() {
                 <Route path="/cards" element={<Cards />} />
                 <Route path="/transactions" element={<Transactions />} />
                 <Route path="/subscriptions" element={<Subscriptions />} />
-                <Route path="/goals" element={<Reports />} />
+                <Route path="/goals" element={<Goals />} />
                 <Route path="/reports" element={<Reports />} />
+                <Route path="/tools" element={<Tools />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/help" element={<Settings />} />
+                <Route path="/help" element={<Help />} />
                 <Route path="/import" element={<Import />} />
               </Route>
             </Route>

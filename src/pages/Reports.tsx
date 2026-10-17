@@ -1,533 +1,837 @@
-import React, { useMemo, useState, Suspense, lazy } from 'react';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, parseTxDate } from '../utils/format';
-import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
-import { CustomSelect } from '../components/CustomSelect';
-import { MoneyField, NumberField, MonthPicker, Tooltip } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { useUIStore } from '../stores/useUIStore';
+import {
+  formatCurrency,
+  maskCurrency,
+  parseTxDate,
+  formatDate,
+  normalize,
+} from '../utils/format';
+import { Transaction, Person, Card } from '../types';
 import { toast } from '../stores/useToastStore';
 import { auth } from '../firebase';
-import { Transaction, Account, User } from '../types';
+import { Select } from '../components/ui/Select';
+import { MoneyField } from '../components/ui/MoneyField';
+import { NumberField } from '../components/ui/NumberField';
 
-const ReportsCharts = lazy(() => import('../components/ReportsCharts'));
+const MONTH_NAMES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
 
-function shiftMonth(monthStr: string, delta: number) {
-  const [y, m] = monthStr.split('-').map(Number);
-  const d = new Date(y, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
+const MONTH_SHORT = [
+  'Jan',
+  'Fev',
+  'Mar',
+  'Abr',
+  'Mai',
+  'Jun',
+  'Jul',
+  'Ago',
+  'Set',
+  'Out',
+  'Nov',
+  'Dez',
+];
 
-function monthLabel(monthStr: string) {
-  const [y, m] = monthStr.split('-').map(Number);
-  return new Date(y, m - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-}
+export function Reports() {
+  const { data: transactions } = useCollection<Transaction>('transactions');
+  const { data: personsList } = useCollection<Person>('persons');
+  const { data: cards } = useCollection<Card>('cards');
+  const { data: settingsData } = useCollection<any>('settings');
+  const { canAccessTransaction, canAccessPerson, canAccessCard } = useAuth();
+  const { privacyMode, selectedPeriod } = useUIStore();
 
-export default function Reports() {
-  const { session, canAccessPerson } = useAuth() as { session: User; canAccessPerson: (p?: string, tx?: any) => boolean };
-  const { data: transactions, loading, error } = useCollection<Transaction>('transactions');
-  const { data: accounts } = useCollection<Account>('accounts');
-  const { data: personsList } = useCollection<any>('persons');
-
-  const now = new Date();
-  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedPerson, setSelectedPerson] = useState('todos');
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
-  const [simAmount, setSimAmount] = useState('');
-  const [simInstallments, setSimInstallments] = useState(1);
 
-  const prevMonthStr = useMemo(() => {
-    const [y, m] = selectedMonth.split('-').map(Number);
-    const prevDate = new Date(y, m - 2, 1);
-    return `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-  }, [selectedMonth]);
+  // Simulador de compra parcelada
+  const [simTotal, setSimTotal] = useState<number>(1800);
+  const [simInstallments, setSimInstallments] = useState<number>(10);
 
-  const availablePersons = useMemo(() => {
-    const list = (personsList || []).map((p) => p.name?.trim()).filter(Boolean);
-    const base = list.length > 0 ? list : ['Eduardo', 'Mãe', 'Rodrigo'];
-    return base.filter((p) => session.role === 'admin' || canAccessPerson(p));
-  }, [personsList, session, canAccessPerson]);
-
-  const accessibleTx = useMemo(() => transactions.filter((tx) => canAccessPerson(tx.person, tx)), [transactions, canAccessPerson]);
-
-  // Tendência dos últimos 6 meses (Receitas x Despesas), pro gráfico de linha
-  const last6MonthsTrend = useMemo(() => {
-    const buckets: Record<string, { income: number; expense: number }> = {};
-    const now = new Date();
-    const keys: string[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      keys.push(k);
-      buckets[k] = { income: 0, expense: 0 };
+  const reportMonth = useMemo(() => {
+    if (selectedPeriod && /^\d{4}-\d{2}$/.test(selectedPeriod)) {
+      return selectedPeriod;
     }
-    accessibleTx.forEach((tx) => {
-      const d = parseTxDate(tx.date);
-      if (!d) return;
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!buckets[k]) return;
-      if (tx.type === 'transfer_out' || tx.type === 'transfer_in' || tx.type === 'invoice_payment') return;
-      const amt = Number(tx.amount) || 0;
-      if (tx.type === 'income') buckets[k].income += amt;
-      else if (tx.type === 'expense') buckets[k].expense += amt;
-    });
-    return keys.map((k) => {
-      const [y, m] = k.split('-');
-      const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'short' });
-      return { month: label, Receitas: buckets[k].income, Despesas: buckets[k].expense };
-    });
-  }, [accessibleTx]);
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, [selectedPeriod]);
 
-  // MOTOR OTIMIZADO 2: Single-Pass Analyzer (1 loop faz o trabalho de 6)
-  const { currentTxs, metrics, prevMetrics, categoryStats, personStats } = useMemo(() => {
-    const curTxs: Transaction[] = [];
-    let curIncome = 0; let curExpense = 0; let curCards = 0;
-    let prevIncome = 0; let prevExpense = 0; let prevCards = 0;
-    const catMap = new Map(); const pMap = new Map();
+  const personOptions = useMemo(
+    () =>
+      (personsList || [])
+        .map((p) => p.name)
+        .filter((n): n is string => Boolean(n) && canAccessPerson(n)),
+    [personsList, canAccessPerson]
+  );
 
-    const targetPersonLower = selectedPerson !== 'todos' ? selectedPerson.toLowerCase() : null;
+  useEffect(() => {
+    if (personOptions.length === 1) {
+      setSelectedPerson(personOptions[0]);
+    } else if (selectedPerson !== 'todos' && !personOptions.includes(selectedPerson)) {
+      setSelectedPerson('todos');
+    }
+  }, [personOptions, selectedPerson]);
 
-    accessibleTx.forEach(tx => {
-      const d = parseTxDate(tx.date);
-      if (!d) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      
-      let txPersonMatch = false;
-      let amtForPerson = Number(tx.amount) || 0;
+  const budgetsMap = useMemo<Record<string, number>>(() => {
+    const doc = (settingsData || []).find((d: any) => d.id === 'budgets');
+    if (doc && doc.limits && typeof doc.limits === 'object') {
+      return doc.limits;
+    }
+    return {};
+  }, [settingsData]);
 
-      if (targetPersonLower) {
-        if (tx.isSplit && Array.isArray(tx.splitDetails)) {
-          const item = tx.splitDetails.find(d => d.person?.toLowerCase() === targetPersonLower);
-          if (item) { txPersonMatch = true; amtForPerson = Number(item.amount) || 0; }
-        } else {
-          txPersonMatch = !!tx.person?.toLowerCase().includes(targetPersonLower);
-        }
-        if (!txPersonMatch) return;
+  const visibleTxs = useMemo(
+    () => (transactions || []).filter((t) => canAccessTransaction(t)),
+    [transactions, canAccessTransaction]
+  );
+
+  const filterByMonthAndPerson = (ym: string) => {
+    const [yr, mo] = ym.split('-').map(Number);
+    return visibleTxs.filter((tx) => {
+      if (tx.type === 'transfer_in' || tx.type === 'transfer_out' || tx.type === 'invoice_payment') {
+        return false;
       }
+      const d = parseTxDate(tx.date);
+      if (!d) return false;
+      if (d.getFullYear() !== yr || d.getMonth() !== mo - 1) return false;
 
-      const isCurrent = key === selectedMonth;
-      const isPrev = key === prevMonthStr;
-      if (!isCurrent && !isPrev) return;
+      if (selectedPerson !== 'todos') {
+        const target = normalize(selectedPerson);
+        const inMain = normalize(tx.person) === target;
+        const inSplit =
+          tx.isSplit &&
+          Array.isArray(tx.splitDetails) &&
+          tx.splitDetails.some((s) => normalize(s.person) === target);
+        if (!inMain && !inSplit) return false;
+      }
+      return true;
+    });
+  };
 
-      const isCard = tx.paymentMethod?.startsWith('card_');
-      const isExpense = tx.type === 'expense';
+  const getEffectiveAmount = (tx: Transaction): number => {
+    const raw = Number(tx.amount) || 0;
+    if (selectedPerson !== 'todos' && tx.isSplit && Array.isArray(tx.splitDetails)) {
+      const detail = tx.splitDetails.find(
+        (s) => normalize(s.person) === normalize(selectedPerson)
+      );
+      if (detail) return Number(detail.amount) || 0;
+    }
+    return raw;
+  };
 
-      if (isCurrent) {
-        curTxs.push(tx);
-        if (isCard && isExpense) curCards += amtForPerson;
-        else if (!isCard) {
-          if (tx.type === 'income') curIncome += amtForPerson;
-          else if (isExpense) curExpense += amtForPerson;
-        }
+  const filteredTxs = useMemo(
+    () => filterByMonthAndPerson(reportMonth),
+    [visibleTxs, reportMonth, selectedPerson]
+  );
 
-        if (isExpense) {
-          const cat = tx.category?.trim() || 'Outros';
-          catMap.set(cat, (catMap.get(cat) || 0) + amtForPerson);
-          
-          if (!targetPersonLower) {
-            if (tx.isSplit && Array.isArray(tx.splitDetails)) {
-              tx.splitDetails.forEach(d => {
-                const p = d.person?.trim() || 'Eu';
-                pMap.set(p, (pMap.get(p) || 0) + (Number(d.amount) || 0));
-              });
-            } else {
-              const p = tx.person?.trim() || 'Eu';
-              pMap.set(p, (pMap.get(p) || 0) + amtForPerson);
-            }
-          }
-        }
-      } else if (isPrev) {
-        if (isCard && isExpense) prevCards += amtForPerson;
-        else if (!isCard) {
-          if (tx.type === 'income') prevIncome += amtForPerson;
-          else if (isExpense) prevExpense += amtForPerson;
-        }
+  const prevMonthInfo = useMemo(() => {
+    const [y, m] = reportMonth.split('-').map(Number);
+    const prevDate = new Date(y, (m || 1) - 2, 1);
+    const prevYM = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+    const prevName = MONTH_NAMES[prevDate.getMonth()] || 'mês anterior';
+    const txs = filterByMonthAndPerson(prevYM);
+    let income = 0;
+    let expense = 0;
+    txs.forEach((tx) => {
+      const val = getEffectiveAmount(tx);
+      if (tx.type === 'income') income += val;
+      else if (tx.type === 'expense') expense += val;
+    });
+    return { prevYM, prevName, income, expense };
+  }, [visibleTxs, reportMonth, selectedPerson]);
+
+  const summary = useMemo(() => {
+    let income = 0;
+    let expense = 0;
+    const byCategory: Record<string, number> = {};
+
+    filteredTxs.forEach((tx) => {
+      const val = getEffectiveAmount(tx);
+      if (tx.type === 'income') {
+        income += val;
+      } else if (tx.type === 'expense') {
+        expense += val;
+        const cat = tx.category || 'Outros';
+        byCategory[cat] = (byCategory[cat] || 0) + val;
       }
     });
 
-    const totalCurExpense = curExpense + curCards;
-    
-    // Process Maps to Arrays
-    const catArr = [...catMap.entries()]
-      .map(([name, value]) => ({ name, value, pct: totalCurExpense > 0 ? (value / totalCurExpense) * 100 : 0 }))
-      .sort((a, b) => b.value - a.value);
+    const balance = income - expense;
+    const savedPct = income > 0 ? Math.round((balance / income) * 100) : 0;
+    const committedPct = income > 0 ? Math.round((expense / income) * 100) : expense > 0 ? 100 : 0;
 
-    let pTotal = 0; for (const v of pMap.values()) pTotal += v;
-    const pArr = [...pMap.entries()]
-      .map(([name, value]) => ({ name, value, pct: pTotal > 0 ? (value / pTotal) * 100 : 0 }))
-      .sort((a, b) => b.value - a.value);
+    // Nota do mês
+    let grade = 'A+';
+    let gradeTitle = 'Ótimo controle';
+    let ringProgress = 92;
+    if (income <= 0 && expense <= 0) {
+      grade = 'A';
+      gradeTitle = 'Mês sem gastos';
+      ringProgress = 100;
+    } else if (committedPct <= 45) {
+      grade = 'A+';
+      gradeTitle = 'Ótimo controle';
+      ringProgress = Math.max(70, 100 - Math.round(committedPct * 0.5));
+    } else if (committedPct <= 65) {
+      grade = 'A';
+      gradeTitle = 'Bom equilíbrio';
+      ringProgress = 78;
+    } else if (committedPct <= 80) {
+      grade = 'B+';
+      gradeTitle = 'Dentro do esperado';
+      ringProgress = 65;
+    } else if (committedPct <= 95) {
+      grade = 'B';
+      gradeTitle = 'Atenção aos gastos';
+      ringProgress = 50;
+    } else if (committedPct <= 105) {
+      grade = 'C';
+      gradeTitle = 'No limite da renda';
+      ringProgress = 35;
+    } else {
+      grade = 'D';
+      gradeTitle = 'Acima da renda';
+      ringProgress = 20;
+    }
 
-    // Equity (Patrimônio)
-    const relevantAccounts = accounts.filter((a) => session.role === 'admin' || canAccessPerson(a.owner));
-    const equity = relevantAccounts.reduce((sum, a) => sum + (Number(a.balance) || 0) + (Number((a as any).computedBalance) || 0), 0);
+    const catEntries = Object.entries(byCategory)
+      .map(([name, val]) => {
+        const limit = Number(budgetsMap[name]) || 0;
+        const pct =
+          limit > 0
+            ? Math.min(100, (val / limit) * 100)
+            : expense > 0
+              ? Math.min(100, (val / expense) * 100)
+              : 0;
+        const isOver = limit > 0 && val > limit;
+        return { name, val, limit, pct, isOver };
+      })
+      .sort((a, b) => b.val - a.val);
+
+    const top5Expenses = filteredTxs
+      .filter((tx) => tx.type === 'expense')
+      .map((tx) => ({
+        id: tx.id || `${tx.description}-${tx.date}`,
+        description: tx.description,
+        amount: getEffectiveAmount(tx),
+      }))
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5);
 
     return {
-      currentTxs: curTxs,
-      metrics: { income: curIncome, expense: curExpense, cardsTotal: curCards, economy: curIncome - totalCurExpense, commitment: curIncome > 0 ? (totalCurExpense / curIncome) * 100 : (totalCurExpense > 0 ? 100 : 0), equity },
-      prevMetrics: { income: prevIncome, expense: prevExpense + prevCards, economy: prevIncome - (prevExpense + prevCards) },
-      categoryStats: catArr, personStats: pArr
+      income,
+      expense,
+      balance,
+      savedPct,
+      committedPct,
+      grade,
+      gradeTitle,
+      ringProgress,
+      catEntries,
+      top5Expenses,
     };
-  }, [accessibleTx, selectedMonth, prevMonthStr, selectedPerson, accounts, session, canAccessPerson]);
+  }, [filteredTxs, budgetsMap, selectedPerson]);
 
-  // Acerto do Mês: soma as despesas divididas do mês e calcula, por par de pessoas, quem deve quanto a quem.
+  const incomeDiffLabel = useMemo(() => {
+    if (prevMonthInfo.income <= 0) {
+      return summary.income > 0
+        ? `Sem receitas em ${prevMonthInfo.prevName}`
+        : `Igual a ${prevMonthInfo.prevName}`;
+    }
+    const pct = ((summary.income - prevMonthInfo.income) / prevMonthInfo.income) * 100;
+    const formatted = Math.abs(pct).toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    if (pct >= 0) {
+      return `+${formatted}% a mais que ${prevMonthInfo.prevName}`;
+    }
+    return `-${formatted}% a menos que ${prevMonthInfo.prevName}`;
+  }, [summary.income, prevMonthInfo]);
+
+  const expenseDiffInfo = useMemo(() => {
+    if (prevMonthInfo.expense <= 0) {
+      return {
+        text:
+          summary.expense > 0
+            ? `Sem despesas em ${prevMonthInfo.prevName}`
+            : `Igual a ${prevMonthInfo.prevName}`,
+        positive: summary.expense <= 0,
+      };
+    }
+    const pct = ((summary.expense - prevMonthInfo.expense) / prevMonthInfo.expense) * 100;
+    const formatted = Math.abs(pct).toLocaleString('pt-BR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    if (pct <= 0) {
+      return {
+        text: `-${formatted}% a menos que ${prevMonthInfo.prevName}`,
+        positive: true,
+      };
+    }
+    return {
+      text: `+${formatted}% a mais que ${prevMonthInfo.prevName}`,
+      positive: false,
+    };
+  }, [summary.expense, prevMonthInfo]);
+
+  // Acerto do mês (compensação líquida entre pares)
   const settlements = useMemo(() => {
-    const debts = new Map<string, Map<string, number>>();
-    const add = (from: string, to: string, amt: number) => {
-      if (!debts.has(from)) debts.set(from, new Map());
-      const m = debts.get(from)!;
-      m.set(to, (m.get(to) || 0) + amt);
-    };
-
-    accessibleTx.forEach((tx) => {
+    const [yr, mo] = reportMonth.split('-').map(Number);
+    const monthAllTxs = visibleTxs.filter((tx) => {
+      if (tx.type !== 'expense') return false;
       const d = parseTxDate(tx.date);
-      if (!d) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (key !== selectedMonth) return;
-      if (!tx.isSplit || !Array.isArray(tx.splitDetails) || !tx.paidBy) return;
-      tx.splitDetails.forEach((s) => {
-        if (s.person === tx.paidBy) return; // quem pagou não deve a si mesmo
-        add(s.person, tx.paidBy as string, Number(s.amount) || 0);
+      return d && d.getFullYear() === yr && d.getMonth() === mo - 1;
+    });
+
+    // netMatrix[debtor][creditor] = valor
+    const pairDebts: Record<string, Record<string, number>> = {};
+
+    monthAllTxs.forEach((tx) => {
+      if (!tx.isSplit || !Array.isArray(tx.splitDetails) || tx.splitDetails.length === 0) return;
+      const payer = (tx.paidBy || tx.person?.split(',')[0] || '').trim();
+      if (!payer) return;
+
+      tx.splitDetails.forEach((sd) => {
+        const debtor = (sd.person || '').trim();
+        const share = Number(sd.amount) || 0;
+        if (!debtor || share <= 0 || normalize(debtor) === normalize(payer)) return;
+        if (!pairDebts[debtor]) pairDebts[debtor] = {};
+        pairDebts[debtor][payer] = (pairDebts[debtor][payer] || 0) + share;
       });
     });
 
-    const seen = new Set<string>();
-    const result: { from: string; to: string; amount: number }[] = [];
-    debts.forEach((_, personA) => {
-      debts.get(personA)!.forEach((_amt, personB) => {
-        const pairKey = [personA, personB].sort().join('__');
-        if (seen.has(pairKey)) return;
-        seen.add(pairKey);
-        const aOwesB = debts.get(personA)?.get(personB) || 0;
-        const bOwesA = debts.get(personB)?.get(personA) || 0;
-        const net = aOwesB - bOwesA;
-        if (Math.abs(net) < 0.01) return;
-        if (net > 0) result.push({ from: personA, to: personB, amount: net });
-        else result.push({ from: personB, to: personA, amount: -net });
-      });
-    });
-    return result.sort((a, b) => b.amount - a.amount);
-  }, [accessibleTx, selectedMonth]);
+    const people = Array.from(
+      new Set([
+        ...Object.keys(pairDebts),
+        ...Object.values(pairDebts).flatMap((m) => Object.keys(m)),
+      ])
+    );
 
-  const topExpenses = useMemo(() =>
-    [...currentTxs]
-      .filter((tx) => tx.type === 'expense')
-      .sort((a, b) => Number(b.amount) - Number(a.amount))
-      .slice(0, 5),
-    [currentTxs]);
+    const results: { from: string; to: string; amount: number }[] = [];
+    for (let i = 0; i < people.length; i++) {
+      for (let j = i + 1; j < people.length; j++) {
+        const pA = people[i];
+        const pB = people[j];
+        const aOwesB = pairDebts[pA]?.[pB] || 0;
+        const bOwesA = pairDebts[pB]?.[pA] || 0;
+        const net = Number((aOwesB - bOwesA).toFixed(2));
+        if (net > 0.01) {
+          results.push({ from: pA, to: pB, amount: net });
+        } else if (net < -0.01) {
+          results.push({ from: pB, to: pA, amount: Math.abs(net) });
+        }
+      }
+    }
 
-  // Projeção de parcelas: soma, por mês futuro, as parcelas já agendadas (o parcelamento já cria todas as transações futuras de uma vez).
+    return results.sort((a, b) => b.amount - a.amount);
+  }, [visibleTxs, reportMonth]);
+
+  // Projeção de parcelas (próximos 6 meses a partir do mês selecionado)
   const installmentProjection = useMemo(() => {
-    const now = new Date();
-    const months: { key: string; label: string; total: number }[] = [];
+    const [yr, mo] = reportMonth.split('-').map(Number);
+    const buckets: { ym: string; label: string; total: number }[] = [];
+
     for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      months.push({ key, label: d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), total: 0 });
-    }
-    const byKey = new Map(months.map((m) => [m.key, m]));
-    accessibleTx.forEach((tx) => {
-      if (!tx.groupId || !tx.totalInstallments) return;
-      const d = parseTxDate(tx.date);
-      if (!d) return;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const m = byKey.get(key);
-      if (m) m.total += Number(tx.installmentAmount ?? tx.amount) || 0;
-    });
-    return months;
-  }, [accessibleTx]);
+      const d = new Date(yr, (mo || 1) - 1 + i, 1);
+      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = MONTH_SHORT[d.getMonth()];
 
-  const purchaseSimulation = useMemo(() => {
-    const amt = parseFloat(simAmount) || 0;
-    if (amt <= 0) return null;
-    const n = Math.max(1, Math.min(24, simInstallments));
-    const perInstallment = Math.round((amt / n) * 100) / 100;
-    return installmentProjection.map((m, idx) => ({
-      ...m,
-      comAcompra: m.total + (idx < n ? perInstallment : 0),
-    }));
-  }, [simAmount, simInstallments, installmentProjection]);
-
-  // Evolução de Patrimônio: reconstrói o saldo acumulado de meses anteriores subtraindo, do patrimônio de hoje,
-  // o fluxo líquido (receita - despesa - pagamento de fatura) de cada mês seguinte. Matemática exata, não uma estimativa.
-  const equityHistory = useMemo(() => {
-    const now = new Date();
-    const netByMonth: Record<string, number> = {};
-    const keys: string[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      keys.push(k);
-      netByMonth[k] = 0;
-    }
-    accessibleTx.forEach((tx) => {
-      const d = parseTxDate(tx.date);
-      if (!d) return;
-      const k = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      if (!(k in netByMonth)) return;
-      if (tx.type === 'transfer_out' || tx.type === 'transfer_in') return; // zero-soma, não muda o patrimônio total
-      const amt = Number(tx.amount) || 0;
-      if (tx.type === 'income') netByMonth[k] += amt;
-      else if (tx.type === 'expense' || tx.type === 'invoice_payment') netByMonth[k] -= amt;
-    });
-
-    const currentEquity = metrics.equity;
-    let running = currentEquity;
-    const points: { key: string; value: number }[] = [];
-    for (let i = keys.length - 1; i >= 0; i--) {
-      points.unshift({ key: keys[i], value: running });
-      running -= netByMonth[keys[i]];
-    }
-    return points.map((p) => {
-      const [y, m] = p.key.split('-');
-      const label = new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('pt-BR', { month: 'short' });
-      return { month: label, Patrimônio: Math.round(p.value * 100) / 100 };
-    });
-  }, [accessibleTx, metrics.equity]);
-
-  // Excel formatado: o servidor (api/export-report) monta o arquivo com as mesmas regras desta tela e o navegador baixa.
-  async function handleExportExcel() {
-    setExportMenuOpen(false);
-    if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
-    setExportingExcel(true);
-    try {
-      const idToken = await auth.currentUser?.getIdToken();
-      const response = await fetch('/api/export-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ month: selectedMonth, person: selectedPerson, format: 'xlsx' }),
+      let sum = 0;
+      visibleTxs.forEach((tx) => {
+        if (tx.type !== 'expense') return;
+        const totalInst = Number(tx.totalInstallments) || 1;
+        if (totalInst <= 1) return;
+        const txD = parseTxDate(tx.date);
+        if (!txD) return;
+        const txYM = `${txD.getFullYear()}-${String(txD.getMonth() + 1).padStart(2, '0')}`;
+        if (txYM === ym || tx.invoiceMonth === ym) {
+          sum += getEffectiveAmount(tx);
+        }
       });
-      // Se a função do servidor não estiver publicada, a Vercel devolve a página do app (HTML) em vez de JSON.
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.includes('application/json')) {
-        throw new Error(`A função /api/export-report não respondeu (status ${response.status}). Verifique se o deploy da pasta api terminou na Vercel.`);
+
+      buckets.push({ ym, label, total: sum });
+    }
+
+    const maxVal = Math.max(...buckets.map((b) => b.total), 1);
+    return buckets.map((b, idx) => ({
+      ...b,
+      heightPct: b.total > 0 ? Math.max(16, Math.round((b.total / maxVal) * 100)) : 8,
+      isPrimary: idx < 2,
+    }));
+  }, [visibleTxs, reportMonth, selectedPerson]);
+
+  // Simulador
+  const simResult = useMemo(() => {
+    const n = Math.max(1, Number(simInstallments) || 1);
+    const total = Math.max(0, Number(simTotal) || 0);
+    const perMonth = total / n;
+    const pctIncome =
+      summary.income > 0
+        ? ((perMonth / summary.income) * 100).toLocaleString('pt-BR', {
+            minimumFractionDigits: 1,
+            maximumFractionDigits: 1,
+          })
+        : null;
+    return { n, total, perMonth, pctIncome };
+  }, [simTotal, simInstallments, summary.income]);
+
+  const handleExportCSV = () => {
+    if (filteredTxs.length === 0) {
+      toast.warning('Não há transações no período selecionado.');
+      return;
+    }
+    let csv = 'Data;Descricao;Categoria;Pessoa;Tipo;Valor\n';
+    filteredTxs.forEach((t) => {
+      const d = formatDate(t.date);
+      const desc = `"${(t.description || '').replace(/"/g, '""')}"`;
+      const cat = `"${t.category || ''}"`;
+      const p = `"${t.person || ''}"`;
+      const type = t.type === 'income' ? 'Receita' : 'Despesa';
+      const val = getEffectiveAmount(t).toFixed(2).replace('.', ',');
+      csv += `${d};${desc};${cat};${p};${type};${val}\n`;
+    });
+
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `relatorio_${reportMonth}_${selectedPerson}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('CSV exportado.');
+  };
+
+  const handleExportExcel = async () => {
+    if (exportingExcel) return;
+    const user = auth?.currentUser;
+    if (!user) {
+      toast.error('Sua sessão no Firebase expirou. Saia e entre novamente.');
+      return;
+    }
+    setExportingExcel(true);
+    setExportMenuOpen(false);
+    toast.info('Gerando planilha Excel...');
+    try {
+      const idToken = await user.getIdToken();
+      const resp = await fetch('/api/export-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          period: reportMonth,
+          person: selectedPerson,
+        }),
+      });
+      if (!resp.ok) {
+        let msg = `Erro ${resp.status} ao gerar o Excel.`;
+        try {
+          const errJson = await resp.json();
+          if (errJson?.error) msg = errJson.error;
+        } catch {
+          // ignora
+        }
+        toast.error(msg);
+        return;
       }
-      let result: any;
-      try {
-        result = (await response.json()) || {};
-      } catch {
-        throw new Error(`Resposta inválida do servidor (status ${response.status}).`);
-      }
-      if (!response.ok) throw new Error(result.error || `Erro no servidor (status ${response.status})`);
-      if (result.success !== true || !result.filename || !result.mime || !result.base64) throw new Error('Resposta inválida do servidor.');
-      const binary = atob(result.base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-      const url = URL.createObjectURL(new Blob([bytes], { type: result.mime }));
-      const a = document.createElement('a'); a.href = url; a.download = result.filename;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      toast.success('Relatório em Excel gerado!');
-    } catch (err: any) {
-      console.error('Erro ao exportar em Excel:', err);
-      toast.error(err.message || 'Erro ao gerar o relatório em Excel.');
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Wynd-Relatorio-${reportMonth}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Planilha Excel baixada.');
+    } catch {
+      toast.error('Não foi possível conectar à função de exportação.');
     } finally {
       setExportingExcel(false);
     }
-  }
+  };
 
-  function handleExportCSV() {
-    if (currentTxs.length === 0) return toast.warning('Não há lançamentos no período para exportar.');
-    const headers = ['Data', 'Descricao', 'Categoria', 'Pessoa', 'Tipo', 'Valor', 'Metodo'];
-    const rows = currentTxs.map((tx) => [
-      tx.date, `"${(tx.description || '').replace(/"/g, '""')}"`, `"${(tx.category || '').replace(/"/g, '""')}"`, `"${(tx.person || '').replace(/"/g, '""')}"`,
-      tx.type === 'income' ? 'Receita' : (tx.type === 'transfer_out' || tx.type === 'transfer_in') ? 'Transferência' : tx.type === 'invoice_payment' ? 'Pagamento de Fatura' : 'Despesa', Number(tx.amount).toFixed(2).replace('.', ','), tx.paymentMethod || 'Conta',
-    ]);
-    const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `relatorio_${selectedMonth}_${selectedPerson}.csv`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    toast.success('Relatório exportado com sucesso!');
-  }
-
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-  if (error) return <PageError error={error} title={'Erro ao carregar relatórios'} />;
-
-  const currentTotalExpense = metrics.expense + metrics.cardsTotal;
-  const expenseDiff = prevMetrics.expense > 0 ? ((currentTotalExpense - prevMetrics.expense) / prevMetrics.expense) * 100 : 0;
-  const incomeDiff = prevMetrics.income > 0 ? ((metrics.income - prevMetrics.income) / prevMetrics.income) * 100 : 0;
+  const circleRadius = 22;
+  const circleCircumference = 2 * Math.PI * circleRadius;
+  const strokeDashoffset =
+    circleCircumference - (summary.ringProgress / 100) * circleCircumference;
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[1000px] mx-auto p-4 sm:p-6 pb-12">
-      <div className="flex flex-col md:flex-row items-center justify-between mb-8 gap-4 bg-white/[0.02] border border-white/[0.08] p-4 sm:p-6 rounded-3xl shadow-lg">
-        <h2 className="font-display text-[34px] leading-tight font-bold text-ink">Relatórios</h2>
-        <p className="hidden print:block text-sm text-[#8fa39a]">{selectedMonth} &bull; {selectedPerson === 'todos' ? 'Todos (Consolidado)' : selectedPerson}</p>
-        <div className="no-print flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <MonthPicker value={selectedMonth} onChange={setSelectedMonth} />
-          {availablePersons.length > 1 ? (
-            <CustomSelect value={selectedPerson} onChange={(e) => setSelectedPerson(e.target.value)} className="flex-1 md:flex-none">
-              <option value="todos">Todos (Consolidado)</option>
-              {availablePersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-            </CustomSelect>
-          ) : availablePersons.length === 1 ? (
-            <Tooltip content="Relatório desta pessoa">
-              <div className="flex items-center gap-2 px-4 h-11 rounded-xl border border-white/10 bg-black/20 text-[#f2f0ea] text-sm">
-                <i className="fa-solid fa-user text-[#8fa39a] text-xs" />
-                <span className="truncate max-w-[160px]">{availablePersons[0]}</span>
-              </div>
-            </Tooltip>
-          ) : null}
+    <div className="space-y-5 pb-8">
+      {/* Header Filters & Export Actions */}
+      <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center gap-2">
+          {personOptions.length === 1 ? (
+            <span className="px-4 min-h-[42px] inline-flex items-center rounded-[18px] bg-card border border-border text-sm font-bold text-ink">
+              {personOptions[0]}
+            </span>
+          ) : (
+            <div className="w-48">
+              <Select
+                value={selectedPerson}
+                onChange={(e) => setSelectedPerson(e.target.value)}
+                ariaLabel="Filtrar por pessoa"
+              >
+                <option value="todos">Todas as pessoas</option>
+                {personOptions.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2.5 ml-auto">
           <div className="relative">
-            <Tooltip content="Exportar relatório">
-              <button onClick={() => setExportMenuOpen((v) => !v)} disabled={exportingExcel} aria-label="Exportar relatório" className="h-11 px-4 flex items-center gap-2 rounded-xl bg-[#10b981]/20 text-[#10b981] hover:bg-[#10b981]/30 transition-colors text-sm font-semibold disabled:opacity-60">
-                <i className={`fa-solid ${exportingExcel ? 'fa-spinner fa-spin' : 'fa-file-export'}`} />
-                <span>{exportingExcel ? 'Gerando...' : 'Exportar'}</span>
-                <i className="fa-solid fa-chevron-down text-[10px]" />
-              </button>
-            </Tooltip>
+            <button
+              type="button"
+              disabled={exportingExcel}
+              onClick={() => setExportMenuOpen((v) => !v)}
+              className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-sm flex items-center gap-2 hover:border-pri/40 transition-colors disabled:opacity-50"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" x2="12" y1="15" y2="3" />
+              </svg>
+              <span>{exportingExcel ? 'Gerando...' : 'Exportar'}</span>
+            </button>
+
             {exportMenuOpen && (
               <>
-                <div className="fixed inset-0 z-30" onClick={() => setExportMenuOpen(false)} />
-                <div className="absolute right-0 z-40 mt-2 w-72 overflow-hidden rounded-xl border border-white/10 bg-[#1a2422] shadow-2xl">
-                  <button onClick={handleExportExcel} className="w-full text-left px-4 py-3 text-sm text-[#f2f0ea] hover:bg-white/5 transition-colors">
-                    <span className="flex items-center gap-2 font-semibold"><i className="fa-solid fa-file-excel text-[#10b981]" /> Excel formatado (.xlsx)</span>
-                    <span className="mt-0.5 block text-xs text-[#8fa39a]">Resumo, transações, categorias e evolução, com totais em fórmulas</span>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setExportMenuOpen(false)}
+                />
+                <div className="absolute right-0 mt-2 w-60 rounded-[20px] bg-card border border-border shadow-2xl z-50 p-1.5">
+                  <button
+                    type="button"
+                    onClick={handleExportExcel}
+                    className="w-full text-left px-3.5 py-2.5 rounded-[14px] text-sm font-semibold text-ink hover:bg-neutral flex items-center gap-2.5 transition-colors"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-pri shrink-0" />
+                    <div>
+                      <div>Excel formatado (.xlsx)</div>
+                      <div className="text-[11px] text-muted font-normal">
+                        Resumo, categorias e lançamentos
+                      </div>
+                    </div>
                   </button>
-                  <button onClick={() => { setExportMenuOpen(false); handleExportCSV(); }} className="w-full text-left px-4 py-3 text-sm text-[#f2f0ea] hover:bg-white/5 transition-colors border-t border-white/5">
-                    <span className="flex items-center gap-2 font-semibold"><i className="fa-solid fa-file-csv text-[#8fa39a]" /> CSV simples (.csv)</span>
-                    <span className="mt-0.5 block text-xs text-[#8fa39a]">Só os lançamentos, sem formatação</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExportMenuOpen(false);
+                      handleExportCSV();
+                    }}
+                    className="w-full text-left px-3.5 py-2.5 rounded-[14px] text-sm font-semibold text-ink hover:bg-neutral flex items-center gap-2.5 transition-colors"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-muted shrink-0" />
+                    <div>
+                      <div>CSV simples (.csv)</div>
+                      <div className="text-[11px] text-muted font-normal">
+                        Lista rápida de transações
+                      </div>
+                    </div>
                   </button>
                 </div>
               </>
             )}
           </div>
-          <Tooltip content="Imprimir ou salvar PDF">
-            <button onClick={() => window.print()} onContextMenu={(e) => e.preventDefault()} aria-label="Imprimir ou salvar PDF" className="w-11 h-11 flex items-center justify-center rounded-xl bg-white/10 text-[#f2f0ea] hover:bg-white/20 transition-colors"><i className="fa-solid fa-print" /></button>
-          </Tooltip>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-sm flex items-center gap-2 hover:border-pri/40 transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            <span>Imprimir</span>
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#34d399]" />
-          <span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Receitas</span>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] font-mono block mb-2">{formatCurrency(metrics.income)}</strong>
-          {prevMetrics.income > 0 && (
-            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md ${incomeDiff >= 0 ? 'bg-[#34d399]/10 text-[#34d399]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
-              <i className={`fa-solid ${incomeDiff >= 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`} /> {Math.abs(incomeDiff).toFixed(1)}% vs anterior
-            </span>
-          )}
-        </div>
-
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f87171]" />
-          <span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Despesas Totais</span>
-          <strong className="text-2xl sm:text-3xl font-bold text-[#f2f0ea] font-mono block mb-2">{formatCurrency(currentTotalExpense)}</strong>
-          <span className="text-xs text-[#8fa39a] block mb-2">Contas: {formatCurrency(metrics.expense)} &bull; Cartões: {formatCurrency(metrics.cardsTotal)}</span>
-          {prevMetrics.expense > 0 && (
-            <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md ${expenseDiff <= 0 ? 'bg-[#34d399]/10 text-[#34d399]' : 'bg-[#f87171]/10 text-[#f87171]'}`}>
-              <i className={`fa-solid ${expenseDiff <= 0 ? 'fa-arrow-trend-down' : 'fa-arrow-trend-up'}`} /> {Math.abs(expenseDiff).toFixed(1)}% vs anterior
-            </span>
-          )}
-        </div>
-
-        <div className="bg-gradient-to-br from-[#1a2320] to-[#141d1a] border border-white/[0.08] rounded-3xl p-6 shadow-xl relative overflow-hidden">
-          <div className={`w-1 absolute top-0 bottom-0 left-0 ${metrics.economy >= 0 ? 'bg-[#34d399]' : 'bg-[#f87171]'}`} />
-          <span className="block text-[#8fa39a] text-sm uppercase tracking-wider font-semibold mb-1">Economia Líquida</span>
-          <strong className={`text-2xl sm:text-3xl font-bold font-mono block mb-2 ${metrics.economy >= 0 ? 'text-[#34d399]' : 'text-[#f87171]'}`}>{formatCurrency(metrics.economy)}</strong>
-          <span className="text-xs text-[#8fa39a]">Comprometimento: {metrics.commitment.toFixed(1)}%</span>
-        </div>
-      </div>
-
-      {currentTxs.length > 0 && (
-        <div className={`flex items-center gap-4 p-5 rounded-2xl mb-8 border ${metrics.commitment > 70 ? 'bg-red-500/10 border-red-500/20' : metrics.commitment < 50 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-blue-500/10 border-blue-500/20'}`}>
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${metrics.commitment > 70 ? 'bg-red-500/20 text-red-500' : metrics.commitment < 50 ? 'bg-emerald-500/20 text-emerald-500' : 'bg-blue-500/20 text-blue-500'}`}>
-            <i className={`fa-solid ${metrics.commitment > 70 ? 'fa-triangle-exclamation' : metrics.commitment < 50 ? 'fa-piggy-bank' : 'fa-chart-line'}`} />
+      {/* Row 1: 4 Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Receitas</div>
+          <div className="font-display text-2xl font-bold text-ink tracking-tight">
+            {maskCurrency(summary.income, privacyMode)}
           </div>
-          <div className="flex-1">
-            <strong className={`block text-lg mb-0.5 ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
-              {metrics.commitment > 70 ? 'Atenção: Alto Comprometimento de Renda' : metrics.commitment < 50 ? 'Excelente Gestão Financeira' : 'Orçamento sob Controle'}
-            </strong>
-            <p className="text-sm text-white/70">
-              {metrics.commitment > 70 ? `Você comprometeu ${metrics.commitment.toFixed(0)}% da sua receita neste mês. Considere rever despesas.` : metrics.commitment < 50 ? `Você economizou ${formatCurrency(metrics.economy)} este mês. Ótimo momento para aportar.` : `Seus gastos representam ${metrics.commitment.toFixed(0)}% da receita. Sua saúde financeira segue equilibrada.`}
-            </p>
+          <div className="text-xs font-semibold text-pri mt-1.5">{incomeDiffLabel}</div>
+        </div>
+
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Despesas</div>
+          <div className="font-display text-2xl font-bold text-ink tracking-tight">
+            {maskCurrency(summary.expense, privacyMode)}
           </div>
-          <Tooltip content="Indicador simplificado baseado na porcentagem de comprometimento de renda do mês.">
-            <div className="text-center shrink-0 pl-4 border-l border-white/10">
-              <div className={`text-3xl font-black font-mono ${metrics.commitment > 70 ? 'text-red-400' : metrics.commitment < 50 ? 'text-emerald-400' : 'text-blue-400'}`}>
-                {Math.max(0, Math.min(100, Math.round(100 - metrics.commitment)))}
-              </div>
-              <div className="text-[9px] uppercase tracking-wider text-[#8fa39a] font-bold">Nota do mês</div>
+          <div
+            className={`text-xs font-semibold mt-1.5 ${
+              expenseDiffInfo.positive ? 'text-pri' : 'text-spendText'
+            }`}
+          >
+            {expenseDiffInfo.text}
+          </div>
+        </div>
+
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Saldo do mês</div>
+          <div
+            className={`font-display text-2xl font-bold tracking-tight ${
+              summary.balance >= 0 ? 'text-pri' : 'text-spendText'
+            }`}
+          >
+            {maskCurrency(summary.balance, privacyMode)}
+          </div>
+          <div className="text-xs font-semibold text-pri mt-1.5">
+            {summary.income > 0
+              ? summary.balance >= 0
+                ? `Sobrou ${summary.savedPct}% da renda`
+                : `Excedeu ${Math.abs(summary.savedPct)}% da renda`
+              : 'Sem receitas registradas'}
+          </div>
+        </div>
+
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs flex items-center gap-4">
+          <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
+            <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+              <circle
+                cx="28"
+                cy="28"
+                r={circleRadius}
+                fill="none"
+                stroke="var(--track)"
+                strokeWidth="5"
+              />
+              <circle
+                cx="28"
+                cy="28"
+                r={circleRadius}
+                fill="none"
+                stroke={summary.committedPct > 95 ? 'var(--spend)' : 'var(--pri)'}
+                strokeWidth="5"
+                strokeLinecap="round"
+                strokeDasharray={circleCircumference}
+                strokeDashoffset={strokeDashoffset}
+              />
+            </svg>
+            <span className="absolute font-display text-sm font-bold text-ink">
+              {summary.grade}
+            </span>
+          </div>
+
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-muted">Nota do mês</div>
+            <div className="font-display text-base font-bold text-ink truncate">
+              {summary.gradeTitle}
             </div>
-          </Tooltip>
-        </div>
-      )}
-
-      {settlements.length > 0 && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
-          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-handshake text-[#e3b04b]" /> Acerto do Mês</h3>
-          <div className="flex flex-col gap-2">
-            {settlements.map((s, i) => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03]">
-                <span className="text-sm text-[#f2f0ea]"><strong>{s.from}</strong> deve <strong>{formatCurrency(s.amount)}</strong> para <strong>{s.to}</strong></span>
-              </div>
-            ))}
+            <div className="text-xs text-muted mt-0.5">
+              Compromete {summary.committedPct}% da renda
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {topExpenses.length > 0 && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
-          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-ranking-star text-[#e3b04b]" /> Top 5 Maiores Gastos do Mês</h3>
-          <div className="flex flex-col gap-2">
-            {topExpenses.map((tx, i) => (
-              <div key={tx.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03]">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-6 h-6 rounded-full bg-[#e3b04b]/15 text-[#e3b04b] text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-[#f2f0ea] truncate">{tx.description}</div>
-                    <div className="text-xs text-[#8fa39a]">{tx.category} &bull; {tx.person}</div>
+      {/* Row 2: Gastos por categoria (with budgets) & Top 5 maiores gastos */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-7 rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <h2 className="font-display text-base font-bold text-ink mb-4">
+            Gastos por categoria
+          </h2>
+
+          {summary.catEntries.length === 0 ? (
+            <p className="text-xs text-muted py-8 text-center">
+              Nenhuma despesa registrada neste mês.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {summary.catEntries.map((item) => (
+                <div key={item.name} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-ink">{item.name}</span>
+                    <span
+                      className={
+                        item.isOver
+                          ? 'font-bold text-spendText'
+                          : 'font-semibold text-muted'
+                      }
+                    >
+                      {item.limit > 0
+                        ? `${maskCurrency(item.val, privacyMode)} de ${maskCurrency(item.limit, privacyMode)}`
+                        : maskCurrency(item.val, privacyMode)}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-track overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        item.isOver ? 'bg-spend' : 'bg-pri'
+                      }`}
+                      style={{ width: `${Math.max(4, item.pct)}%` }}
+                    />
                   </div>
                 </div>
-                <strong className="font-mono text-[#f2f0ea] shrink-0 pl-2">{formatCurrency(tx.amount)}</strong>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
 
-      {installmentProjection.some((m) => m.total > 0) && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 shadow-xl mb-8">
-          <h3 className="text-lg font-bold text-[#f2f0ea] mb-4 flex items-center gap-2"><i className="fa-solid fa-calendar-days text-[#e3b04b]" /> Projeção de Parcelas (6 meses)</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
-            {(purchaseSimulation || installmentProjection).map((m) => (
-              <div key={m.key} className="bg-white/[0.03] rounded-xl p-3 text-center">
-                <div className="text-[10px] uppercase tracking-wider text-[#8fa39a] font-bold mb-1 capitalize">{m.label}</div>
-                <div className="font-mono text-sm text-[#f2f0ea]">{formatCurrency(m.total)}</div>
-                {purchaseSimulation && (m as any).comAcompra !== m.total && (
-                  <div className="font-mono text-xs text-[#e3b04b] mt-0.5">→ {formatCurrency((m as any).comAcompra)}</div>
-                )}
+        <div className="lg:col-span-5 rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <h2 className="font-display text-base font-bold text-ink mb-4">
+            Top 5 maiores gastos
+          </h2>
+
+          {summary.top5Expenses.length === 0 ? (
+            <p className="text-xs text-muted py-8 text-center">
+              Sem gastos lançados neste mês.
+            </p>
+          ) : (
+            <div className="divide-y divide-border">
+              {summary.top5Expenses.map((tx, idx) => (
+                <div
+                  key={tx.id}
+                  className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="text-xs font-bold text-muted w-4">{idx + 1}</span>
+                    <span className="text-sm font-bold text-ink truncate">
+                      {tx.description}
+                    </span>
+                  </div>
+                  <span className="font-display text-sm font-bold text-spendText shrink-0">
+                    {maskCurrency(tx.amount, privacyMode)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Row 3: Acerto do mês | Projeção de parcelas | Simular compra parcelada */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Acerto do mês */}
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs flex flex-col justify-between gap-4">
+          <div>
+            <h2 className="font-display text-base font-bold text-ink">Acerto do mês</h2>
+            <p className="text-xs text-muted mt-1">
+              Despesas divididas entre as pessoas da família.
+            </p>
+          </div>
+
+          {settlements.length === 0 ? (
+            <div className="rounded-[18px] bg-priSoft p-4 flex items-center justify-between">
+              <span className="text-xs font-bold text-priInk">
+                Nenhum acerto pendente no mês
+              </span>
+              <span className="font-display text-sm font-bold text-priInk">R$ 0,00</span>
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {settlements.map((s, i) => (
+                <div
+                  key={`${s.from}-${s.to}-${i}`}
+                  className="rounded-[18px] bg-priSoft p-4 flex items-center justify-between gap-2"
+                >
+                  <span className="text-sm font-bold text-priInk">
+                    {s.from} deve a {s.to}
+                  </span>
+                  <span className="font-display text-base font-bold text-priInk shrink-0">
+                    {maskCurrency(s.amount, privacyMode)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Projeção de parcelas */}
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs flex flex-col justify-between gap-4">
+          <h2 className="font-display text-base font-bold text-ink">
+            Projeção de parcelas
+          </h2>
+
+          <div className="grid grid-cols-6 gap-2.5 items-end h-28 pt-2">
+            {installmentProjection.map((bar) => (
+              <div
+                key={bar.ym}
+                className="flex flex-col items-center justify-end h-full gap-1.5"
+              >
+                <div className="w-full flex-1 flex items-end">
+                  <div
+                    className={`w-full rounded-t-[8px] transition-all ${
+                      bar.isPrimary ? 'bg-pri' : 'bg-pri/45'
+                    }`}
+                    style={{ height: `${bar.heightPct}%` }}
+                  />
+                </div>
+                <span className="text-[11px] font-bold text-muted">{bar.label}</span>
               </div>
             ))}
           </div>
 
-          <div className="border-t border-white/10 pt-4">
-            <p className="text-xs text-[#8fa39a] mb-3 flex items-center gap-2"><i className="fa-solid fa-circle-question" /> Simulador "Posso comprar?": compara o que você já tem parcelado com o que ficaria se somar essa compra. Não considera sua receita, é só uma comparação de comprometimento.</p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <MoneyField placeholder="Valor da compra" value={simAmount} onChange={(e) => setSimAmount(e.target.value)} className="flex-1" />
-              <NumberField min={1} max={24} placeholder="Em quantas vezes" value={simInstallments} onChange={(e) => setSimInstallments(parseInt(e.target.value) || 1)} className="w-full sm:w-40" />
+          <p className="text-xs text-muted">Parcelas a pagar nos próximos meses.</p>
+        </div>
+
+        {/* Simular compra parcelada */}
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs flex flex-col justify-between gap-3">
+          <h2 className="font-display text-base font-bold text-ink">
+            Simular compra parcelada
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-bold text-muted mb-1">
+                Valor da compra
+              </label>
+              <MoneyField
+                value={simTotal}
+                onValueChange={setSimTotal}
+                ariaLabel="Valor da compra"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-muted mb-1">
+                Em quantas vezes
+              </label>
+              <NumberField
+                value={simInstallments}
+                onValueChange={setSimInstallments}
+                min={1}
+                max={48}
+                ariaLabel="Em quantas vezes"
+              />
             </div>
           </div>
+
+          <div className="rounded-[18px] bg-priSoft p-3.5 text-xs font-semibold text-priInk leading-relaxed">
+            {formatCurrency(simResult.total)} em {simResult.n}x são{' '}
+            <span className="font-bold">{formatCurrency(simResult.perMonth)}</span> por mês
+            {simResult.pctIncome ? `, ${simResult.pctIncome}% da renda.` : '.'}
+          </div>
         </div>
-      )}
-
-      <Suspense fallback={<div className="h-40 flex items-center justify-center text-[#8fa39a] text-sm"><i className="fa-solid fa-spinner fa-spin mr-2" /> Carregando gráficos...</div>}>
-        <ReportsCharts
-          categoryStats={categoryStats}
-          personStats={personStats}
-          selectedPerson={selectedPerson}
-          last6MonthsTrend={last6MonthsTrend}
-          equityHistory={equityHistory}
-        />
-      </Suspense>
-
-      {currentTxs.length === 0 && (
-        <EmptyState icon="fa-chart-simple" title={'Sem dados para este período'} description="Selecione outro mês ou lance transações para visualizar as análises financeiras." />
-      )}
+      </div>
     </div>
   );
 }
+
+export default Reports;

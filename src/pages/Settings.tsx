@@ -1,565 +1,695 @@
-import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useCollection } from '../hooks/useCollection';
+import { useAuth } from '../context/AuthContext';
 import { useUIStore, THEME_OPTIONS, ThemeMode } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { CustomSelect } from '../components/CustomSelect';
-import { MoneyField, FileDropzone, Tooltip } from '../components/ui';
-import { PageLoading } from '../components/StateFeedback';
-import { auth, db } from '../firebase';
-import { User } from '../types';
+import { db, auth } from '../firebase';
+import {
+  collection,
+  getDocs,
+  writeBatch,
+  doc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  deleteField,
+  query,
+  where,
+} from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
+import { MoneyField } from '../components/ui/MoneyField';
 
 const DEFAULT_CATEGORIES = [
-  'Alimentação', 'Moradia', 'Transporte', 'Saúde', 'Educação',
-  'Lazer', 'Salário', 'Investimentos', 'Assinaturas', 'Outros',
+  'Moradia',
+  'Mercado',
+  'Transporte',
+  'Lazer',
+  'Saúde',
+  'Assinaturas',
+  'Restaurantes',
+  'Salário',
 ];
 
-const ICON_OPTIONS = [
-  'fa-bag-shopping', 'fa-house', 'fa-car', 'fa-bus', 'fa-heart-pulse', 'fa-graduation-cap',
-  'fa-gamepad', 'fa-film', 'fa-plane', 'fa-utensils', 'fa-mug-hot', 'fa-dumbbell',
-  'fa-gift', 'fa-paw', 'fa-baby', 'fa-shirt', 'fa-wrench', 'fa-bolt',
-  'fa-mobile-screen', 'fa-money-bill-wave', 'fa-piggy-bank', 'fa-chart-line', 'fa-rotate', 'fa-tag',
-];
+export function Settings() {
+  const { session, logout } = useAuth();
+  const { themeMode, setThemeMode, selectedPeriod } = useUIStore();
+  const { data: settingsDocs } = useCollection<any>('settings');
+  const { data: allUsers } = useCollection<any>('users', {}, { unscoped: true });
 
-export default function Settings() {
-  const { session, hasPermission, logout } = useAuth() as {
-    session: User;
-    hasPermission: (r: string, a?: string) => boolean;
-    logout: () => Promise<void>;
-  };
-  const { theme, themeMode, setThemeMode } = useUIStore();
-
-  const { data: accounts, saveRecord: saveAccount } = useCollection('accounts');
-  const { data: cards, saveRecord: saveCard } = useCollection('cards');
-  const { data: transactions, saveRecord: saveTx } = useCollection('transactions');
-  const { data: subscriptions, saveRecord: saveSub } = useCollection('subscriptions');
-  const { data: persons, saveRecord: savePerson } = useCollection('persons');
-  const { data: paidInvoices, saveRecord: savePaidInvoice } = useCollection('paidInvoices');
-
-  const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
-  const [categoryStyles, setCategoryStyles] = useState<Record<string, { icon: string; color: string }>>({});
-  const [newCat, setNewCat] = useState('');
-  const [loadingCats, setLoadingCats] = useState(true);
-  const [budgets, setBudgets] = useState<Record<string, number>>({});
-
-  const [restoreFile, setRestoreFile] = useState<File | null>(null);
-  const [restoreModalOpen, setRestoreModalOpen] = useState(false);
-  const [isRestoring, setIsRestoring] = useState(false);
+  const [newCategory, setNewCategory] = useState('');
+  const [localBudgets, setLocalBudgets] = useState<Record<string, number>>({});
+  const [savingBudgets, setSavingBudgets] = useState(false);
 
   // Mudar de família
-  const [joinFamilyCode, setJoinFamilyCode] = useState('');
-  const [requestingFamilyChange, setRequestingFamilyChange] = useState(false);
+  const [inviteCodeInput, setInviteCodeInput] = useState('');
+  const [requestingSwitch, setRequestingSwitch] = useState(false);
 
-  // Zona de Perigo: Excluir minha conta
-  const [deleteAccountModalOpen, setDeleteAccountModalOpen] = useState(false);
-  const [deleteConfirmWord, setDeleteConfirmWord] = useState('');
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  // Backup
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
-  const canManage = hasPermission('config_system');
+  // Excluir minha conta
+  const [deleteText, setDeleteText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+
+  const myUserDoc = useMemo(
+    () => (allUsers || []).find((u: any) => u.id === session?.id),
+    [allUsers, session?.id]
+  );
+
+  const categoriesDoc = useMemo(
+    () => (settingsDocs || []).find((d: any) => d.id === 'categories'),
+    [settingsDocs]
+  );
+
+  const budgetsDoc = useMemo(
+    () => (settingsDocs || []).find((d: any) => d.id === 'budgets'),
+    [settingsDocs]
+  );
+
+  const categories: string[] = useMemo(() => {
+    if (Array.isArray(categoriesDoc?.list) && categoriesDoc.list.length > 0) {
+      return categoriesDoc.list;
+    }
+    return DEFAULT_CATEGORIES;
+  }, [categoriesDoc]);
 
   useEffect(() => {
-    async function loadSettings() {
-      try {
-        const snap = await getDoc(doc(db, 'settings', 'categories'));
-        if (snap.exists() && Array.isArray(snap.data().list)) {
-          setCategories(snap.data().list);
-        }
-        const budgetsSnap = await getDoc(doc(db, 'settings', 'budgets'));
-        if (budgetsSnap.exists()) {
-          setBudgets(budgetsSnap.data() as Record<string, number>);
-        }
-        const stylesSnap = await getDoc(doc(db, 'settings', 'categoryStyles'));
-        if (stylesSnap.exists()) {
-          setCategoryStyles(stylesSnap.data() as Record<string, { icon: string; color: string }>);
-        }
-      } catch (e) {
-        console.error('Erro ao carregar categorias:', e);
-      } finally {
-        setLoadingCats(false);
-      }
+    if (budgetsDoc?.limits && typeof budgetsDoc.limits === 'object') {
+      setLocalBudgets(budgetsDoc.limits);
     }
-    loadSettings();
-  }, []);
+  }, [budgetsDoc]);
 
-  async function handleAddCategory(e: React.FormEvent) {
+  const saveCategoriesList = async (nextList: string[]) => {
+    const famId = session?.familyId || session?.id || '';
+    await setDoc(
+      doc(db, 'settings', 'categories'),
+      {
+        list: nextList,
+        familyId: famId,
+        ownerUid: session?.id || '',
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  };
+
+  const handleAddCategory = async (e: React.FormEvent) => {
     e.preventDefault();
-    const clean = newCat.trim();
+    const clean = newCategory.trim();
     if (!clean) return;
     if (categories.some((c) => c.toLowerCase() === clean.toLowerCase())) {
-      toast.warning('Esta categoria já existe.');
+      toast.warning('Essa categoria já existe.');
       return;
     }
-
-    const updated = [...categories, clean];
-    setCategories(updated);
-    setNewCat('');
-
     try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: updated }, { merge: true });
-      toast.success(`Categoria "${clean}" adicionada!`);
-    } catch (err) {
-      toast.error('Erro ao salvar categoria no banco.');
-    }
-  }
-
-  async function handleRemoveCategory(catToRemove: string) {
-    const updated = categories.filter((c) => c !== catToRemove);
-    setCategories(updated);
-
-    try {
-      await setDoc(doc(db, 'settings', 'categories'), { list: updated }, { merge: true });
-      toast.info(`Categoria "${catToRemove}" removida.`);
-    } catch (err) {
-      toast.error('Erro ao atualizar categorias.');
-    }
-  }
-
-  async function handleCategoryStyleChange(cat: string, field: 'icon' | 'color', value: string) {
-    const updated = { ...categoryStyles, [cat]: { icon: categoryStyles[cat]?.icon || ICON_OPTIONS[0], color: categoryStyles[cat]?.color || '#e3b04b', [field]: value } };
-    setCategoryStyles(updated);
-    try {
-      await setDoc(doc(db, 'settings', 'categoryStyles'), updated, { merge: true });
+      await saveCategoriesList([...categories, clean]);
+      setNewCategory('');
+      toast.success(`Categoria "${clean}" adicionada.`);
     } catch {
-      toast.error('Erro ao salvar estilo da categoria.');
+      toast.error('Não foi possível adicionar a categoria.');
     }
-  }
+  };
 
-  function handleBudgetChange(cat: string, value: string) {
-    setBudgets((prev) => ({ ...prev, [cat]: Number(value) || 0 }));
-  }
-
-  async function handleBudgetSave(cat: string) {
+  const handleRemoveCategory = async (cat: string) => {
+    const next = categories.filter((c) => c !== cat);
     try {
-      await setDoc(doc(db, 'settings', 'budgets'), { [cat]: budgets[cat] || 0 }, { merge: true });
-      toast.success(`Meta de "${cat}" salva!`);
-    } catch (err) {
-      toast.error('Erro ao salvar meta.');
+      await saveCategoriesList(next);
+      toast.info(`Categoria "${cat}" removida.`);
+    } catch {
+      toast.error('Erro ao remover categoria.');
     }
-  }
+  };
 
-  function handleExportBackup() {
+  const handleBudgetChange = async (cat: string, val: number) => {
+    const next = { ...localBudgets, [cat]: val };
+    if (val <= 0) {
+      delete next[cat];
+    }
+    setLocalBudgets(next);
+    setSavingBudgets(true);
     try {
-      const backupData = {
-        version: '2.0-react',
-        exportedAt: new Date().toISOString(),
-        accounts,
-        cards,
-        transactions,
-        subscriptions,
-        categories,
-        persons,
-        paidInvoices,
-        budgets,
-      };
+      const famId = session?.familyId || session?.id || '';
+      await setDoc(
+        doc(db, 'settings', 'budgets'),
+        {
+          limits: next,
+          familyId: famId,
+          ownerUid: session?.id || '',
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    } catch {
+      toast.error('Não foi possível salvar a meta da categoria.');
+    } finally {
+      setSavingBudgets(false);
+    }
+  };
 
-      const jsonStr = JSON.stringify(backupData, null, 2);
-      const blob = new Blob([jsonStr], { type: 'application/json' });
+  const handleExportExcelBackup = async () => {
+    if (exportingExcel) return;
+    const fbUser = auth?.currentUser;
+    if (!fbUser) {
+      toast.error('Sua sessão expirou. Saia e entre novamente.');
+      return;
+    }
+    setExportingExcel(true);
+    toast.info('Preparando arquivo Excel...');
+    try {
+      const idToken = await fbUser.getIdToken();
+      const period =
+        selectedPeriod && /^\d{4}-\d{2}$/.test(selectedPeriod)
+          ? selectedPeriod
+          : new Date().toISOString().slice(0, 7);
+      const resp = await fetch('/api/export-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          period,
+          person: 'todos',
+        }),
+      });
+      if (!resp.ok) {
+        toast.error('Não foi possível exportar o Excel agora.');
+        return;
+      }
+      const blob = await resp.blob();
       const url = URL.createObjectURL(blob);
-
       const a = document.createElement('a');
       a.href = url;
-      a.download = `backup_fluxo_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
+      a.download = `Wynd-Backup-${period}.xlsx`;
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-
-      toast.success('Backup exportado com sucesso!');
-    } catch (err) {
-      console.error(err);
-      toast.error('Erro ao gerar arquivo de backup.');
-    }
-  }
-
-  function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setRestoreFile(file);
-    setRestoreModalOpen(true);
-    e.target.value = '';
-  }
-
-  async function handleConfirmRestore() {
-    if (!restoreFile) return;
-    setIsRestoring(true);
-    setRestoreModalOpen(false);
-
-    try {
-      const text = await restoreFile.text();
-      const parsed = JSON.parse(text);
-
-      if (!parsed.accounts && !parsed.transactions) {
-        throw new Error('Arquivo de backup inválido.');
-      }
-
-      let count = 0;
-      if (Array.isArray(parsed.accounts)) {
-        for (const a of parsed.accounts) { await saveAccount(a); count++; }
-      }
-      if (Array.isArray(parsed.cards)) {
-        for (const c of parsed.cards) { await saveCard(c); count++; }
-      }
-      if (Array.isArray(parsed.subscriptions)) {
-        for (const s of parsed.subscriptions) { await saveSub(s); count++; }
-      }
-      if (Array.isArray(parsed.persons)) {
-        for (const p of parsed.persons) { await savePerson(p); count++; }
-      }
-      if (Array.isArray(parsed.paidInvoices)) {
-        for (const inv of parsed.paidInvoices) { await savePaidInvoice(inv); count++; }
-      }
-      if (Array.isArray(parsed.transactions)) {
-        for (const t of parsed.transactions) { await saveTx(t); count++; }
-      }
-      if (Array.isArray(parsed.categories)) {
-        await setDoc(doc(db, 'settings', 'categories'), { list: parsed.categories }, { merge: true });
-        setCategories(parsed.categories);
-      }
-      if (parsed.budgets && typeof parsed.budgets === 'object') {
-        await setDoc(doc(db, 'settings', 'budgets'), parsed.budgets, { merge: true });
-        setBudgets(parsed.budgets);
-      }
-
-      toast.success(`Backup restaurado com sucesso (${count} registros)!`);
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Erro ao restaurar backup.');
+      toast.success('Cópia em Excel exportada com sucesso.');
+    } catch {
+      toast.error('Falha ao baixar planilha Excel.');
     } finally {
-      setIsRestoring(false);
-      setRestoreFile(null);
+      setExportingExcel(false);
     }
-  }
+  };
 
-  if (loadingCats) return <PageLoading message="Carregando configurações..." />;
+  const handleExportJSONBackup = async () => {
+    try {
+      const famId = session?.familyId || session?.id || '';
+      const cols = [
+        'accounts',
+        'cards',
+        'transactions',
+        'subscriptions',
+        'persons',
+        'paid_invoices',
+        'settings',
+        'goals',
+        'tags',
+      ];
+      const backup: Record<string, any[]> = {};
+
+      for (const colName of cols) {
+        const q = famId
+          ? query(collection(db, colName), where('familyId', '==', famId))
+          : collection(db, colName);
+        const snap = await getDocs(q);
+        backup[colName] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      }
+
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: 'application/json',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wynd-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Backup completo baixado.');
+    } catch {
+      toast.error('Erro ao gerar backup.');
+    }
+  };
+
+  const handleRestoreJSONBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setRestoringBackup(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const famId = session?.familyId || session?.id || '';
+      const cols = [
+        'accounts',
+        'cards',
+        'transactions',
+        'subscriptions',
+        'persons',
+        'paid_invoices',
+        'settings',
+        'goals',
+        'tags',
+      ];
+
+      let batch = writeBatch(db);
+      let ops = 0;
+
+      for (const colName of cols) {
+        const arr = parsed[colName];
+        if (!Array.isArray(arr)) continue;
+        for (const item of arr) {
+          const { id, ...rest } = item;
+          const docId = id || doc(collection(db, colName)).id;
+          batch.set(
+            doc(db, colName, docId),
+            {
+              ...rest,
+              familyId: rest.familyId || famId,
+              ownerUid: rest.ownerUid || session?.id || '',
+            },
+            { merge: true }
+          );
+          ops++;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            ops = 0;
+          }
+        }
+      }
+      if (ops > 0) await batch.commit();
+      toast.success('Backup restaurado com sucesso.');
+    } catch {
+      toast.error('Arquivo de backup inválido.');
+    } finally {
+      setRestoringBackup(false);
+    }
+  };
+
+  const handleRequestFamilySwitch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const code = inviteCodeInput.trim().toUpperCase();
+    if (!code) {
+      toast.warning('Digite o código de convite da outra família.');
+      return;
+    }
+    if (!session?.id) return;
+
+    setRequestingSwitch(true);
+    try {
+      const targetAdmin = (allUsers || []).find((u: any) => {
+        const uCode = (
+          u.inviteCode ||
+          (u.familyId || u.id || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6)
+        ).toUpperCase();
+        return uCode === code;
+      });
+
+      if (!targetAdmin) {
+        toast.error('Nenhuma família encontrada com este código de convite.');
+        return;
+      }
+
+      const targetFamilyId = targetAdmin.familyId || targetAdmin.id;
+      if (targetFamilyId === (session.familyId || session.id)) {
+        toast.info('Você já faz parte desta família.');
+        return;
+      }
+
+      await updateDoc(doc(db, 'users', session.id), {
+        pendingFamilyId: targetFamilyId,
+      });
+      setInviteCodeInput('');
+      toast.success(
+        'Pedido enviado! Aguarde a aprovação do administrador da outra família.'
+      );
+    } catch {
+      toast.error('Erro ao enviar pedido de mudança de família.');
+    } finally {
+      setRequestingSwitch(false);
+    }
+  };
+
+  const handleCancelFamilySwitch = async () => {
+    if (!session?.id) return;
+    try {
+      await updateDoc(doc(db, 'users', session.id), {
+        pendingFamilyId: deleteField(),
+      });
+      toast.info('Pedido de mudança de família cancelado.');
+    } catch {
+      toast.error('Não foi possível cancelar o pedido.');
+    }
+  };
+
+  const handleDeleteMyAccount = async () => {
+    if (deleteText.trim().toUpperCase() !== 'EXCLUIR' || !session?.id) return;
+    setDeletingAccount(true);
+    try {
+      const myUid = session.id;
+      const cols = ['accounts', 'cards', 'transactions', 'subscriptions', 'goals'];
+      let batch = writeBatch(db);
+      let ops = 0;
+
+      for (const colName of cols) {
+        const q = query(collection(db, colName), where('ownerUid', '==', myUid));
+        const snap = await getDocs(q);
+        for (const d of snap.docs) {
+          batch.delete(doc(db, colName, d.id));
+          ops++;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            ops = 0;
+          }
+        }
+      }
+      if (ops > 0) await batch.commit();
+
+      await deleteDoc(doc(db, 'users', myUid));
+
+      if (auth?.currentUser) {
+        try {
+          await deleteUser(auth.currentUser);
+        } catch {
+          // Se exigir reautenticação recente, o doc em /users já foi removido
+        }
+      }
+
+      toast.success('Sua conta foi excluída.');
+      await logout();
+    } catch {
+      toast.error('Erro ao excluir sua conta.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
+  const initial = (session?.name || session?.username || 'U')
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+
+  const roleLabel =
+    session?.role === 'admin'
+      ? 'Administrador'
+      : session?.role === 'gerente'
+        ? 'Gerente'
+        : 'Membro';
+
+  const budgetCategories = useMemo(
+    () => categories.filter((c) => c.toLowerCase() !== 'salário'),
+    [categories]
+  );
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-[850px] mx-auto p-4 sm:p-6 pb-12">
-      <div className="mb-8">
-        <h2 className="text-[1.8rem] font-bold text-[#f2f0ea]">Configurações do Sistema</h2>
-      </div>
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pb-8">
+      {/* Left Column */}
+      <div className="lg:col-span-7 space-y-5">
+        {/* Perfil */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+          <h2 className="font-display text-base font-bold text-ink">Perfil</h2>
 
-      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
-        <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#3b82f6]" />
-        
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#3b82f6]/20 text-[#3b82f6] flex items-center justify-center">
-            <i className="fa-solid fa-user-gear" />
-          </div>
-          Perfil e Preferências
-        </h3>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div>
-            <span className="block text-xs uppercase tracking-wider font-semibold text-[#8fa39a] mb-1">Nome de Exibição</span>
-            <p className="font-bold text-[#f2f0ea] text-lg">{session.name}</p>
-          </div>
-          <div>
-            <span className="block text-xs uppercase tracking-wider font-semibold text-[#8fa39a] mb-1">Login / Usuário</span>
-            <p className="font-bold text-[#f2f0ea] text-lg">{session.username}</p>
-          </div>
-          <div>
-            <span className="block text-xs uppercase tracking-wider font-semibold text-[#8fa39a] mb-1">Cargo</span>
-            <p className="font-bold text-[#f2f0ea] text-lg capitalize">{session.role}</p>
-          </div>
-          <div>
-            <span className="block text-xs uppercase tracking-wider font-semibold text-[#8fa39a] mb-1">Pessoa Vinculada</span>
-            <p className="font-bold text-[#f2f0ea] text-lg">{session.person}</p>
-          </div>
-        </div>
-
-        <div className="pt-6 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <strong className="block text-[#f2f0ea] mb-1">Tema da Interface</strong>
-            <span className="text-sm text-[#8fa39a]">
-              Atualmente em modo {theme === 'dark' ? 'Verde calmo, escuro' : 'Floresta, claro'}
-            </span>
-          </div>
-          <div className="w-full sm:w-64">
-            <CustomSelect
-              value={themeMode}
-              onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
-              ariaLabel="Escolher tema da interface"
-            >
-              {THEME_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </CustomSelect>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
-        <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#10b981]" />
-        
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#10b981]/20 text-[#10b981] flex items-center justify-center">
-            <i className="fa-solid fa-tags" />
-          </div>
-          Categorias Personalizadas
-        </h3>
-        <p className="text-sm text-[#8fa39a] mb-6">Gerencie as opções de categoria disponíveis para classificação de despesas e receitas.</p>
-
-        {canManage && (
-          <form onSubmit={handleAddCategory} className="flex gap-3 mb-6">
-            <input type="text" placeholder="Nova categoria (ex: Streaming)..." value={newCat} onChange={(e) => setNewCat(e.target.value)} className="flex-1 p-3 rounded-xl border border-white/[0.08] bg-[#141d1a] text-[#f2f0ea] focus:border-[#10b981] outline-none" />
-            <button type="submit" className="px-5 py-3 rounded-xl bg-[#10b981]/20 text-[#10b981] font-bold transition-all hover:bg-[#10b981]/30 border border-[#10b981]/30 shrink-0">
-              <i className="fa-solid fa-plus mr-1" /> Adicionar
-            </button>
-          </form>
-        )}
-
-        <div className="flex flex-wrap gap-2.5">
-          {categories.map((cat) => (
-            <span key={cat} className="inline-flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-2 rounded-xl text-sm font-medium text-[#f2f0ea]">
-              <i className={`fa-solid ${categoryStyles[cat]?.icon || 'fa-tag'}`} style={{ color: categoryStyles[cat]?.color || '#8fa39a' }} />
-              {cat}
-              {canManage && (
-                <>
-                  <CustomSelect value={categoryStyles[cat]?.icon || ''} onChange={(e) => handleCategoryStyleChange(cat, 'icon', e.target.value)} size="sm" className="w-28">
-                    <option value="" disabled>Ícone</option>
-                    {ICON_OPTIONS.map((ic) => (<option key={ic} value={ic}>{ic.replace('fa-', '')}</option>))}
-                  </CustomSelect>
-                  <Tooltip content="Cor da categoria">
-                    <input type="color" aria-label="Cor da categoria" value={categoryStyles[cat]?.color || '#e3b04b'} onChange={(e) => handleCategoryStyleChange(cat, 'color', e.target.value)} className="w-6 h-6 rounded-md cursor-pointer bg-transparent border border-white/20" />
-                  </Tooltip>
-                  <Tooltip content="Remover categoria">
-                    <button type="button" onClick={() => handleRemoveCategory(cat)} onContextMenu={(e) => e.preventDefault()} aria-label="Remover categoria" className="text-[#8fa39a] hover:text-red-400 transition-colors focus:outline-none">
-                      <i className="fa-solid fa-xmark" />
-                    </button>
-                  </Tooltip>
-                </>
-              )}
-            </span>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
-        <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#f59e0b]" />
-
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#f59e0b]/20 text-[#f59e0b] flex items-center justify-center">
-            <i className="fa-solid fa-bullseye" />
-          </div>
-          Metas de Gasto por Categoria
-        </h3>
-        <p className="text-sm text-[#8fa39a] mb-6">Defina um limite mensal por categoria. O Dashboard avisa quando o gasto do mês estiver perto ou passar da meta.</p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {categories.map((cat) => (
-            <div key={cat} className="flex items-center gap-3 bg-white/[0.03] border border-white/[0.06] rounded-xl p-3">
-              <span className="flex-1 text-sm font-medium text-[#f2f0ea] truncate">{cat}</span>
-              <div className="w-36" onBlur={() => handleBudgetSave(cat)}>
-                <MoneyField
-                  placeholder="Sem meta"
-                  value={budgets[cat] || ''}
-                  onChange={(e) => handleBudgetChange(cat, e.target.value)}
-                  disabled={!canManage}
-                  className="text-right text-xs"
-                />
+          <div className="flex items-center gap-3.5 pb-2">
+            <div className="w-11 h-11 rounded-full bg-priSoft text-priInk font-display font-bold text-base flex items-center justify-center shrink-0">
+              {initial}
+            </div>
+            <div className="min-w-0">
+              <div className="font-bold text-sm text-ink truncate">
+                {session?.name || 'Usuário'}
+              </div>
+              <div className="text-xs text-muted truncate">
+                {myUserDoc?.email || `${session?.username || 'usuario'}@wynd.app`}
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
-        <div className="w-1 absolute top-0 bottom-0 left-0 bg-[#8b5cf6]" />
-        
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#8b5cf6]/20 text-[#8b5cf6] flex items-center justify-center">
-            <i className="fa-solid fa-database" />
-          </div>
-          Backup e Segurança de Dados
-        </h3>
-        <p className="text-sm text-[#8fa39a] mb-6">Exporte uma cópia completa de suas contas, cartões, transações, assinaturas, pessoas e faturas pagas em JSON, ou restaure um backup anterior.</p>
-
-        <div className="flex flex-col gap-4">
-          <div>
-            <button onClick={handleExportBackup} className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium border border-white/10 transition-colors">
-              <i className="fa-solid fa-download" /> Exportar Backup Completo
-            </button>
           </div>
 
-          {canManage && (
-            <FileDropzone
-              accept=".json"
-              disabled={isRestoring}
-              label="Solte o arquivo de backup (.json) aqui"
-              buttonLabel="Escolher arquivo"
-              selectedFileName={restoreFile?.name}
-              onFileSelect={(file) => {
-                setRestoreFile(file);
-                setRestoreModalOpen(true);
-              }}
-            />
-          )}
-        </div>
-      </div>
-
-      {!session?.superAdmin && (
-        <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 mt-8 shadow-xl relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-amber-400" />
-          <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <i className="fa-solid fa-people-roof" />
+          <div className="divide-y divide-border text-sm">
+            <div className="py-3 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted">Nome</span>
+              <span className="font-bold text-ink">{session?.name || '-'}</span>
             </div>
-            Mudar de Família
-          </h3>
-          <p className="text-sm text-[#8fa39a] mb-3">
-            Se você deseja sair do seu grupo atual e entrar em outra família, informe o código de convite abaixo. O administrador da família de destino precisará aprovar sua entrada.
-          </p>
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300 font-medium mb-4">
-            <i className="fa-solid fa-triangle-exclamation mr-1.5" />
-            Atenção: Seus dados anteriores não serão levados para a nova família.
+            <div className="py-3 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted">Usuário</span>
+              <span className="font-bold text-ink">{session?.username || '-'}</span>
+            </div>
+            <div className="py-3 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted">Cargo</span>
+              <span className="font-bold text-ink">{roleLabel}</span>
+            </div>
+            <div className="py-3 flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted">
+                Pessoa vinculada
+              </span>
+              <span className="font-bold text-ink">
+                {session?.person || session?.name || '-'}
+              </span>
+            </div>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
+        </div>
+
+        {/* Tema */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-3.5">
+          <h2 className="font-display text-base font-bold text-ink">Tema</h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 rounded-[20px] bg-seg p-1.5">
+            {THEME_OPTIONS.map((opt) => {
+              const active = themeMode === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setThemeMode(opt.value as ThemeMode)}
+                  className={`min-h-[42px] px-3 py-2 rounded-[16px] text-xs font-bold transition-all ${
+                    active
+                      ? 'bg-segOn text-ink shadow-xs'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Categorias */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+          <h2 className="font-display text-base font-bold text-ink">Categorias</h2>
+
+          <div className="flex flex-wrap gap-2">
+            {categories.map((cat) => (
+              <span
+                key={cat}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-pill bg-neutral text-xs font-bold text-ink"
+              >
+                <span>{cat}</span>
+                <button
+                  type="button"
+                  aria-label={`Remover categoria ${cat}`}
+                  onClick={() => handleRemoveCategory(cat)}
+                  className="text-muted hover:text-spend ml-0.5 font-bold"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <form onSubmit={handleAddCategory} className="flex flex-col sm:flex-row gap-2.5">
             <input
               type="text"
-              value={joinFamilyCode}
-              onChange={(e) => setJoinFamilyCode(e.target.value)}
-              placeholder="Código de convite da nova família (ex: A1B2C3D4)"
-              className="flex-1 p-3 rounded-xl border border-white/10 bg-[#141d1a] text-[#f2f0ea] uppercase font-mono text-sm outline-none focus:border-amber-400"
+              value={newCategory}
+              onChange={(e) => setNewCategory(e.target.value)}
+              placeholder="Nova categoria, por exemplo Streaming"
+              aria-label="Nova categoria"
+              className="flex-1 min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+            />
+            <button
+              type="submit"
+              className="px-5 min-h-[44px] rounded-[18px] bg-priSoft text-priInk font-bold text-xs md:text-sm hover:opacity-90 transition-opacity shrink-0"
+            >
+              Adicionar
+            </button>
+          </form>
+        </div>
+
+        {/* Metas por categoria */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="font-display text-base font-bold text-ink">
+                Metas por categoria
+              </h2>
+              <p className="text-xs text-muted mt-0.5">
+                Quando o gasto do mês passa da meta, a barra em Relatórios fica vermelha.
+              </p>
+            </div>
+            {savingBudgets && (
+              <span className="text-[11px] font-bold text-pri shrink-0">
+                Salvando...
+              </span>
+            )}
+          </div>
+
+          <div className="divide-y divide-border">
+            {budgetCategories.map((cat) => {
+              const val = localBudgets[cat];
+              return (
+                <div
+                  key={cat}
+                  className="py-3 first:pt-1 last:pb-0 flex items-center justify-between gap-4"
+                >
+                  <span className="text-sm font-bold text-ink">{cat}</span>
+                  <div className="w-40">
+                    <MoneyField
+                      value={val && val > 0 ? val : ''}
+                      onValueChange={(num) => handleBudgetChange(cat, num)}
+                      placeholder="Sem meta"
+                      ariaLabel={`Meta para ${cat}`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Right Column */}
+      <div className="lg:col-span-5 space-y-5">
+        {/* Backup */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+          <div>
+            <h2 className="font-display text-base font-bold text-ink">Backup</h2>
+            <p className="text-xs text-muted mt-1 leading-relaxed">
+              Baixe uma cópia de contas, cartões, transações, fixas, pessoas e faturas pagas.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={exportingExcel}
+            onClick={handleExportExcelBackup}
+            className="w-full min-h-[46px] px-4 rounded-[18px] bg-fab text-fabIcon font-bold text-sm shadow-sm hover:opacity-95 transition-opacity disabled:opacity-50"
+          >
+            {exportingExcel ? 'Exportando Excel...' : 'Exportar tudo em Excel'}
+          </button>
+
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={handleExportJSONBackup}
+              className="flex-1 min-h-[40px] px-3 rounded-[14px] bg-neutral text-ink font-bold text-xs hover:opacity-90 transition-opacity"
+            >
+              Baixar cópia JSON
+            </button>
+            <button
+              type="button"
+              disabled={restoringBackup}
+              onClick={() => restoreInputRef.current?.click()}
+              className="flex-1 min-h-[40px] px-3 rounded-[14px] bg-neutral text-ink font-bold text-xs hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              {restoringBackup ? 'Restaurando...' : 'Restaurar JSON'}
+            </button>
+            <input
+              ref={restoreInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleRestoreJSONBackup}
+              className="sr-only hidden"
+              tabIndex={-1}
+            />
+          </div>
+        </div>
+
+        {/* Mudar de família */}
+        <div className="rounded-[24px] bg-card border border-border p-5 md:p-6 shadow-xs space-y-4">
+          <h2 className="font-display text-base font-bold text-ink">
+            Mudar de família
+          </h2>
+
+          {myUserDoc?.pendingFamilyId ? (
+            <div className="rounded-[18px] bg-priSoft p-4 space-y-2.5">
+              <div className="text-xs font-bold text-priInk">
+                Você tem um pedido de mudança aguardando aprovação.
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelFamilySwitch}
+                className="px-3.5 min-h-[36px] rounded-[12px] bg-card text-ink text-xs font-bold border border-border"
+              >
+                Cancelar pedido
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleRequestFamilySwitch} className="space-y-2">
+              <label className="block text-xs font-bold text-muted">
+                Código de convite da outra família
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2.5">
+                <input
+                  type="text"
+                  value={inviteCodeInput}
+                  onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())}
+                  placeholder="Digite o código"
+                  aria-label="Código de convite da outra família"
+                  className="flex-1 min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink uppercase tracking-wider outline-none focus:border-pri"
+                />
+                <button
+                  type="submit"
+                  disabled={requestingSwitch}
+                  className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-xs md:text-sm hover:bg-neutral transition-colors shrink-0 disabled:opacity-50"
+                >
+                  {requestingSwitch ? 'Enviando...' : 'Pedir para mudar'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="rounded-[18px] bg-neutral p-3.5 text-xs text-muted leading-relaxed">
+            Seus lançamentos de hoje não vão junto. A mudança só vale depois que o chefe da outra família aprovar.
+          </div>
+        </div>
+
+        {/* Excluir minha conta */}
+        <div className="rounded-[24px] bg-card border border-spend p-5 md:p-6 shadow-xs space-y-4">
+          <div>
+            <h2 className="font-display text-base font-bold text-spendText">
+              Excluir minha conta
+            </h2>
+            <p className="text-xs text-muted mt-1 leading-relaxed">
+              Apaga seu usuário e seus lançamentos pessoais. Para confirmar, digite EXCLUIR abaixo.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <input
+              type="text"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="Digite EXCLUIR"
+              aria-label="Digite EXCLUIR para confirmar exclusão da conta"
+              className="flex-1 min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-spend"
             />
             <button
               type="button"
-              disabled={requestingFamilyChange || joinFamilyCode.trim().length < 4}
-              onClick={async () => {
-                if (!session?.id) return;
-                setRequestingFamilyChange(true);
-                try {
-                  const idToken = await auth.currentUser?.getIdToken();
-                  const res = await fetch('/api/manage-users', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-                    body: JSON.stringify({
-                      action: 'change-family',
-                      uid: session.id,
-                      inviteCode: joinFamilyCode.trim(),
-                    }),
-                  });
-                  const data = await res.json();
-                  if (!res.ok) throw new Error(data.error || 'Erro ao solicitar mudança de família.');
-                  toast.success(data.message || 'Solicitação enviada! Aguarde a aprovação do administrador da família.');
-                  setJoinFamilyCode('');
-                } catch (err: any) {
-                  toast.error(err.message || 'Erro ao solicitar mudança de família.');
-                } finally {
-                  setRequestingFamilyChange(false);
-                }
-              }}
-              className="px-5 py-3 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+              disabled={
+                deletingAccount || deleteText.trim().toUpperCase() !== 'EXCLUIR'
+              }
+              onClick={handleDeleteMyAccount}
+              className="px-4 min-h-[44px] rounded-[18px] bg-spend text-white font-bold text-xs md:text-sm hover:opacity-95 transition-opacity shrink-0 disabled:opacity-40"
             >
-              {requestingFamilyChange ? 'Enviando...' : 'Solicitar Entrada'}
+              {deletingAccount ? 'Excluindo...' : 'Excluir minha conta'}
             </button>
           </div>
         </div>
-      )}
-
-      {!session?.superAdmin && (
-        <div className="bg-red-500/[0.03] border border-red-500/25 rounded-3xl p-6 sm:p-8 mt-8 shadow-xl relative overflow-hidden">
-          <div className="w-1 absolute top-0 bottom-0 left-0 bg-red-500" />
-          <h3 className="text-xl font-bold text-[#f2f0ea] mb-2 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center">
-              <i className="fa-solid fa-triangle-exclamation" />
-            </div>
-            Zona de Perigo — Excluir minha conta
-          </h3>
-          <p className="text-sm text-[#8fa39a] mb-6">
-            Ao excluir sua conta, seu acesso ao Wynd e todos os seus lançamentos, contas, cartões e assinaturas serão apagados permanentemente. Esta ação não pode ser desfeita.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setDeleteConfirmWord('');
-              setDeleteAccountModalOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-red-500/15 hover:bg-red-500/25 text-red-300 font-bold border border-red-500/30 transition-colors"
-          >
-            <i className="fa-solid fa-user-xmark" /> Excluir minha conta
-          </button>
-        </div>
-      )}
-
-      {deleteAccountModalOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200"
-          onClick={() => {
-            if (!isDeletingAccount) {
-              setDeleteAccountModalOpen(false);
-              setDeleteConfirmWord('');
-            }
-          }}
-        >
-          <div
-            className="bg-[#141d1a] border border-red-500/30 rounded-2xl p-6 sm:p-7 w-full max-w-[460px] shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="text-lg font-bold text-[#f2f0ea] flex items-center gap-2 mb-2">
-              <i className="fa-solid fa-triangle-exclamation text-red-400" />
-              Confirmar exclusão permanente da conta
-            </h3>
-            <p className="text-sm text-[#c9d2cf] mb-3">
-              Esta ação apagará seu login e todos os seus registros financeiros (transações, contas, cartões, assinaturas e metas). Se você tiver outros membros na sua família, será necessário removê-los ou movê-los antes.
-            </p>
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#8fa39a] mb-1.5">
-              Para confirmar, digite <span className="text-red-400">EXCLUIR</span> abaixo:
-            </label>
-            <input
-              type="text"
-              value={deleteConfirmWord}
-              onChange={(e) => setDeleteConfirmWord(e.target.value)}
-              placeholder="EXCLUIR"
-              className="w-full p-3 rounded-xl border border-white/10 bg-black/30 text-[#f2f0ea] outline-none focus:border-red-400 mb-5 font-mono uppercase"
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                disabled={isDeletingAccount}
-                onClick={() => {
-                  setDeleteAccountModalOpen(false);
-                  setDeleteConfirmWord('');
-                }}
-                className="px-4 py-2.5 rounded-xl text-sm font-medium text-[#8fa39a] hover:text-white transition-colors"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={isDeletingAccount || deleteConfirmWord.trim().toUpperCase() !== 'EXCLUIR'}
-                onClick={async () => {
-                  if (!session?.id) return;
-                  setIsDeletingAccount(true);
-                  try {
-                    const idToken = await auth.currentUser?.getIdToken();
-                    const res = await fetch('/api/manage-users', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-                      body: JSON.stringify({ action: 'delete', uid: session.id }),
-                    });
-                    const data = await res.json();
-                    if (!res.ok) throw new Error(data.error || 'Não foi possível excluir sua conta.');
-                    toast.success('Sua conta e seus dados foram excluídos.');
-                    await logout();
-                  } catch (err: any) {
-                    toast.error(err.message || 'Erro ao excluir conta.');
-                    setIsDeletingAccount(false);
-                  }
-                }}
-                className="px-5 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-              >
-                {isDeletingAccount ? 'Excluindo...' : 'Excluir permanentemente'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmModal isOpen={restoreModalOpen} title={'Restaurar Backup de Dados'} message={`Deseja restaurar os dados do arquivo "${restoreFile?.name}"? Os registros contidos no backup serão importados e mesclados no sistema.`} confirmLabel="Confirmar Restauração" onConfirm={handleConfirmRestore} onCancel={() => { setRestoreModalOpen(false); setRestoreFile(null); }} />
+      </div>
     </div>
   );
 }
+
+export default Settings;

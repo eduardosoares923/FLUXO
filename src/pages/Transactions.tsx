@@ -14,6 +14,8 @@ import { DatePicker, MonthPicker, MoneyField, NumberField, Tooltip } from '../co
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
+import { useTripState, getTripCurrencySymbol, formatTripRate } from '../utils/travelMode';
+
 
 const CATEGORY_ICONS: Record<string, string> = {
   alimentação: 'fa-utensils', mercado: 'fa-cart-shopping', moradia: 'fa-house', transporte: 'fa-car',
@@ -132,6 +134,8 @@ export default function Transactions() {
   const [isSplit, setIsSplit] = useState(false);
   const [splitItems, setSplitItems] = useState<Record<string, string>>({});
   const [paidBy, setPaidBy] = useState('');
+  const { trip, isActive: isTripActiveNow } = useTripState();
+  const [txCurrency, setTxCurrency] = useState<string>('BRL');
 
   const canEdit = hasPermission('transactions', 'edit');
 
@@ -278,18 +282,22 @@ export default function Transactions() {
 
   function openNew() {
     reset({ description: '', amount: '', type: 'expense', category: '', date: new Date().toISOString().slice(0, 10), paymentMethod: 'account', person: session?.person || '', fromAccount: '', toAccount: '' });
-    resetSplitAndInstallments(); setTags([]); setTagInput(''); setEditingTx(null); setEditingId(null); setShowForm(true);
+    resetSplitAndInstallments();
+    setTxCurrency(isTripActiveNow ? trip.code : 'BRL');
+    setTags(isTripActiveNow && trip.tagOn ? ['Viagem'] : []);
+    setTagInput(''); setEditingTx(null); setEditingId(null); setShowForm(true);
   }
 
   function openEdit(tx: any) {
     const isTransfer = tx.type === 'transfer_out' || tx.type === 'transfer_in';
     reset({
-      description: tx.description || '', amount: tx.installmentAmount ?? tx.amount ?? '',
+      description: tx.description || '', amount: tx.originalAmount ?? tx.installmentAmount ?? tx.amount ?? '',
       type: isTransfer ? 'transfer' : (tx.type || 'expense'), category: tx.category || '', date: tx.date || new Date().toISOString().slice(0, 10),
       paymentMethod: tx.paymentMethod || 'account', person: tx.person || session?.person || '',
       fromAccount: isTransfer ? (tx.type === 'transfer_out' ? tx.paymentMethod : tx.transferAccountId) : '',
       toAccount: isTransfer ? (tx.type === 'transfer_out' ? tx.transferAccountId : tx.paymentMethod) : '',
     });
+    setTxCurrency(tx.currency && tx.currency !== 'BRL' ? tx.currency : 'BRL');
     setIsSplit(Boolean(tx.isSplit));
     if (tx.isSplit && Array.isArray(tx.splitDetails)) {
       const items: Record<string, string> = {};
@@ -422,8 +430,16 @@ export default function Transactions() {
         finalPaidBy = paidBy || session?.person || null;
       }
 
+      const isForeignExpense = data.type === 'expense' && txCurrency !== 'BRL' && Number(trip.rate) > 0;
+      const rawTypedAmt = Number(data.amount) || 0;
+      const convertedBrlAmt = isForeignExpense ? Number((rawTypedAmt * Number(trip.rate)).toFixed(2)) : rawTypedAmt;
+      const finalTagsList =
+        isTripActiveNow && trip.tagOn && data.type === 'expense' && !tags.includes('Viagem')
+          ? [...tags, 'Viagem']
+          : tags;
+
       if (paymentMode === 'installments' && installmentsCount >= 2 && !editingId) {
-        const rawAmt = Number(data.amount) || 0;
+        const rawAmt = convertedBrlAmt;
         const instAmt = installmentValueType === 'total' ? Math.round((rawAmt / installmentsCount) * 100) / 100 : rawAmt;
         const totalAmt = installmentValueType === 'total' ? rawAmt : Math.round(rawAmt * installmentsCount * 100) / 100;
         const groupId = 'group_' + generateId();
@@ -436,17 +452,24 @@ export default function Transactions() {
             amount: instAmt, installmentAmount: instAmt, totalPurchaseAmount: totalAmt, category: data.category?.trim() || '',
             paymentMethod: data.paymentMethod, person: finalPerson, personKeys: toPersonKeys(finalPerson), date: instDate,
             invoiceMonth: computeInvoiceMonth(instDate, data.paymentMethod), installmentIndex: i + 1, totalInstallments: installmentsCount,
-            isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags, userId: session?.id,
+            isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags: finalTagsList, userId: session?.id,
           } as Transaction));
         }
         await Promise.all(saves);
         toast.success(`Lançamento parcelado em ${installmentsCount}x de ${formatCurrency(instAmt)}!`);
       } else {
         const record: any = {
-          id: editingId || undefined, description: data.description.trim(), amount: Number(data.amount), type: data.type,
+          id: editingId || undefined, description: data.description.trim(), amount: convertedBrlAmt, type: data.type,
           category: data.category?.trim() || '', date: data.date, paymentMethod: data.paymentMethod, person: finalPerson,
-          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags, userId: session?.id,
+          personKeys: toPersonKeys(finalPerson), isSplit, splitDetails: finalSplitDetails, paidBy: finalPaidBy, tags: finalTagsList, userId: session?.id,
           invoiceMonth: computeInvoiceMonth(data.date, data.paymentMethod),
+          ...(isForeignExpense
+            ? {
+                originalAmount: rawTypedAmt,
+                currency: txCurrency,
+                fxRate: Number(trip.rate),
+              }
+            : {}),
         };
         await saveRecord(record);
 
@@ -948,10 +971,42 @@ export default function Transactions() {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase font-bold text-muted">Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total da compra)' : ''}</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-xs uppercase font-bold text-muted">
+                  Valor {paymentMode === 'installments' && installmentValueType === 'total' ? '(Total da compra)' : ''}
+                  {watchedType === 'expense' && txCurrency !== 'BRL' ? ` (${getTripCurrencySymbol(txCurrency)})` : ''}
+                </label>
+                {isTripActiveNow && watchedType === 'expense' && (
+                  <div className="inline-flex items-center gap-1 rounded-pill bg-seg p-0.5 text-[11px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setTxCurrency('BRL')}
+                      className={`px-2.5 py-0.5 rounded-pill transition-colors ${
+                        txCurrency === 'BRL' ? 'bg-segOn text-ink shadow-xs' : 'text-muted'
+                      }`}
+                    >
+                      R$ (BRL)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTxCurrency(trip.code)}
+                      className={`px-2.5 py-0.5 rounded-pill transition-colors ${
+                        txCurrency === trip.code ? 'bg-segOn text-ink shadow-xs' : 'text-muted'
+                      }`}
+                    >
+                      {getTripCurrencySymbol(trip.code)} ({trip.code})
+                    </button>
+                  </div>
+                )}
+              </div>
               <Controller name="amount" control={control} render={({ field }) => (
                 <MoneyField value={field.value} onChange={(e) => field.onChange(e.target.value)} />
               )} />
+              {watchedType === 'expense' && txCurrency !== 'BRL' && Number(watchedAmount) > 0 && (
+                <span className="text-xs font-semibold text-pri mt-0.5">
+                  Converte para {formatCurrency(Number(watchedAmount) * Number(trip.rate))} ({formatTripRate(trip.rate)})
+                </span>
+              )}
               {errors.amount && <span className="text-spendText text-xs mt-1">{(errors.amount as any).message}</span>}
             </div>
 

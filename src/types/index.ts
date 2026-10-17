@@ -97,3 +97,40 @@ export interface Person {
   name: string;
   personKey?: string;
 }
+
+export interface GoalDeposit {
+  id: string;
+  amount: number;
+  date: string;
+  fromAccountId: string;
+  transferId: string;
+}
+
+export interface Goal {
+  id?: string;
+  name: string;
+  target: number;
+  initial: number;
+  deadline: string;
+  accountId: string;
+  icon: string;
+  done: boolean;
+  doneAt: string;
+  owner: string;
+  createdAt?: string;
+  updatedAt?: string;
+  familyId?: string;
+  ownerUid?: string;
+  deposits?: GoalDeposit[];
+}
+
+export interface TagItem {
+  id?: string;
+  name: string;
+  color: string;
+  familyId?: string;
+  ownerUid?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

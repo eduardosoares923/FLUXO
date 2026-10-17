@@ -13,6 +13,9 @@ interface AuthContextType {
   logout: () => Promise<void>;
   hasPermission: (module: string, action?: string) => boolean;
   canAccessPerson: (personName?: string | null, tx?: any) => boolean;
+  canAccessTransaction: (tx: any) => boolean;
+  canAccessAccount: (acc: any) => boolean;
+  canAccessCard: (card: any) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -190,7 +193,41 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return false;
   }, [session]);
 
-  const value = { session, loading, login, logout, hasPermission, canAccessPerson };
+  const canAccessTransaction = useCallback(
+    (tx: any) => {
+      if (!tx) return false;
+      return canAccessPerson(tx.person, tx);
+    },
+    [canAccessPerson]
+  );
+
+  const canAccessAccount = useCallback(
+    (acc: any) => {
+      if (!acc) return false;
+      return canAccessPerson(acc.owner, acc);
+    },
+    [canAccessPerson]
+  );
+
+  const canAccessCard = useCallback(
+    (card: any) => {
+      if (!card) return false;
+      return canAccessPerson(card.owner, card);
+    },
+    [canAccessPerson]
+  );
+
+  const value = {
+    session,
+    loading,
+    login,
+    logout,
+    hasPermission,
+    canAccessPerson,
+    canAccessTransaction,
+    canAccessAccount,
+    canAccessCard,
+  };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

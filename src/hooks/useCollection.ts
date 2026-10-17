@@ -6,7 +6,11 @@ import { generateId, normalize } from '../utils/format';
 import { SCOPED_COLLECTIONS, scopedQuery } from '../utils/scope';
 import { useAuth } from '../context/AuthContext';
 
-export function useCollection<T = any>(collectionName: string) {
+export function useCollection<T = any>(
+  collectionName: string,
+  _filter?: any,
+  options?: { unscoped?: boolean }
+) {
   const queryClient = useQueryClient();
   const pendingDeletes = useRef<Set<string>>(new Set());
   const { session } = useAuth();
@@ -22,8 +26,11 @@ export function useCollection<T = any>(collectionName: string) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    const q = options?.unscoped
+      ? collection(db, collectionName)
+      : scopedQuery(collectionName, session);
     const unsub = onSnapshot(
-      scopedQuery(collectionName, session),
+      q,
       (snapshot) => {
         const items: T[] = [];
         snapshot.forEach((d) => items.push({ id: d.id, ...d.data() } as unknown as T));
@@ -43,7 +50,7 @@ export function useCollection<T = any>(collectionName: string) {
       }
     );
     return unsub;
-  }, [collectionName, queryClient, session?.id, session?.familyId, session?.superAdmin]);
+  }, [collectionName, queryClient, session?.id, session?.familyId, session?.superAdmin, options?.unscoped]);
 
   // MOTOR DA OTIMIZAÇÃO 1: Recalcula e salva o saldo final da conta no Firebase
   const syncAccountBalance = async (paymentMethod: string) => {
@@ -211,5 +218,31 @@ export function useCollection<T = any>(collectionName: string) {
     [collectionName, queryClient, data]
   );
 
-  return { data, loading, error, saveRecord, deleteRecord, deleteRecords };
+  const add = useCallback(
+    (record: Partial<T>) => saveRecord(record),
+    [saveRecord]
+  );
+
+  const update = useCallback(
+    (id: string | number, record: Partial<T>) =>
+      saveRecord({ ...record, id: String(id) }),
+    [saveRecord]
+  );
+
+  const remove = useCallback(
+    (id: string | number) => deleteRecord(id),
+    [deleteRecord]
+  );
+
+  return {
+    data,
+    loading,
+    error,
+    saveRecord,
+    deleteRecord,
+    deleteRecords,
+    add,
+    update,
+    remove,
+  };
 }

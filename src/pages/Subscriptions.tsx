@@ -1,446 +1,1083 @@
-import React, { useMemo, useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { useAuth } from '../context/AuthContext';
+import React, { useState, useMemo, useEffect } from 'react';
+import * as Dialog from '@radix-ui/react-dialog';
 import { useCollection } from '../hooks/useCollection';
-import { formatCurrency, getCardInvoiceMonth, toPersonKeys } from '../utils/format';
-import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
-import { ConfirmModal } from '../components/ConfirmModal';
-import { CustomSelect } from '../components/CustomSelect';
-import { MoneyField, NumberField, Tooltip } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { useUIStore } from '../stores/useUIStore';
+import {
+  formatCurrency,
+  maskCurrency,
+  getCardInvoiceMonth,
+  normalize,
+  toPersonKeys,
+} from '../utils/format';
 import { toast } from '../stores/useToastStore';
-import { Transaction, Account, User } from '../types';
+import { Account, Card, Person, Transaction, SplitDetail } from '../types';
+import { Select } from '../components/ui/Select';
+import { MoneyField } from '../components/ui/MoneyField';
+import { NumberField } from '../components/ui/NumberField';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { Switch } from '../components/ui/Switch';
+import { useTripState } from '../utils/travelMode';
 
-export default function Subscriptions() {
-  const { session, hasPermission, canAccessPerson } = useAuth() as { session: User; hasPermission: (r: string, a: string) => boolean; canAccessPerson: (p?: string | null) => boolean };
-  const { data: subs, loading, error, saveRecord, deleteRecord } = useCollection<any>('subscriptions');
-  const { data: transactions, saveRecord: saveTx, deleteRecord: deleteTx } = useCollection<Transaction>('transactions');
-  const { data: accounts } = useCollection<Account>('accounts');
-  const { data: cards } = useCollection<any>('cards');
-  const { data: personsList } = useCollection<{ name?: string }>('persons');
+const MONTH_NAMES = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+];
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+const DEFAULT_CATEGORIES = [
+  'Assinaturas',
+  'Moradia',
+  'Contas Fixas',
+  'Educação',
+  'Saúde',
+  'Lazer',
+  'Transporte',
+  'Alimentação',
+  'Outros',
+];
 
-  const [search, setSearch] = useState('');
-  const [paymentFilter, setPaymentFilter] = useState('all');
+interface SubscriptionItem {
+  id: string;
+  name: string;
+  amount: number;
+  dueDay: number;
+  category: string;
+  paymentMethod: string;
+  person: string;
+  personKeys?: string[];
+  active: boolean;
+  isSplit?: boolean;
+  splitDetails?: SplitDetail[];
+  launchedMonths?: string[];
+  createdAt?: string;
+}
+
+export function Subscriptions() {
+  const { data: subscriptions, add, update, remove } = useCollection<SubscriptionItem>('subscriptions');
+  const { data: accounts, update: updateAccount } = useCollection<Account>('accounts');
+  const { data: cards } = useCollection<Card>('cards');
+  const { data: personsList } = useCollection<Person>('persons');
+  const { data: transactions, add: addTx } = useCollection<Transaction>('transactions');
+  const { data: settingsData } = useCollection<any>('settings');
+
+  const {
+    session,
+    canAccessPerson,
+    canAccessTransaction,
+    canAccessAccount,
+    canAccessCard,
+  } = useAuth();
+  const { privacyMode, selectedPeriod } = useUIStore();
+  const { trip, isActive: isTripActiveNow } = useTripState();
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [methodFilter, setMethodFilter] = useState<'all' | 'accounts' | 'cards'>('all');
   const [personFilter, setPersonFilter] = useState('all');
 
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingSub, setEditingSub] = useState<SubscriptionItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SubscriptionItem | null>(null);
+  const [launchingMonth, setLaunchingMonth] = useState(false);
+
+  // Form states
+  const [name, setName] = useState('');
+  const [amount, setAmount] = useState<number>(0);
+  const [dueDay, setDueDay] = useState<number>(10);
+  const [category, setCategory] = useState('Assinaturas');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [person, setPerson] = useState(session?.person || '');
+  const [active, setActive] = useState(true);
   const [isSplit, setIsSplit] = useState(false);
-  const [splitItems, setSplitItems] = useState<Record<string, string>>({});
+  const [splitPeople, setSplitPeople] = useState<string[]>([]);
 
-  const canEdit = hasPermission('subscriptions', 'edit');
-
-  const availablePersons = useMemo(() => {
-    const list = (personsList || []).map((p) => p.name?.trim()).filter(Boolean) as string[];
-    return list.length > 0 ? list : ['Eduardo', 'Mãe', 'Rodrigo'];
-  }, [personsList]);
-
-  // Pessoas que este usuário pode enxergar (pro filtro da lista). A lista completa acima continua
-  // servindo pra escolher com quem dividir uma assinatura.
-  const filterPersons = useMemo(() => availablePersons.filter((p) => session?.role === 'admin' || canAccessPerson(p)), [availablePersons, session, canAccessPerson]);
-
-  const { register, handleSubmit, reset, watch, control, formState: { errors, isSubmitting } } = useForm({
-    defaultValues: { name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: '' },
-  });
-
-  const watchedAmount = watch('amount');
-  const [originalAmount, setOriginalAmount] = useState<number | null>(null);
-
-  async function syncSubscriptionWithTransaction(sub: any, isCancel = false) {
+  const currentMonthStr = useMemo(() => {
+    if (selectedPeriod && /^\d{4}-\d{2}$/.test(selectedPeriod)) {
+      return selectedPeriod;
+    }
     const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const dayStr = String(sub.billingDay || 10).padStart(2, '0');
-    const txDate = `${currentYear}-${currentMonth}-${dayStr}`;
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  }, [selectedPeriod]);
 
-    const existingTx = transactions.find((t) => t.subscriptionId === sub.id && t.date?.startsWith(`${currentYear}-${currentMonth}`));
+  const [viewYear, viewMonth0] = useMemo(() => {
+    const [y, m] = currentMonthStr.split('-').map(Number);
+    return [y, (m || 1) - 1];
+  }, [currentMonthStr]);
 
-    if (isCancel || sub.status === 'pausada') {
-      if (existingTx) await deleteTx(existingTx.id!);
+  const nextMonthName = useMemo(() => {
+    const d = new Date(viewYear, viewMonth0 + 1, 1);
+    return MONTH_NAMES[d.getMonth()];
+  }, [viewYear, viewMonth0]);
+
+  const currentMonthName = MONTH_NAMES[viewMonth0] || 'mês';
+
+  const visibleAccounts = useMemo(
+    () => (accounts || []).filter((a) => canAccessAccount(a)),
+    [accounts, canAccessAccount]
+  );
+  const visibleCards = useMemo(
+    () => (cards || []).filter((c) => canAccessCard(c)),
+    [cards, canAccessCard]
+  );
+
+  const allPersonNames = useMemo(
+    () => (personsList || []).map((p) => p.name).filter((n): n is string => Boolean(n)),
+    [personsList]
+  );
+
+  const accessiblePersonNames = useMemo(
+    () => allPersonNames.filter((n) => canAccessPerson(n)),
+    [allPersonNames, canAccessPerson]
+  );
+
+  useEffect(() => {
+    if (accessiblePersonNames.length === 1) {
+      setPersonFilter(accessiblePersonNames[0]);
+    } else if (personFilter !== 'all' && !accessiblePersonNames.includes(personFilter)) {
+      setPersonFilter('all');
+    }
+  }, [accessiblePersonNames, personFilter]);
+
+  const categoriesList = useMemo(() => {
+    const catDoc = (settingsData || []).find((d: any) => d.id === 'categories');
+    const custom: string[] = Array.isArray(catDoc?.list) ? catDoc.list : [];
+    const combined = Array.from(new Set([...DEFAULT_CATEGORIES, ...custom]));
+    return combined;
+  }, [settingsData]);
+
+  const accessibleSubs = useMemo(() => {
+    return (subscriptions || []).filter((s) => {
+      if (s.person && canAccessPerson(s.person)) return true;
+      if (s.isSplit && Array.isArray(s.splitDetails)) {
+        return s.splitDetails.some((d) => canAccessPerson(d.person));
+      }
+      return canAccessTransaction(s as any);
+    });
+  }, [subscriptions, canAccessPerson, canAccessTransaction]);
+
+  const isLaunchedInMonth = (sub: SubscriptionItem, ym: string) => {
+    const inArray = Array.isArray(sub.launchedMonths) && sub.launchedMonths.includes(ym);
+    const inTx = (transactions || []).some(
+      (tx) =>
+        (tx.subscriptionId === sub.id ||
+          (tx.isSubscription && normalize(tx.description) === normalize(sub.name))) &&
+        String(tx.date || '').startsWith(ym)
+    );
+    return inArray || inTx;
+  };
+
+  const getMyShare = (sub: SubscriptionItem): { isShared: boolean; otherNames: string[]; myAmount: number } => {
+    const total = Number(sub.amount) || 0;
+    if (!sub.isSplit || !Array.isArray(sub.splitDetails) || sub.splitDetails.length <= 1) {
+      return { isShared: false, otherNames: [], myAmount: total };
+    }
+    const myPerson = session?.person || sub.person || '';
+    const myDetail = sub.splitDetails.find((d) => normalize(d.person) === normalize(myPerson));
+    const others = sub.splitDetails
+      .map((d) => d.person)
+      .filter((p) => normalize(p) !== normalize(myPerson));
+    return {
+      isShared: true,
+      otherNames: others,
+      myAmount: myDetail ? Number(myDetail.amount) : total / sub.splitDetails.length,
+    };
+  };
+
+  const filteredSubs = useMemo(() => {
+    return accessibleSubs
+      .filter((s) => {
+        if (personFilter !== 'all') {
+          const inMain = normalize(s.person) === normalize(personFilter);
+          const inSplit =
+            s.isSplit &&
+            Array.isArray(s.splitDetails) &&
+            s.splitDetails.some((d) => normalize(d.person) === normalize(personFilter));
+          if (!inMain && !inSplit) return false;
+        }
+        if (methodFilter === 'accounts' && !String(s.paymentMethod || '').startsWith('acc_')) {
+          return false;
+        }
+        if (methodFilter === 'cards' && !String(s.paymentMethod || '').startsWith('card_')) {
+          return false;
+        }
+        if (searchQuery.trim()) {
+          const q = normalize(searchQuery);
+          const matchName = normalize(s.name).includes(q);
+          const matchCat = normalize(s.category).includes(q);
+          if (!matchName && !matchCat) return false;
+        }
+        return true;
+      })
+      .sort((a, b) => (Number(a.dueDay) || 1) - (Number(b.dueDay) || 1));
+  }, [accessibleSubs, personFilter, methodFilter, searchQuery]);
+
+  const stats = useMemo(() => {
+    const activeList = filteredSubs.filter((s) => s.active !== false);
+    let expectedTotal = 0;
+    let launchedTotal = 0;
+    let launchedCount = 0;
+    let pendingTotal = 0;
+    let dueSoonCount = 0;
+
+    const now = new Date();
+    const todayDay = now.getDate();
+    const cutoffDay = Math.min(31, todayDay + 7);
+
+    activeList.forEach((s) => {
+      const val = Number(s.amount) || 0;
+      expectedTotal += val;
+      if (isLaunchedInMonth(s, currentMonthStr)) {
+        launchedTotal += val;
+        launchedCount += 1;
+      } else {
+        pendingTotal += val;
+        const day = Number(s.dueDay) || 1;
+        if (day <= cutoffDay) {
+          dueSoonCount += 1;
+        }
+      }
+    });
+
+    return {
+      activeCount: activeList.length,
+      expectedTotal,
+      launchedTotal,
+      launchedCount,
+      pendingTotal,
+      dueSoonCount,
+      cutoffDay,
+    };
+  }, [filteredSubs, currentMonthStr, transactions]);
+
+  const getPaymentMethodLabel = (pm?: string) => {
+    if (!pm) return 'Sem conta';
+    if (pm.startsWith('acc_')) {
+      const id = pm.replace('acc_', '');
+      const acc = (accounts || []).find((a) => a.id === id);
+      return acc ? acc.name : 'Conta';
+    }
+    if (pm.startsWith('card_')) {
+      const id = pm.replace('card_', '');
+      const card = (cards || []).find((c) => c.id === id);
+      return card ? `Cartão ${card.name}` : 'Cartão';
+    }
+    return pm;
+  };
+
+  const getStatusBadge = (sub: SubscriptionItem) => {
+    if (sub.active === false) {
+      return {
+        label: 'Pausada',
+        className: 'bg-neutral text-muted',
+      };
+    }
+    if (isLaunchedInMonth(sub, currentMonthStr)) {
+      return {
+        label: 'Lançada',
+        className: 'bg-priSoft text-priInk',
+      };
+    }
+    const now = new Date();
+    const nowYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const due = Number(sub.dueDay) || 1;
+
+    if (currentMonthStr === nowYM) {
+      const diff = due - now.getDate();
+      if (diff === 0) {
+        return { label: 'Vence hoje', className: 'bg-spendSoft text-spendText' };
+      }
+      if (diff > 0 && diff <= 7) {
+        return {
+          label: `Vence em ${diff} ${diff === 1 ? 'dia' : 'dias'}`,
+          className: 'bg-spendSoft text-spendText',
+        };
+      }
+      if (diff < 0) {
+        return {
+          label: `Dia ${String(due).padStart(2, '0')}`,
+          className: 'bg-spendSoft text-spendText',
+        };
+      }
+    }
+
+    return {
+      label: 'Aguardando',
+      className: 'bg-neutral text-muted',
+    };
+  };
+
+  // Calendar grid for right column
+  const calendarCells = useMemo(() => {
+    const firstDayWeek = new Date(viewYear, viewMonth0, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth0 + 1, 0).getDate();
+    const activeSubs = filteredSubs.filter((s) => s.active !== false);
+
+    const cells: ({
+      day: number;
+      status: 'none' | 'launched' | 'pending';
+    } | null)[] = [];
+
+    for (let i = 0; i < firstDayWeek; i++) {
+      cells.push(null);
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const subsOnDay = activeSubs.filter((s) => (Number(s.dueDay) || 1) === d);
+      if (subsOnDay.length === 0) {
+        cells.push({ day: d, status: 'none' });
+      } else {
+        const allLaunched = subsOnDay.every((s) => isLaunchedInMonth(s, currentMonthStr));
+        cells.push({
+          day: d,
+          status: allLaunched ? 'launched' : 'pending',
+        });
+      }
+    }
+
+    return cells;
+  }, [viewYear, viewMonth0, filteredSubs, currentMonthStr, transactions]);
+
+  const openNewModal = () => {
+    setEditingSub(null);
+    setName('');
+    setAmount(0);
+    setDueDay(10);
+    setCategory('Assinaturas');
+    const defaultMethod = visibleAccounts[0]?.id
+      ? `acc_${visibleAccounts[0].id}`
+      : visibleCards[0]?.id
+        ? `card_${visibleCards[0].id}`
+        : '';
+    setPaymentMethod(defaultMethod);
+    const defaultPerson = session?.person || accessiblePersonNames[0] || '';
+    setPerson(defaultPerson);
+    setActive(true);
+    setIsSplit(false);
+    setSplitPeople(defaultPerson ? [defaultPerson] : []);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (sub: SubscriptionItem) => {
+    setEditingSub(sub);
+    setName(sub.name || '');
+    setAmount(Number(sub.amount) || 0);
+    setDueDay(Number(sub.dueDay) || 10);
+    setCategory(sub.category || 'Assinaturas');
+    setPaymentMethod(sub.paymentMethod || '');
+    setPerson(sub.person || session?.person || '');
+    setActive(sub.active !== false);
+    const hasSplit = Boolean(sub.isSplit && Array.isArray(sub.splitDetails) && sub.splitDetails.length > 0);
+    setIsSplit(hasSplit);
+    if (hasSplit && sub.splitDetails) {
+      setSplitPeople(sub.splitDetails.map((d) => d.person));
+    } else {
+      setSplitPeople(sub.person ? [sub.person] : []);
+    }
+    setIsModalOpen(true);
+  };
+
+  const toggleSplitPerson = (pName: string) => {
+    setSplitPeople((prev) =>
+      prev.includes(pName) ? prev.filter((x) => x !== pName) : [...prev, pName]
+    );
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || amount <= 0) {
+      toast.warning('Preencha o nome e um valor maior que zero.');
+      return;
+    }
+    if (!paymentMethod) {
+      toast.warning('Selecione uma conta ou cartão.');
       return;
     }
 
-    const txRecord: Partial<Transaction> = {
-      id: existingTx?.id,
-      subscriptionId: sub.id,
-      description: `${sub.name} (Assinatura)`,
+    const safeDay = Math.min(31, Math.max(1, Number(dueDay) || 1));
+    let splitDetails: SplitDetail[] = [];
+    if (isSplit && splitPeople.length > 0) {
+      const share = Number((amount / splitPeople.length).toFixed(2));
+      splitDetails = splitPeople.map((p) => ({ person: p, amount: share }));
+    }
+
+    const personField = isSplit && splitPeople.length > 0 ? splitPeople.join(', ') : person;
+    const payload: any = {
+      name: name.trim(),
+      amount: Number(amount),
+      dueDay: safeDay,
+      category: category || 'Assinaturas',
+      paymentMethod,
+      person: personField,
+      personKeys: toPersonKeys(personField),
+      active,
+      isSplit: Boolean(isSplit && splitPeople.length > 0),
+      splitDetails,
+    };
+
+    try {
+      if (editingSub?.id) {
+        await update(editingSub.id, payload);
+        toast.success('Fixa atualizada.');
+      } else {
+        payload.launchedMonths = [];
+        payload.createdAt = new Date().toISOString();
+        await add(payload);
+        toast.success('Nova fixa cadastrada.');
+      }
+      setIsModalOpen(false);
+    } catch {
+      toast.error('Não foi possível salvar a fixa.');
+    }
+  };
+
+  const launchSingleSub = async (sub: SubscriptionItem, silent = false): Promise<boolean> => {
+    if (isLaunchedInMonth(sub, currentMonthStr)) {
+      if (!silent) toast.info('Esta fixa já foi lançada neste mês.');
+      return false;
+    }
+
+    const daysInTargetMonth = new Date(viewYear, viewMonth0 + 1, 0).getDate();
+    const clampedDay = Math.min(daysInTargetMonth, Math.max(1, Number(sub.dueDay) || 1));
+    const txDate = `${currentMonthStr}-${String(clampedDay).padStart(2, '0')}`;
+
+    let invoiceMonth = '';
+    if (String(sub.paymentMethod || '').startsWith('card_')) {
+      const cardId = sub.paymentMethod.replace('card_', '');
+      const cardObj = (cards || []).find((c) => c.id === cardId);
+      invoiceMonth = getCardInvoiceMonth(txDate, cardObj?.closeDay || 28);
+    }
+
+    const personField =
+      sub.isSplit && Array.isArray(sub.splitDetails) && sub.splitDetails.length > 0
+        ? sub.splitDetails.map((d) => d.person).join(', ')
+        : sub.person || session?.person || 'Geral';
+
+    const txPayload: any = {
+      description: sub.name,
       amount: Number(sub.amount),
       type: 'expense',
       category: sub.category || 'Assinaturas',
       date: txDate,
       paymentMethod: sub.paymentMethod,
-      person: sub.person || session?.person,
-      userId: session?.id,
+      person: personField,
+      personKeys: toPersonKeys(personField),
+      isSplit: Boolean(sub.isSplit),
+      splitDetails: sub.splitDetails || [],
+      paidBy: sub.person || session?.person || '',
+      subscriptionId: sub.id,
       isSubscription: true,
+      invoiceMonth,
+      createdAt: new Date().toISOString(),
     };
 
-    if (sub.paymentMethod.startsWith('card_')) {
-      const cardId = sub.paymentMethod.replace('card_', '');
-      const card = cards.find((c) => String(c.id) === cardId);
-      if (card) txRecord.invoiceMonth = getCardInvoiceMonth(txDate, card.closeDay);
-    }
+    await addTx(txPayload);
 
-    await saveTx(txRecord as Transaction);
-  }
-
-  async function handleLaunchMonth() {
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
-    const activeSubs = visible.filter((s) => s.status !== 'pausada');
-    if (activeSubs.length === 0) return toast.info('Nenhuma assinatura ativa pra lançar.');
-    let created = 0; let alreadyLaunched = 0;
-    for (const s of activeSubs) {
-      const already = transactions.some((t) => t.subscriptionId === s.id && t.date?.startsWith(`${currentYear}-${currentMonth}`));
-      await syncSubscriptionWithTransaction(s);
-      if (already) alreadyLaunched++; else created++;
-    }
-    if (created === 0) toast.info(`Todas as ${alreadyLaunched} assinatura(s) já estavam lançadas este mês.`);
-    else toast.success(`${created} assinatura(s) lançada(s) este mês!${alreadyLaunched > 0 ? ` (${alreadyLaunched} já estavam, sem duplicar)` : ''}`);
-  }
-
-  const visible = useMemo(() => {
-    return subs
-      .filter((s) => session?.role === 'admin' || canAccessPerson(s.person))
-      .filter((s) => {
-        const matchSearch = !search || s.name?.toLowerCase().includes(search.toLowerCase()) || s.category?.toLowerCase().includes(search.toLowerCase());
-        const matchPayment = paymentFilter === 'all' || s.paymentMethod === paymentFilter;
-        const matchPerson = personFilter === 'all' || (s.isSplit && s.splitDetails?.some((d: any) => d.person === personFilter)) || s.person?.toLowerCase().includes(personFilter.toLowerCase());
-        return matchSearch && matchPayment && matchPerson;
-      });
-  }, [subs, session, canAccessPerson, search, paymentFilter, personFilter]);
-
-  const { totalMonthly, activeCount, pausedCount, nextDue } = useMemo(() => {
-    let sum = 0; let active = 0; let paused = 0;
-    const todayDay = new Date().getDate();
-    let minDaysDiff = Infinity; let nextSub: any = null;
-
-    visible.forEach((s) => {
-      const amt = Number(s.amount) || 0;
-      if (s.status !== 'pausada') {
-        sum += amt; active++;
-        const bDay = Number(s.billingDay) || 10;
-        let diff = bDay - todayDay;
-        if (diff < 0) diff += 30;
-        if (diff < minDaysDiff) { minDaysDiff = diff; nextSub = s; }
-      } else {
-        paused++;
+    if (String(sub.paymentMethod || '').startsWith('acc_')) {
+      const accId = sub.paymentMethod.replace('acc_', '');
+      const acc = (accounts || []).find((a) => a.id === accId);
+      if (acc && acc.id) {
+        const prevBal = acc.computedBalance !== undefined ? Number(acc.computedBalance) : Number(acc.balance || 0);
+        await updateAccount(acc.id, {
+          computedBalance: Number((prevBal - Number(sub.amount)).toFixed(2)),
+        });
       }
-    });
-    return { totalMonthly: sum, activeCount: active, pausedCount: paused, nextDue: nextSub ? `Dia ${nextSub.billingDay} (${nextSub.name})` : 'Nenhuma' };
-  }, [visible]);
-
-  function openNew() {
-    reset({ name: '', amount: '', billingDay: 10, category: 'Assinaturas', paymentMethod: 'account', person: session?.person || '' });
-    setIsSplit(false); setSplitItems({}); setOriginalAmount(null); setEditingId(null); setShowForm(true);
-  }
-
-  function openEdit(s: any) {
-    reset({ name: s.name || '', amount: s.amount ?? '', billingDay: s.billingDay ?? 10, category: s.category || 'Assinaturas', paymentMethod: s.paymentMethod || 'account', person: s.person || session?.person || '' });
-    setIsSplit(Boolean(s.isSplit));
-    if (s.isSplit && Array.isArray(s.splitDetails)) {
-      const map: Record<string, string> = {};
-      s.splitDetails.forEach((d) => { map[d.person] = d.amount; });
-      setSplitItems(map);
-    } else {
-      setSplitItems({});
     }
-    setOriginalAmount(Number(s.amount) || null);
-    setEditingId(s.id); setShowForm(true);
-  }
 
-  function handleSplitCheck(personName: string, checked: boolean) {
-    setSplitItems((prev) => {
-      const copy = { ...prev };
-      if (checked) copy[personName] = copy[personName] || '';
-      else delete copy[personName];
-      return copy;
-    });
-  }
+    const nextMonths = Array.from(new Set([...(sub.launchedMonths || []), currentMonthStr]));
+    await update(sub.id, { launchedMonths: nextMonths });
+    if (!silent) toast.success(`"${sub.name}" lançada no mês.`);
+    return true;
+  };
 
-  function handleSplitValueChange(personName: string, val: string) {
-    setSplitItems((prev) => ({
-      ...prev,
-      [personName]: val,
-    }));
-  }
+  const handleLaunchMonth = async () => {
+    if (isTripActiveNow && trip.pauseFixed) {
+      toast.warning('As fixas estão pausadas durante o Modo viagem.');
+      return;
+    }
 
-  function splitEqually() {
-    const total = parseFloat(watchedAmount as string) || 0;
-    const keys = Object.keys(splitItems);
-    if (keys.length === 0) return toast.warning('Selecione pelo menos uma pessoa para dividir.');
-    const share = Math.floor((total / keys.length) * 100) / 100;
-    const remainder = Math.round((total - share * keys.length) * 100) / 100;
-    const updated: Record<string, string> = {};
-    keys.forEach((k, idx) => { updated[k] = idx === 0 ? (share + remainder).toFixed(2) : share.toFixed(2); });
-    setSplitItems(updated);
-  }
+    const pendingSubs = filteredSubs.filter(
+      (s) => s.active !== false && !isLaunchedInMonth(s, currentMonthStr)
+    );
 
-  async function onSubmit(data: any) {
+    if (pendingSubs.length === 0) {
+      toast.info('Todas as fixas ativas já foram lançadas neste mês.');
+      return;
+    }
+
+    setLaunchingMonth(true);
     try {
-      let finalPerson = data.person?.trim() || session?.person;
-      let finalSplitDetails = null;
-
-      if (isSplit) {
-        const keys = Object.keys(splitItems);
-        if (keys.length === 0) return toast.warning('Selecione pelo menos uma pessoa na divisão.');
-        let sum = 0; const details = [];
-        for (const k of keys) {
-          const val = parseFloat(splitItems[k]) || 0;
-          if (val <= 0) return toast.warning(`Informe o valor da cota de ${k}.`);
-          sum += val; details.push({ person: k, amount: val });
-        }
-        const totalAmt = Number(data.amount) || 0;
-        if (Math.abs(sum - totalAmt) > 0.05) return toast.error(`A soma das cotas (${formatCurrency(sum)}) deve ser igual ao valor total (${formatCurrency(totalAmt)}).`);
-        finalPerson = details.map((d) => d.person).join(', ');
-        finalSplitDetails = details;
+      let count = 0;
+      for (const s of pendingSubs) {
+        const ok = await launchSingleSub(s, true);
+        if (ok) count += 1;
       }
+      toast.success(`${count} ${count === 1 ? 'fixa lançada' : 'fixas lançadas'} no mês.`);
+    } catch {
+      toast.error('Erro ao lançar fixas do mês.');
+    } finally {
+      setLaunchingMonth(false);
+    }
+  };
 
-      const existing = editingId ? subs.find((s) => s.id === editingId) : null;
-      const status = existing ? existing.status || 'ativa' : 'ativa';
-
-      const record = {
-        id: editingId || undefined, name: data.name.trim(), amount: Number(data.amount), billingDay: Number(data.billingDay),
-        category: data.category?.trim() || 'Assinaturas', paymentMethod: data.paymentMethod, person: finalPerson,
-        personKeys: toPersonKeys(finalPerson), status, isSplit, splitDetails: finalSplitDetails, updatedAt: new Date().toISOString(),
-      };
-
-      const saved = await saveRecord(record);
-      await syncSubscriptionWithTransaction(saved);
-      toast.success(editingId ? 'Assinatura atualizada!' : 'Assinatura cadastrada!');
-      setShowForm(false);
-    } catch (err) { toast.error('Erro ao salvar assinatura.'); }
-  }
-
-  async function handleTogglePause(s: any) {
-    const nextStatus = s.status === 'pausada' ? 'ativa' : 'pausada';
+  const handleToggleActive = async (sub: SubscriptionItem) => {
     try {
-      const updated = { ...s, status: nextStatus };
-      await saveRecord(updated);
-      await syncSubscriptionWithTransaction(updated);
-      toast.info(nextStatus === 'ativa' ? 'Assinatura reativada!' : 'Assinatura pausada.');
-    } catch (err) { toast.error('Erro ao alterar status.'); }
-  }
+      const next = sub.active === false;
+      await update(sub.id, { active: next });
+      toast.info(next ? `"${sub.name}" reativada.` : `"${sub.name}" pausada.`);
+    } catch {
+      toast.error('Erro ao alterar estado da fixa.');
+    }
+  };
 
-  async function handleConfirmDelete() {
-    if (!deleteId) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget?.id) return;
     try {
-      const subToDelete = subs.find((s) => s.id === deleteId);
-      if (subToDelete) await syncSubscriptionWithTransaction(subToDelete, true);
-      await deleteRecord(deleteId);
-      toast.success('Assinatura excluída com sucesso!');
-    } catch (err) { toast.error('Erro ao excluir assinatura.'); } 
-    finally { setDeleteId(null); }
-  }
-
-  function getPaymentLabel(pm: string) {
-    if (pm === 'account') return 'Conta principal';
-    if (pm.startsWith('acc_')) { const a = accounts.find((acc) => `acc_${acc.id}` === pm); return a ? `Conta: ${a.name}` : 'Conta'; }
-    if (pm.startsWith('card_')) { const c = cards.find((card) => `card_${card.id}` === pm); return c ? `Cartão: ${c.name}` : 'Cartão'; }
-    return pm;
-  }
-
-    if (loading) return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-10 h-10 border-4 border-[#e3b04b] border-t-transparent rounded-full animate-spin" /></div>;
-  if (error) return <PageError error={error as Error} title={'Erro ao carregar assinaturas'} />;
+      await remove(deleteTarget.id);
+      toast.success('Fixa excluída.');
+    } catch {
+      toast.error('Erro ao excluir fixa.');
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
 
   return (
-    <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-24 md:pb-6 animate-in fade-in">
-      
-      {/* CABEÇALHO */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="font-display text-[34px] leading-tight font-bold text-ink">Fixas</h2>
-        {canEdit && (
-          <div className="flex gap-2">
-            <Tooltip content="Lançar todas as assinaturas ativas do mês de uma vez">
-              <button onClick={handleLaunchMonth} aria-label="Lançar todas as assinaturas ativas do mês de uma vez" className="bg-white/5 hover:bg-white/10 text-[#8fa39a] hover:text-white px-4 py-2 rounded-xl font-bold transition-colors flex items-center gap-2">
-                <i className="fa-solid fa-bolt" /> <span className="hidden sm:inline">Lançar mês</span>
-              </button>
-            </Tooltip>
-            <button onClick={openNew} className="bg-[#e3b04b] text-black px-4 py-2 rounded-xl font-bold hover:scale-105 transition-transform flex items-center gap-2">
-              <i className="fa-solid fa-plus" /> <span className="hidden sm:inline">Nova Assinatura</span>
-            </button>
+    <div className="space-y-5 pb-8">
+      {/* Top action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {accessiblePersonNames.length === 1 ? (
+            <span className="px-3.5 py-2 rounded-pill bg-card border border-border text-xs font-bold text-ink">
+              {accessiblePersonNames[0]}
+            </span>
+          ) : accessiblePersonNames.length > 1 ? (
+            <div className="w-44">
+              <Select
+                size="sm"
+                value={personFilter}
+                onChange={(e) => setPersonFilter(e.target.value)}
+                ariaLabel="Filtrar por pessoa"
+              >
+                <option value="all">Todas as pessoas</option>
+                {accessiblePersonNames.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-2.5 ml-auto">
+          <button
+            type="button"
+            disabled={launchingMonth}
+            onClick={handleLaunchMonth}
+            className="px-4 min-h-[44px] rounded-[18px] bg-card border border-border text-ink font-bold text-sm hover:border-pri/40 transition-colors disabled:opacity-50"
+          >
+            {launchingMonth ? 'Lançando...' : 'Lançar mês'}
+          </button>
+          <button
+            type="button"
+            onClick={openNewModal}
+            className="px-4 min-h-[44px] rounded-[18px] bg-fab text-fabIcon font-bold text-sm flex items-center gap-2 shadow-sm hover:opacity-95 transition-opacity"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>Nova fixa</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 3 KPI Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Previsto no mês</div>
+          <div className="font-display text-2xl md:text-[28px] font-bold text-ink tracking-tight">
+            {maskCurrency(stats.expectedTotal, privacyMode)}
           </div>
-        )}
+          <div className="text-xs font-semibold text-muted mt-1">
+            {stats.activeCount} {stats.activeCount === 1 ? 'fixa ativa' : 'fixas ativas'}
+          </div>
+        </div>
+
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Já lançado</div>
+          <div className="font-display text-2xl md:text-[28px] font-bold text-pri tracking-tight">
+            {maskCurrency(stats.launchedTotal, privacyMode)}
+          </div>
+          <div className="text-xs font-semibold text-pri mt-1">
+            {stats.launchedCount} de {stats.activeCount}
+          </div>
+        </div>
+
+        <div className="rounded-[24px] bg-card border border-border p-5 shadow-xs">
+          <div className="text-xs font-semibold text-muted mb-1.5">Falta lançar</div>
+          <div className="font-display text-2xl md:text-[28px] font-bold text-spendText tracking-tight">
+            {maskCurrency(stats.pendingTotal, privacyMode)}
+          </div>
+          <div className="text-xs font-semibold text-spendText mt-1">
+            {stats.dueSoonCount} {stats.dueSoonCount === 1 ? 'vence' : 'vencem'} até o dia {stats.cutoffDay}
+          </div>
+        </div>
       </div>
 
-      {/* KPIs SUPER ENXUTOS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
-          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Custo Mensal Fixado</span>
-          <strong className="text-2xl font-mono text-[#e3b04b]">{formatCurrency(totalMonthly)}</strong>
-        </div>
-        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
-          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Status Ativas</span>
-          <strong className="text-2xl text-white">{activeCount} <span className="text-sm text-[#8fa39a] font-normal">/ {pausedCount} pausadas</span></strong>
-        </div>
-        <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl flex flex-col justify-center">
-          <span className="text-[#8fa39a] text-xs font-bold uppercase tracking-widest mb-1">Próxima Cobrança</span>
-          <strong className="text-lg text-white truncate">{nextDue}</strong>
-        </div>
-      </div>
+      {/* Main 2-column content */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left list card */}
+        <div className="lg:col-span-8 rounded-[24px] bg-card border border-border p-4 md:p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-4 border-b border-border">
+            <div className="relative flex-1">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.8}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="text-muted absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar fixa"
+                aria-label="Buscar fixa"
+                className="w-full min-h-[42px] pl-10 pr-4 py-2 rounded-pill bg-neutral border border-transparent focus:border-pri text-sm text-ink placeholder:text-muted outline-none transition-colors"
+              />
+            </div>
 
-      {/* FILTROS RESPONSIVOS */}
-      <div className="bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl shadow-lg flex flex-col md:flex-row gap-3 mb-6">
-        <div className="relative flex-1">
-          <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-[#8fa39a]" />
-          <input type="text" placeholder="Buscar assinatura..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-11 pr-4 py-2.5 rounded-xl border border-white/10 bg-black/20 text-white focus:border-[#e3b04b] outline-none" />
-        </div>
-        <div className="flex gap-3">
-          <CustomSelect value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
-            <option value="all">Cobrança</option><option value="account">Contas</option><option value="card">Cartões</option>
-          </CustomSelect>
-          {filterPersons.length > 1 && (
-            <CustomSelect value={personFilter} onChange={(e) => setPersonFilter(e.target.value)} className="flex-1 w-full md:w-[150px]">
-              <option value="all">Pessoas</option>{filterPersons.map((p) => (<option key={p} value={p}>{p}</option>))}
-            </CustomSelect>
+            <div className="inline-flex items-center gap-1 rounded-pill bg-seg p-1 shrink-0">
+              {(
+                [
+                  { id: 'all', label: 'Todas' },
+                  { id: 'accounts', label: 'Contas' },
+                  { id: 'cards', label: 'Cartões' },
+                ] as const
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setMethodFilter(tab.id)}
+                  className={`px-3.5 min-h-[34px] rounded-pill text-xs font-bold transition-colors ${
+                    methodFilter === tab.id
+                      ? 'bg-segOn text-ink shadow-xs'
+                      : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {filteredSubs.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-sm font-bold text-ink">Nenhuma fixa encontrada</p>
+              <p className="text-xs text-muted mt-1">
+                Cadastre contas recorrentes e assinaturas para acompanhar os vencimentos do mês.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {filteredSubs.map((sub) => {
+                const status = getStatusBadge(sub);
+                const shareInfo = getMyShare(sub);
+                const methodLabel = getPaymentMethodLabel(sub.paymentMethod);
+                const launched = isLaunchedInMonth(sub, currentMonthStr);
+
+                return (
+                  <div
+                    key={sub.id}
+                    className={`py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-opacity ${
+                      sub.active === false ? 'opacity-55' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-12 h-12 rounded-[14px] bg-neutral flex flex-col items-center justify-center shrink-0 border border-border/60">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-muted leading-none">
+                          DIA
+                        </span>
+                        <span className="font-display text-sm font-bold text-ink leading-tight mt-0.5">
+                          {String(sub.dueDay || 1).padStart(2, '0')}
+                        </span>
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-ink truncate">{sub.name}</div>
+                        <div className="text-xs text-muted truncate mt-0.5">
+                          {sub.category || 'Assinaturas'}
+                          {shareInfo.isShared && shareInfo.otherNames.length > 0 && (
+                            <>
+                              {`, dividida com ${shareInfo.otherNames.join(', ')} · `}
+                              <span className="font-semibold text-ink">
+                                Sua parte {maskCurrency(shareInfo.myAmount, privacyMode)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between sm:justify-end gap-3 pl-14 sm:pl-0 shrink-0">
+                      <span className="text-xs font-medium text-muted hidden md:inline">
+                        {methodLabel}
+                      </span>
+
+                      <span
+                        className={`px-2.5 py-1 rounded-pill text-[11px] font-bold ${status.className}`}
+                      >
+                        {status.label}
+                      </span>
+
+                      <div className="font-display font-bold text-sm md:text-base text-ink min-w-[92px] text-right">
+                        {maskCurrency(sub.amount, privacyMode)}
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {!launched && sub.active !== false && (
+                          <button
+                            type="button"
+                            aria-label={`Lançar ${sub.name}`}
+                            onClick={() => launchSingleSub(sub)}
+                            className="w-9 h-9 rounded-full flex items-center justify-center text-pri hover:bg-priSoft transition-colors"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M20 6 9 17l-5-5" />
+                            </svg>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={`Editar ${sub.name}`}
+                          onClick={() => openEditModal(sub)}
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral transition-colors"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={sub.active === false ? `Ativar ${sub.name}` : `Pausar ${sub.name}`}
+                          onClick={() => handleToggleActive(sub)}
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral transition-colors"
+                        >
+                          {sub.active === false ? (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                              <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                          ) : (
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="6" y="4" width="4" height="16" />
+                              <rect x="14" y="4" width="4" height="16" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`Excluir ${sub.name}`}
+                          onClick={() => setDeleteTarget(sub)}
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-spend hover:bg-spendSoft transition-colors"
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
+
+        {/* Right calendar card */}
+        <div className="lg:col-span-4 rounded-[24px] bg-card border border-border p-5 shadow-xs space-y-4">
+          <h2 className="font-display text-base font-bold text-ink">
+            Vencimentos de {currentMonthName}
+          </h2>
+
+          <div>
+            <div className="grid grid-cols-7 gap-1.5 text-center mb-1.5">
+              {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                <div key={i} className="text-[11px] font-bold text-muted py-1">
+                  {d}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1.5">
+              {calendarCells.map((cell, idx) => {
+                if (!cell) {
+                  return <div key={`empty-${idx}`} className="h-9" />;
+                }
+                const badgeStyle =
+                  cell.status === 'launched'
+                    ? 'bg-priSoft text-priInk font-bold'
+                    : cell.status === 'pending'
+                      ? 'bg-spendSoft text-spendText font-bold'
+                      : 'text-ink font-medium';
+                return (
+                  <div
+                    key={cell.day}
+                    className={`h-9 rounded-[12px] text-xs flex items-center justify-center ${badgeStyle}`}
+                  >
+                    {cell.day}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs text-muted pt-1">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-pri inline-block" />
+              Lançada
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-spend inline-block" />
+              A vencer
+            </span>
+          </div>
+
+          <div className="rounded-[18px] bg-priSoft p-3.5 text-xs font-semibold text-priInk leading-relaxed">
+            Se nada mudar, {nextMonthName} fecha com{' '}
+            <span className="font-bold">{maskCurrency(stats.expectedTotal, privacyMode)}</span> em
+            fixas.
+          </div>
+        </div>
       </div>
 
-      {/* GRID DE CARTÕES DE ASSINATURA */}
-      {visible.length === 0 ? (
-        <EmptyState icon="fa-rotate" title={'Nenhuma assinatura'} description="Cadastre seus pagamentos recorrentes (Spotify, Netflix, Conta de Luz)." />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {visible.map((s) => (
-            <div key={s.id} className={`p-5 rounded-3xl border transition-all ${s.status === 'pausada' ? 'bg-white/[0.01] border-white/5 opacity-60 grayscale' : 'bg-white/[0.03] border-white/[0.08] hover:-translate-y-1 shadow-lg'}`}>
-              <div className="flex justify-between items-start mb-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl shrink-0 ${s.status === 'pausada' ? 'bg-white/10 text-[#8fa39a]' : 'bg-[#e3b04b]/15 text-[#e3b04b]'}`}>
-                  <i className="fa-solid fa-rotate" />
-                </div>
-                {canEdit && (
-                  <div className="flex gap-1.5 bg-black/20 p-1.5 rounded-xl border border-white/5">
-                    <Tooltip content={s.status === 'pausada' ? 'Reativar' : 'Pausar'}>
-                      <button onClick={() => handleTogglePause(s)} onContextMenu={(e) => e.preventDefault()} aria-label={s.status === 'pausada' ? 'Reativar' : 'Pausar'} className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-white/10 hover:text-white flex items-center justify-center"><i className={`fa-solid ${s.status === 'pausada' ? 'fa-play' : 'fa-pause'}`} /></button>
-                    </Tooltip>
-                    <button onClick={() => openEdit(s)} onContextMenu={(e) => e.preventDefault()} aria-label="Editar assinatura" className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-[#3b82f6]/20 hover:text-[#3b82f6] flex items-center justify-center"><i className="fa-solid fa-pen" /></button>
-                    <button onClick={() => setDeleteId(s.id)} onContextMenu={(e) => e.preventDefault()} aria-label="Excluir assinatura" className="w-8 h-8 rounded-lg text-[#8fa39a] hover:bg-red-500/20 hover:text-red-400 flex items-center justify-center"><i className="fa-solid fa-trash" /></button>
-                  </div>
-                )}
-              </div>
-              <h3 className="text-lg font-bold text-white truncate">{s.name}</h3>
-              <div className="text-xs text-[#8fa39a] mb-5 font-medium flex items-center gap-1.5"><i className="fa-regular fa-calendar" /> Vence dia {s.billingDay}</div>
-              <div className="flex justify-between items-end border-t border-white/5 pt-4">
-                <strong className={`text-2xl font-mono ${s.status === 'pausada' ? 'text-[#8fa39a]' : 'text-white'}`}>{formatCurrency(s.amount)}</strong>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-[#8fa39a] px-2 py-1 bg-white/5 rounded-lg text-right leading-tight whitespace-normal max-w-[140px]">{s.person}</span>
-              </div>
+      {/* Modal Nova / Editar Fixa */}
+      <Dialog.Root open={isModalOpen} onOpenChange={setIsModalOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[9998] bg-black/55 backdrop-blur-xs" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[9999] w-[calc(100vw-24px)] max-w-[480px] max-h-[90vh] overflow-y-auto -translate-x-1/2 -translate-y-1/2 rounded-[26px] bg-card border border-border p-6 text-ink shadow-2xl focus:outline-none">
+            <div className="flex items-center justify-between mb-4">
+              <Dialog.Title className="font-display text-lg font-bold text-ink">
+                {editingSub ? 'Editar fixa' : 'Nova fixa'}
+              </Dialog.Title>
+              <Dialog.Close asChild>
+                <button
+                  type="button"
+                  aria-label="Fechar"
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-neutral"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </Dialog.Close>
             </div>
-          ))}
-        </div>
-      )}
+            <Dialog.Description className="sr-only">
+              Formulário para cadastrar ou editar despesa fixa mensal.
+            </Dialog.Description>
 
-      {/* MODAL DE FORMULÁRIO BÁSICO */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm" onClick={() => setShowForm(false)}>
-          <form className="bg-[#141d1a] border border-white/10 p-6 rounded-3xl w-full max-w-md flex flex-col gap-4 text-white max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit(onSubmit)}>
-            <h3 className="text-xl font-bold mb-2">{editingId ? 'Editar Assinatura' : 'Nova Assinatura'}</h3>
-            
-            <input placeholder="Nome (Ex: Netflix, Luz)" {...register('name')} className="p-3 bg-black/40 border border-white/10 rounded-xl outline-none focus:border-[#e3b04b]" />
-            {(errors.name as any) && <span className="text-red-400 text-xs mt-[-10px]">{(errors.name as any).message}</span>}
-            
-            <div className="flex gap-4">
-              <Controller
-                name="amount"
-                control={control}
-                render={({ field }) => (
-                  <MoneyField
-                    placeholder="Valor Mensal"
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className="w-1/2"
-                  />
-                )}
-              />
-              <Controller
-                name="billingDay"
-                control={control}
-                render={({ field }) => (
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-muted mb-1.5">Nome</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Aluguel, Internet fibra, Netflix"
+                  className="w-full min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-pri"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1.5">Valor</label>
+                  <MoneyField value={amount} onValueChange={setAmount} ariaLabel="Valor da fixa" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1.5">Dia do vencimento</label>
                   <NumberField
+                    value={dueDay}
+                    onValueChange={setDueDay}
                     min={1}
                     max={31}
-                    placeholder="Dia do Vencimento"
-                    value={field.value}
-                    onChange={(e) => field.onChange(e.target.value)}
-                    className="w-1/2"
+                    placeholder="10"
+                    ariaLabel="Dia do vencimento"
                   />
-                )}
-              />
-            </div>
-            {originalAmount !== null && (() => {
-              const novo = parseFloat(watchedAmount as string) || 0;
-              const diff = novo - originalAmount;
-              if (Math.abs(diff) < 0.01) return null;
-              const pct = originalAmount > 0 ? (diff / originalAmount) * 100 : 0;
-              return (
-                <p className={`text-xs -mt-2 font-bold ${diff > 0 ? 'text-red-400' : 'text-emerald-400'}`}>
-                  <i className={`fa-solid ${diff > 0 ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'} mr-1`} />
-                  {diff > 0 ? 'Subiu' : 'Baixou'} {formatCurrency(Math.abs(diff))} ({Math.abs(pct).toFixed(0)}%) desde o valor anterior ({formatCurrency(originalAmount)})
-                </p>
-              );
-            })()}
-
-            <Controller name="paymentMethod" control={control} render={({ field }) => (
-              <CustomSelect value={field.value} onChange={(e) => field.onChange(e.target.value)}>
-                <option value="account">Conta Padrão</option>
-                <optgroup label="Contas">{accounts.map((a) => (<option key={a.id} value={`acc_${a.id}`}>{a.name}</option>))}</optgroup>
-                <optgroup label="Cartões">{cards.map((c) => (<option key={c.id} value={`card_${c.id}`}>{c.name}</option>))}</optgroup>
-              </CustomSelect>
-            )} />
-
-            {/* SEÇÃO RATEIO ENXUTA */}
-            <div className="mt-2 p-4 bg-white/5 rounded-2xl">
-              <label className="flex items-center gap-3 cursor-pointer text-sm font-bold text-white">
-                <input type="checkbox" checked={isSplit} onChange={(e) => setIsSplit(e.target.checked)} className="accent-[#e3b04b] w-4 h-4" /> Dividir com outras pessoas
-              </label>
-              {isSplit ? (
-                <div className="mt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs text-[#8fa39a]">Participantes:</span>
-                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-[#e3b04b] bg-[#e3b04b]/10 px-2 py-1 rounded"><i className="fa-solid fa-calculator" /> Dividir igual</button>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {availablePersons.map((pName) => {
-                      const isChecked = Object.prototype.hasOwnProperty.call(splitItems, pName);
-                      return (
-                        <div key={pName} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/5">
-                          <label className="flex items-center gap-3 text-sm text-white cursor-pointer">
-                            <input type="checkbox" checked={isChecked} onChange={(e) => handleSplitCheck(pName, e.target.checked)} className="accent-[#e3b04b]" /> {pName}
-                          </label>
-                          <div className="w-32">
-                            <MoneyField
-                              disabled={!isChecked}
-                              value={splitItems[pName] || ''}
-                              onChange={(e) => handleSplitValueChange(pName, e.target.value)}
-                              placeholder="R$ 0,00"
-                              className="text-right text-xs"
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
-              ) : (
-                <div className="mt-3">
-                  <input {...register('person')} placeholder={`Pessoa (padrão: ${session.person})`} className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-white focus:border-[#e3b04b] outline-none" />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1.5">Categoria</label>
+                  <Select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    ariaLabel="Categoria"
+                  >
+                    {categoriesList.map((cat) => (
+                      <option key={cat} value={cat}>
+                        {cat}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1.5">Conta ou cartão</label>
+                  <Select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    ariaLabel="Conta ou cartão"
+                  >
+                    <option value="">Selecionar</option>
+                    {visibleAccounts.length > 0 && (
+                      <optgroup label="Contas">
+                        {visibleAccounts.map((acc) => (
+                          <option key={acc.id} value={`acc_${acc.id}`}>
+                            {acc.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {visibleCards.length > 0 && (
+                      <optgroup label="Cartões">
+                        {visibleCards.map((c) => (
+                          <option key={c.id} value={`card_${c.id}`}>
+                            Cartão {c.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </Select>
+                </div>
+              </div>
+
+              {allPersonNames.length > 0 && (
+                <div>
+                  <label className="block text-xs font-bold text-muted mb-1.5">Responsável</label>
+                  <Select
+                    value={person}
+                    onChange={(e) => setPerson(e.target.value)}
+                    ariaLabel="Pessoa responsável"
+                  >
+                    {allPersonNames.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </Select>
                 </div>
               )}
-            </div>
 
-            <div className="flex gap-3 mt-4">
-              <button type="button" onClick={() => setShowForm(false)} className="flex-1 bg-white/5 hover:bg-white/10 py-3 rounded-xl font-bold transition-colors">Cancelar</button>
-              <button type="submit" disabled={isSubmitting} className="flex-1 bg-[#e3b04b] text-black font-bold py-3 rounded-xl hover:bg-[#f5d78a] transition-colors disabled:opacity-50">
-                {isSubmitting ? 'Salvando...' : 'Salvar'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+              {allPersonNames.length > 1 && (
+                <div className="rounded-[18px] bg-neutral p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-ink">Dividir entre pessoas</div>
+                      <div className="text-[11px] text-muted">
+                        Reparte o valor igualmente no acerto do mês.
+                      </div>
+                    </div>
+                    <Switch
+                      checked={isSplit}
+                      onCheckedChange={(checked) => {
+                        setIsSplit(checked);
+                        if (checked && splitPeople.length === 0) {
+                          setSplitPeople(person ? [person] : [allPersonNames[0]]);
+                        }
+                      }}
+                      ariaLabel="Dividir entre pessoas"
+                    />
+                  </div>
 
-      {/* CONFIRMAÇÃO DE EXCLUSÃO BÁSICA */}
-      <ConfirmModal isOpen={!!deleteId} title={'Excluir Assinatura'} message="Tem certeza que deseja excluir esta assinatura? (Não afeta cobranças já geradas)" confirmLabel="Excluir" onConfirm={handleConfirmDelete} onCancel={() => setDeleteId(null)} />
+                  {isSplit && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {allPersonNames.map((pName) => {
+                        const selected = splitPeople.includes(pName);
+                        return (
+                          <button
+                            key={pName}
+                            type="button"
+                            onClick={() => toggleSplitPerson(pName)}
+                            className={`px-3 py-1.5 rounded-pill text-xs font-bold transition-colors ${
+                              selected
+                                ? 'bg-priSoft text-priInk border border-pri/30'
+                                : 'bg-card text-muted border border-border'
+                            }`}
+                          >
+                            {pName}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {isSplit && splitPeople.length > 0 && amount > 0 && (
+                    <div className="text-xs font-semibold text-priInk">
+                      Parte de cada pessoa: {formatCurrency(amount / splitPeople.length)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-bold text-ink">Fixa ativa</span>
+                <Switch checked={active} onCheckedChange={setActive} ariaLabel="Fixa ativa" />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 min-h-[44px] rounded-[18px] bg-neutral text-ink font-bold text-sm"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 min-h-[44px] rounded-[18px] bg-fab text-fabIcon font-bold text-sm"
+                >
+                  Salvar
+                </button>
+              </div>
+            </form>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <ConfirmDialog
+        isOpen={Boolean(deleteTarget)}
+        title={'Excluir fixa'}
+        message={
+          deleteTarget
+            ? `Deseja excluir "${deleteTarget.name}"? O que já foi lançado nos meses anteriores continua no histórico.`
+            : ''
+        }
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
 
+export default Subscriptions;
