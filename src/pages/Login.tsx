@@ -99,7 +99,10 @@ export default function Login() {
   const location = useLocation();
   const [mode, setMode] = useState<'login' | 'signup'>(() => {
     const params = new URLSearchParams(window.location.search);
-    return params.get('mode') === 'signup' ? 'signup' : 'login';
+    return params.get('mode') === 'signup' ||
+      window.location.pathname === '/criar-conta'
+      ? 'signup'
+      : 'login';
   });
 
   // Estados do Login
@@ -131,10 +134,10 @@ export default function Login() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('mode') === 'signup') {
+    if (params.get('mode') === 'signup' || location.pathname === '/criar-conta') {
       setMode('signup');
     }
-  }, [location.search]);
+  }, [location.search, location.pathname]);
 
   useEffect(() => {
     if (forgotCooldown <= 0) return;

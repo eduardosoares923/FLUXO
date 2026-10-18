@@ -1,3 +1,4 @@
+// Manter sincronizado com o outro arquivo: api/_legal.ts
 export const TERMS_VERSION = '1.0';
 export const PRIVACY_VERSION = '1.0';
 export const TERMS_EFFECTIVE_DATE = '18 de outubro de 2026';

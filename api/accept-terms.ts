@@ -3,7 +3,7 @@
 // Não armazena IP em consentLogs.
 
 import type { App } from 'firebase-admin/app';
-import { TERMS_VERSION, PRIVACY_VERSION } from '../src/legal/versions';
+import { TERMS_VERSION, PRIVACY_VERSION } from './_legal.js';
 
 type AppModule = typeof import('firebase-admin/app');
 

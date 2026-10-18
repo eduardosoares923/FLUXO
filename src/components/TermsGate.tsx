@@ -63,10 +63,14 @@ export function TermsGate() {
         }),
       });
 
-      const data = await response.json().catch(() => ({}));
+      let data: any = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json().catch(() => null);
+      }
       if (!response.ok) {
         toast.error(
-          data?.error || 'Não foi possível registrar o aceite dos termos.'
+          data?.error || `Erro ${response.status} ao registrar o aceite`
         );
         return;
       }

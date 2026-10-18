@@ -45,6 +45,14 @@ export default function App() {
                   </Suspense>
                 }
               />
+              <Route
+                path="/criar-conta"
+                element={
+                  <Suspense fallback={<RouteLoading />}>
+                    <Login />
+                  </Suspense>
+                }
+              />
             </Route>
 
             <Route element={<ProtectedRoute />}>
