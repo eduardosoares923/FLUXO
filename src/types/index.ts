@@ -76,6 +76,9 @@ export interface User {
   usageType?: 'individual' | 'family';
   requestedInvite?: string;
   pendingFamilyId?: string | null;
+  termsVersion?: string;
+  privacyVersion?: string;
+  acceptedAt?: any;
 }
 
 export interface Card {

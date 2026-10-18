@@ -15,6 +15,7 @@ import {
 } from 'firebase/firestore';
 import { normalize } from '../utils/format';
 import { Select } from '../components/ui/Select';
+import { PageContainer } from '../components/ui/PageContainer';
 
 export function Users() {
   const { data: users, update, remove } = useCollection<User>(
@@ -527,7 +528,7 @@ export function Users() {
   };
 
   return (
-    <div className="space-y-5 pb-8">
+    <PageContainer className="space-y-5">
       {/* Top action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -1217,7 +1218,7 @@ export function Users() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-    </div>
+    </PageContainer>
   );
 }
 

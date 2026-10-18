@@ -12,6 +12,7 @@ import { toast } from '../stores/useToastStore';
 import { Account, Card, Person, Transaction } from '../types';
 import { FileDropzone } from '../components/ui/FileDropzone';
 import { Select } from '../components/ui/Select';
+import { PageContainer } from '../components/ui/PageContainer';
 import { auth } from '../firebase';
 
 const SHORT_MONTHS = [
@@ -483,7 +484,7 @@ export function Import() {
   };
 
   return (
-    <div className="space-y-5 pb-8">
+    <PageContainer className="space-y-5">
       {/* Dropzone Card */}
       <FileDropzone
         accept=".csv,.txt,.ofx,.xlsx,.xls"
@@ -635,7 +636,7 @@ export function Import() {
           </div>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

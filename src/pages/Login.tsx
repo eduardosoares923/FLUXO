@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import * as Dialog from '@radix-ui/react-dialog';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
+import { toast } from '../stores/useToastStore';
 
 const ERROR_MESSAGES: Record<string, string> = {
   'auth/user-not-found': 'Usuário não encontrado.',
@@ -12,6 +12,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   'auth/account-pending': 'Conta aguardando aprovação',
   'auth/account-blocked': 'Esta conta está bloqueada pelo administrador.',
 };
+
+const NEUTRAL_FORGOT_MESSAGE =
+  'Se existir uma conta com esses dados, enviamos um link para o e-mail cadastrado. Olhe também o spam.';
 
 function EyeSvg({ show }: { show: boolean }) {
   if (show) {
@@ -68,9 +71,36 @@ function CloseSvg() {
   );
 }
 
+function GoogleSvg() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" className="shrink-0">
+      <path
+        fill="#4285F4"
+        d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47c-.29 1.48-1.14 2.73-2.4 3.58v3h3.86c2.26-2.09 3.56-5.17 3.56-8.82Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09C3.26 21.3 7.31 24 12 24Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.27 14.29c-.25-.72-.38-1.49-.38-2.29s.14-1.57.38-2.29V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.98-3.09Z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.98 3.09c.95-2.85 3.6-4.96 6.73-4.96Z"
+      />
+    </svg>
+  );
+}
+
 export default function Login() {
-  const { login } = useAuth();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const { login, loginWithGoogle } = useAuth();
+  const location = useLocation();
+  const [mode, setMode] = useState<'login' | 'signup'>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('mode') === 'signup' ? 'signup' : 'login';
+  });
 
   // Estados do Login
   const [identifier, setIdentifier] = useState('');
@@ -82,10 +112,11 @@ export default function Login() {
 
   // Estados de Esqueci a senha
   const [forgotOpen, setForgotOpen] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
   const [forgotMsg, setForgotMsg] = useState('');
   const [forgotError, setForgotError] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotCooldown, setForgotCooldown] = useState(0);
 
   // Estados do Cadastro ("Criar nova conta")
   const [signupName, setSignupName] = useState('');
@@ -95,7 +126,23 @@ export default function Login() {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
   const [usageType, setUsageType] = useState<'individual' | 'family'>('individual');
   const [inviteCode, setInviteCode] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [website, setWebsite] = useState(''); // Honeypot invisível
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'signup') {
+      setMode('signup');
+    }
+  }, [location.search]);
+
+  useEffect(() => {
+    if (forgotCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setForgotCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [forgotCooldown]);
 
   async function handleLoginSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,6 +158,23 @@ export default function Login() {
     } catch (err: any) {
       console.error('Erro de login:', err);
       setError(ERROR_MESSAGES[err.code] || 'Identificador ou senha incorretos.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleGoogleLogin() {
+    setError('');
+    setSuccessMsg('');
+    setLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (err: any) {
+      if (err?.code === 'auth/popup-closed-by-user' || err?.code === 'auth/cancelled-popup-request') {
+        return;
+      }
+      console.error('Erro de login com Google:', err);
+      setError(ERROR_MESSAGES[err?.code] || 'Não foi possível entrar com o Google.');
     } finally {
       setLoading(false);
     }
@@ -137,6 +201,10 @@ export default function Login() {
       setError('Informe o código de convite fornecido.');
       return;
     }
+    if (!acceptedTerms) {
+      setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -150,6 +218,7 @@ export default function Login() {
           password: signupPassword,
           usageType,
           inviteCode: usageType === 'family' ? inviteCode.trim() : '',
+          acceptedTerms: true,
           website,
         }),
       });
@@ -171,6 +240,7 @@ export default function Login() {
       setSignupEmail('');
       setSignupPassword('');
       setInviteCode('');
+      setAcceptedTerms(false);
       setWebsite('');
       setMode('login');
       setSuccessMsg('Cadastro enviado, aguarde a aprovação do administrador');
@@ -184,18 +254,49 @@ export default function Login() {
 
   async function handleForgotSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!forgotEmail.trim() || !forgotEmail.includes('@')) {
-      setForgotError('Informe um e-mail válido.');
+    if (forgotCooldown > 0 || forgotLoading) return;
+
+    const clean = forgotIdentifier.trim();
+    if (!clean) {
+      setForgotError('Informe seu e-mail ou nome de usuário.');
       return;
     }
+
     setForgotError('');
     setForgotMsg('');
     setForgotLoading(true);
     try {
-      await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
-      setForgotMsg('E-mail de recuperação enviado com sucesso. Verifique sua caixa de entrada.');
-    } catch (err: any) {
-      setForgotError(ERROR_MESSAGES[err.code] || 'Não foi possível enviar o e-mail de recuperação.');
+      const response = await fetch('/api/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: clean }),
+      });
+
+      let data: any = null;
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        data = await response.json();
+      }
+
+      if (response.status === 429) {
+        const msg =
+          data?.message ||
+          data?.error ||
+          'Muitas tentativas em pouco tempo. Aguarde alguns minutos e tente novamente.';
+        setForgotError(msg);
+        toast.warning(msg);
+        setForgotCooldown(30);
+        return;
+      }
+
+      const msg = data?.message || NEUTRAL_FORGOT_MESSAGE;
+      setForgotMsg(msg);
+      toast.info(msg);
+      setForgotCooldown(30);
+    } catch {
+      setForgotMsg(NEUTRAL_FORGOT_MESSAGE);
+      toast.info(NEUTRAL_FORGOT_MESSAGE);
+      setForgotCooldown(30);
     } finally {
       setForgotLoading(false);
     }
@@ -204,7 +305,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-bg text-ink">
       {/* Painel Esquerdo Hero (Desktop) */}
-      <div className="hidden lg:flex lg:w-1/2 min-h-screen relative overflow-hidden bg-gradient-to-br from-[#1F5A41] to-[#2F7A57] dark:from-[#123A33] dark:to-[#1F5A4C] p-12 lg:p-16 flex-col justify-between text-white select-none">
+      <div className="hidden lg:flex lg:w-1/2 min-h-screen relative overflow-hidden bg-gradient-to-br from-heroStart to-heroEnd p-12 lg:p-16 flex-col justify-between text-heroInk select-none">
         {/* Marca d'água W ao fundo */}
         <span
           aria-hidden="true"
@@ -213,22 +314,22 @@ export default function Login() {
           W
         </span>
 
-        {/* Topo do painel: W wynd em dourado */}
-        <div className="flex items-center gap-2.5 z-10">
-          <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white/10 font-display text-2xl font-bold bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
+        {/* Topo do painel: W wynd em dourado alinhados pela linha de base com gap 10px */}
+        <div className="flex items-baseline gap-[10px] z-10">
+          <span className="font-display text-[28px] font-bold leading-none bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
             W
           </span>
-          <span className="font-display text-2xl font-bold tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
+          <span className="font-display text-2xl font-bold leading-none tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
             wynd
           </span>
         </div>
 
         {/* Centro: Frase e descrição */}
         <div className="max-w-[480px] z-10 py-12">
-          <h1 className="font-display text-[46px] lg:text-[54px] font-bold leading-[1.08] tracking-tight text-white mb-6">
+          <h1 className="font-display text-[46px] lg:text-[54px] font-bold leading-[1.08] tracking-tight text-heroInk mb-6">
             Seu dinheiro, no seu ritmo.
           </h1>
-          <p className="text-white/80 text-base lg:text-lg leading-relaxed">
+          <p className="text-heroMuted text-base lg:text-lg leading-relaxed">
             O mesmo Wynd no app e no site, com a mesma conta.
             <br />
             Contas, cartões, fixas e metas num lugar só.
@@ -237,13 +338,13 @@ export default function Login() {
 
         {/* Rodapé: Pílulas com destaques */}
         <div className="flex flex-wrap items-center gap-2.5 z-10">
-          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-heroInk text-xs font-semibold backdrop-blur-sm">
             Contas e cartões
           </span>
-          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-heroInk text-xs font-semibold backdrop-blur-sm">
             Fixas e assinaturas
           </span>
-          <span className="px-4 py-2 rounded-pill bg-white/10 text-white text-xs font-semibold backdrop-blur-sm">
+          <span className="px-4 py-2 rounded-pill bg-white/10 text-heroInk text-xs font-semibold backdrop-blur-sm">
             Metas e relatórios
           </span>
         </div>
@@ -253,11 +354,11 @@ export default function Login() {
       <div className="w-full lg:w-1/2 min-h-screen flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-bg relative overflow-y-auto">
         <div className="w-full max-w-[420px] mx-auto py-8 animate-in fade-in duration-300">
           {/* Marca no topo exclusivo celular */}
-          <div className="lg:hidden flex items-center justify-center gap-2.5 mb-8">
-            <span className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-card border border-border font-display text-2xl font-bold bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
+          <div className="lg:hidden flex items-baseline justify-center gap-[10px] mb-8">
+            <span className="font-display text-[28px] font-bold leading-none bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
               W
             </span>
-            <span className="font-display text-2xl font-bold tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
+            <span className="font-display text-2xl font-bold leading-none tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
               wynd
             </span>
           </div>
@@ -321,10 +422,10 @@ export default function Login() {
                       setForgotOpen(true);
                       setForgotError('');
                       setForgotMsg('');
-                      setForgotEmail(identifier.includes('@') ? identifier : '');
+                      setForgotIdentifier(identifier.trim());
                     }}
                     onContextMenu={(e) => e.preventDefault()}
-                    className="text-xs font-semibold text-ink hover:underline"
+                    className="text-[14px] font-bold text-priInk hover:underline"
                   >
                     Esqueci a senha
                   </button>
@@ -347,9 +448,26 @@ export default function Login() {
                 type="submit"
                 disabled={loading}
                 onContextMenu={(e) => e.preventDefault()}
-                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-pri hover:opacity-95 active:scale-[0.99] text-white dark:text-[#0A1110] font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-fab hover:opacity-95 active:scale-[0.99] text-fabIcon font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
               >
                 {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+
+              <div className="flex items-center gap-3 my-5">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-xs font-medium text-muted">ou</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+
+              <button
+                type="button"
+                disabled={loading}
+                onClick={handleGoogleLogin}
+                onContextMenu={(e) => e.preventDefault()}
+                className="w-full min-h-[54px] h-[54px] rounded-[18px] border border-border bg-card hover:bg-neutral/60 active:scale-[0.99] text-ink font-bold text-sm transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              >
+                <GoogleSvg />
+                <span>Continuar com Google</span>
               </button>
 
               <div className="mt-8 text-center text-sm text-muted">
@@ -546,6 +664,59 @@ export default function Login() {
                     onChange={(e) => setWebsite(e.target.value)}
                   />
                 </div>
+
+                {/* Checkbox de aceite dos Termos e Política de Privacidade */}
+                <label className="flex items-start gap-3 cursor-pointer select-none pt-1">
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => setAcceptedTerms(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <span
+                    className={`w-5 h-5 rounded-md border mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
+                      acceptedTerms
+                        ? 'bg-pri border-pri text-white'
+                        : 'bg-card border-border text-transparent'
+                    }`}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="w-3.5 h-3.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M20 6 9 17l-5-5" />
+                    </svg>
+                  </span>
+                  <span className="text-xs text-muted leading-relaxed">
+                    Li e concordo com os{' '}
+                    <Link
+                      to="/termos"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-bold text-priInk hover:underline"
+                    >
+                      Termos de Uso
+                    </Link>{' '}
+                    e com a{' '}
+                    <Link
+                      to="/privacidade"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-bold text-priInk hover:underline"
+                    >
+                      Política de Privacidade
+                    </Link>{' '}
+                    do Wynd, e declaro ter 18 anos ou mais.
+                  </span>
+                </label>
               </div>
 
               {error && (
@@ -556,9 +727,9 @@ export default function Login() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !acceptedTerms}
                 onContextMenu={(e) => e.preventDefault()}
-                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-pri hover:opacity-95 active:scale-[0.99] text-white dark:text-[#0A1110] font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-50"
+                className="w-full min-h-[50px] mt-6 rounded-[18px] bg-fab hover:opacity-95 active:scale-[0.99] text-fabIcon font-bold text-base shadow-sm transition-all flex items-center justify-center disabled:opacity-40"
               >
                 {loading ? 'Enviando...' : 'Criar conta'}
               </button>
@@ -579,6 +750,28 @@ export default function Login() {
               </div>
             </form>
           )}
+
+          {/* Links legais no rodapé do Login */}
+          <div className="mt-8 pt-4 border-t border-border/60 flex flex-wrap items-center justify-center gap-4 text-xs text-muted">
+            <Link
+              to="/termos"
+              className="hover:text-ink font-medium transition-colors"
+            >
+              Termos de uso
+            </Link>
+            <Link
+              to="/privacidade"
+              className="hover:text-ink font-medium transition-colors"
+            >
+              Privacidade
+            </Link>
+            <Link
+              to="/excluir-conta"
+              className="hover:text-ink font-medium transition-colors"
+            >
+              Excluir conta
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -592,7 +785,7 @@ export default function Login() {
           >
             <div className="flex items-center justify-between mb-3">
               <Dialog.Title className="font-display text-xl font-bold text-ink">
-                Recuperar senha
+                Esqueci a senha
               </Dialog.Title>
               <Dialog.Close asChild>
                 <button
@@ -606,20 +799,20 @@ export default function Login() {
             </div>
 
             <p className="text-xs text-muted mb-4 leading-relaxed">
-              Informe seu e-mail cadastrado para receber as instruções de recuperação de senha.
+              Informe seu e-mail ou nome de usuário cadastrado para receber o link de redefinição de senha.
             </p>
 
             <form onSubmit={handleForgotSubmit} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="forgot-email" className="text-xs font-bold text-muted uppercase tracking-wider">
-                  E-mail
+                <label htmlFor="forgot-identifier" className="text-xs font-bold text-muted uppercase tracking-wider">
+                  E-mail ou usuário
                 </label>
                 <input
-                  id="forgot-email"
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  placeholder="voce@exemplo.com"
+                  id="forgot-identifier"
+                  type="text"
+                  value={forgotIdentifier}
+                  onChange={(e) => setForgotIdentifier(e.target.value)}
+                  placeholder="marcos ou voce@exemplo.com"
                   className="w-full min-h-[48px] px-4 rounded-[18px] border border-border bg-card text-ink placeholder:text-muted/50 focus:border-pri focus:outline-none transition-colors text-sm"
                 />
               </div>
@@ -631,7 +824,7 @@ export default function Login() {
               )}
 
               {forgotMsg && (
-                <p className="text-xs font-medium text-pri leading-relaxed">
+                <p className="text-xs font-medium text-priInk bg-priSoft/50 rounded-[14px] p-3 leading-relaxed">
                   {forgotMsg}
                 </p>
               )}
@@ -647,11 +840,15 @@ export default function Login() {
                 </button>
                 <button
                   type="submit"
-                  disabled={forgotLoading}
+                  disabled={forgotLoading || forgotCooldown > 0}
                   onContextMenu={(e) => e.preventDefault()}
-                  className="px-5 min-h-[44px] rounded-pill bg-pri text-white dark:text-[#0A1110] text-xs font-bold hover:opacity-95 transition-all disabled:opacity-50"
+                  className="px-5 min-h-[44px] rounded-pill bg-fab text-fabIcon text-xs font-bold hover:opacity-95 transition-all disabled:opacity-50"
                 >
-                  {forgotLoading ? 'Enviando...' : 'Enviar link de recuperação'}
+                  {forgotLoading
+                    ? 'Enviando...'
+                    : forgotCooldown > 0
+                    ? `Enviar link (${forgotCooldown}s)`
+                    : 'Enviar link'}
                 </button>
               </div>
             </form>

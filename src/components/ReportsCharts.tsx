@@ -1,6 +1,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, Legend, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { formatCurrency } from '../utils/format';
+import { Icon } from './ui/Icon';
 
 const PIE_COLORS = ['#e3b04b', '#3b82f6', '#8b5cf6', '#10b981', '#f87171', '#06b6d4', '#f59e0b', '#ec4899'];
 
@@ -25,7 +26,7 @@ export default function ReportsCharts({
     <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl">
-          <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-chart-pie text-[#8b5cf6]" /> Despesas por Categoria</h3>
+          <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><Icon name="chart-pie" className="text-[#8b5cf6]" /> Despesas por Categoria</h3>
           {categoryStats.length === 0 ? (
             <p className="text-[#8fa39a] text-center py-6">Nenhuma despesa registrada.</p>
           ) : (
@@ -54,7 +55,7 @@ export default function ReportsCharts({
 
         {selectedPerson === 'todos' && (
           <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl">
-            <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-users text-[#10b981]" /> Distribuição por Pessoa</h3>
+            <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><Icon name="users" className="text-[#10b981]" /> Distribuição por Pessoa</h3>
             {personStats.length === 0 ? (
               <p className="text-[#8fa39a] text-center py-6">Nenhuma despesa para rateio.</p>
             ) : (
@@ -72,7 +73,7 @@ export default function ReportsCharts({
       </div>
 
       <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl mb-8">
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-chart-line text-[#e3b04b]" /> Evolução dos Últimos 6 Meses</h3>
+        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><Icon name="chart-line" className="text-[#e3b04b]" /> Evolução dos Últimos 6 Meses</h3>
         <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
             <LineChart data={last6MonthsTrend}>
@@ -89,7 +90,7 @@ export default function ReportsCharts({
       </div>
 
       <div className="bg-white/[0.02] border border-white/[0.08] rounded-3xl p-6 sm:p-8 shadow-xl mb-8">
-        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><i className="fa-solid fa-arrow-trend-up text-[#34d399]" /> Evolução de Patrimônio</h3>
+        <h3 className="text-xl font-bold text-[#f2f0ea] mb-6 flex items-center gap-3"><Icon name="arrow-trend-up" className="text-[#34d399]" /> Evolução de Patrimônio</h3>
         <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
             <LineChart data={equityHistory}>

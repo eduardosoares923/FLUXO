@@ -5,6 +5,11 @@ import { ProtectedRoute, PublicOnlyRoute, Layout } from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { RouteLoading } from './components/RouteLoading';
 import { ToastContainer } from './components/ToastContainer';
+import {
+  TermsPage,
+  PrivacyPage,
+  DeleteAccountPublicPage,
+} from './pages/LegalPages';
 
 const Login = lazy(() => import('./pages/Login'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -26,6 +31,11 @@ export default function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
+            {/* Páginas legais públicas (acessíveis logado ou não) */}
+            <Route path="/termos" element={<TermsPage />} />
+            <Route path="/privacidade" element={<PrivacyPage />} />
+            <Route path="/excluir-conta" element={<DeleteAccountPublicPage />} />
+
             <Route element={<PublicOnlyRoute />}>
               <Route
                 path="/login"

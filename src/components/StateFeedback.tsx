@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './ui/Icon';
 
 export function PageLoading({ message = 'Carregando dados...' }: { message?: string }) {
   return (
@@ -14,7 +15,7 @@ export function PageLoading({ message = 'Carregando dados...' }: { message?: str
         gap: '1rem',
       }}
     >
-      <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '2rem', color: '#3b82f6' }} />
+      <Icon name="circle-notch" spin style={{ fontSize: '2rem', color: '#3b82f6' }} />
       <span style={{ fontSize: '0.95rem', fontWeight: 500 }}>{message}</span>
     </div>
   );
@@ -44,7 +45,7 @@ export function PageError({ title = 'Falha ao sincronizar dados', error, onRetry
       }}
     >
       <div style={{ fontSize: '2.5rem', color: '#ef4444', marginBottom: '0.75rem' }}>
-        <i className="fa-solid fa-cloud-bolt" />
+        <Icon name="cloud-bolt" />
       </div>
       <h3 style={{ fontSize: '1.25rem', marginBottom: '0.5rem', fontWeight: 600 }}>{title}</h3>
       <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginBottom: '1.25rem', lineHeight: 1.5 }}>{errorMessage}</p>
@@ -62,7 +63,7 @@ export function PageError({ title = 'Falha ao sincronizar dados', error, onRetry
             fontWeight: 500,
           }}
         >
-          <i className="fa-solid fa-rotate-right" style={{ marginRight: '6px' }} /> Tentar novamente
+          <Icon name="rotate-right" style={{ marginRight: '6px' }} /> Tentar novamente
         </button>
       )}
     </div>
@@ -78,7 +79,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({
-  icon = 'fa-inbox',
+  icon = 'inbox',
   title = 'Nenhum registro encontrado',
   description,
   actionLabel,
@@ -101,7 +102,7 @@ export function EmptyState({
       }}
     >
       <div style={{ fontSize: '2.5rem', color: '#64748b', marginBottom: '0.75rem' }}>
-        <i className={`fa-solid ${icon}`} />
+        <Icon name={icon} />
       </div>
       <h4 style={{ fontSize: '1.1rem', color: '#f1f5f9', marginBottom: '0.25rem', fontWeight: 600 }}>{title}</h4>
       {description && (
@@ -120,7 +121,7 @@ export function EmptyState({
             cursor: 'pointer',
           }}
         >
-          <i className="fa-solid fa-plus" style={{ marginRight: '6px' }} />
+          <Icon name="plus" style={{ marginRight: '6px' }} />
           {actionLabel}
         </button>
       )}

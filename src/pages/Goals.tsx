@@ -15,6 +15,7 @@ import { MoneyField } from '../components/ui/MoneyField';
 import { Select } from '../components/ui/Select';
 import { MonthPicker } from '../components/ui/MonthPicker';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { PageContainer } from '../components/ui/PageContainer';
 
 const MONTH_NAMES_FULL = [
   'janeiro',
@@ -415,7 +416,7 @@ export function Goals() {
   };
 
   return (
-    <div className="space-y-6 pb-8">
+    <PageContainer className="space-y-6">
       {/* Top bar */}
       <div className="flex items-center justify-end">
         <button
@@ -865,7 +866,7 @@ export function Goals() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </PageContainer>
   );
 }
 

@@ -11,3 +11,5 @@ export * from './Switch';
 export * from './SegTabs';
 export * from './ScrollArea';
 export * from './NotificationsBell';
+export * from './PageContainer';
+export * from './Icon';

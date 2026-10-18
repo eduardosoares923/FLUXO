@@ -17,6 +17,7 @@ import { MoneyField } from '../components/ui/MoneyField';
 import { NumberField } from '../components/ui/NumberField';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { Switch } from '../components/ui/Switch';
+import { PageContainer } from '../components/ui/PageContainer';
 import { useTripState } from '../utils/travelMode';
 
 const MONTH_NAMES = [
@@ -551,7 +552,7 @@ export function Subscriptions() {
   };
 
   return (
-    <div className="space-y-5 pb-8">
+    <PageContainer className="space-y-5">
       {/* Top action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
@@ -1076,7 +1077,7 @@ export function Subscriptions() {
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
-    </div>
+    </PageContainer>
   );
 }
 

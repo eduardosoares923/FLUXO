@@ -23,6 +23,7 @@ import { MoneyField } from '../components/ui/MoneyField';
 import { NumberField } from '../components/ui/NumberField';
 import { Select } from '../components/ui/Select';
 import { DatePicker } from '../components/ui/DatePicker';
+import { PageContainer } from '../components/ui/PageContainer';
 import { Switch } from '../components/ui/Switch';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import {
@@ -410,7 +411,7 @@ export function Tools() {
   const currencySymbol = getTripCurrencySymbol(trip.code);
 
   return (
-    <div className="space-y-5 pb-8">
+    <PageContainer className="space-y-5">
       {/* Top bar: Segmented tabs + Action button */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex items-center gap-1 rounded-pill bg-seg p-1">
@@ -1021,7 +1022,7 @@ export function Tools() {
         onConfirm={handleConfirmDeleteTag}
         onCancel={() => setTagToDelete(null)}
       />
-    </div>
+    </PageContainer>
   );
 }
 

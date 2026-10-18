@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useCollection } from '../hooks/useCollection';
 import { useAuth } from '../context/AuthContext';
 import { useUIStore, THEME_OPTIONS, ThemeMode } from '../stores/useUIStore';
@@ -11,13 +12,12 @@ import {
   doc,
   setDoc,
   updateDoc,
-  deleteDoc,
   deleteField,
   query,
   where,
 } from 'firebase/firestore';
-import { deleteUser } from 'firebase/auth';
 import { MoneyField } from '../components/ui/MoneyField';
+import { PageContainer } from '../components/ui/PageContainer';
 
 const DEFAULT_CATEGORIES = [
   'Moradia',
@@ -347,36 +347,27 @@ export function Settings() {
 
   const handleDeleteMyAccount = async () => {
     if (deleteText.trim().toUpperCase() !== 'EXCLUIR' || !session?.id) return;
+    const fbUser = auth?.currentUser;
+    if (!fbUser) {
+      toast.error('Sua sessão expirou. Saia e entre novamente.');
+      return;
+    }
+
     setDeletingAccount(true);
     try {
-      const myUid = session.id;
-      const cols = ['accounts', 'cards', 'transactions', 'subscriptions', 'goals'];
-      let batch = writeBatch(db);
-      let ops = 0;
+      const idToken = await fbUser.getIdToken();
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
 
-      for (const colName of cols) {
-        const q = query(collection(db, colName), where('ownerUid', '==', myUid));
-        const snap = await getDocs(q);
-        for (const d of snap.docs) {
-          batch.delete(doc(db, colName, d.id));
-          ops++;
-          if (ops >= 400) {
-            await batch.commit();
-            batch = writeBatch(db);
-            ops = 0;
-          }
-        }
-      }
-      if (ops > 0) await batch.commit();
-
-      await deleteDoc(doc(db, 'users', myUid));
-
-      if (auth?.currentUser) {
-        try {
-          await deleteUser(auth.currentUser);
-        } catch {
-          // Se exigir reautenticação recente, o doc em /users já foi removido
-        }
+      const data = await response.json().catch(() => ({}));
+      if (response.status !== 200) {
+        toast.error(data?.error || 'Não foi possível excluir sua conta.');
+        return;
       }
 
       toast.success('Sua conta foi excluída.');
@@ -406,7 +397,7 @@ export function Settings() {
   );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start pb-8">
+    <PageContainer className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
       {/* Left Column */}
       <div className="lg:col-span-7 space-y-5">
         {/* Perfil */}
@@ -687,8 +678,30 @@ export function Settings() {
             </button>
           </div>
         </div>
+
+        {/* Links legais */}
+        <div className="pt-1 flex flex-wrap items-center justify-center sm:justify-start gap-4 text-xs text-muted px-1">
+          <Link
+            to="/termos"
+            className="font-semibold hover:text-ink transition-colors"
+          >
+            Termos de uso
+          </Link>
+          <Link
+            to="/privacidade"
+            className="font-semibold hover:text-ink transition-colors"
+          >
+            Política de privacidade
+          </Link>
+          <Link
+            to="/excluir-conta"
+            className="font-semibold hover:text-ink transition-colors"
+          >
+            Exclusão de conta e dados
+          </Link>
+        </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

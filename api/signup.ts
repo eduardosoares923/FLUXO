@@ -11,6 +11,7 @@
 import type { App } from 'firebase-admin/app';
 import type { Firestore } from 'firebase-admin/firestore';
 import { createHash } from 'node:crypto';
+import { TERMS_VERSION, PRIVACY_VERSION } from '../src/legal/versions';
 
 type AppModule = typeof import('firebase-admin/app');
 
@@ -24,7 +25,12 @@ async function loadFirebaseAdmin() {
     import('firebase-admin/auth'),
     import('firebase-admin/firestore'),
   ]);
-  return { appMod, getAuth: authMod.getAuth, getFirestore: firestoreMod.getFirestore };
+  return {
+    appMod,
+    getAuth: authMod.getAuth,
+    getFirestore: firestoreMod.getFirestore,
+    FieldValue: firestoreMod.FieldValue,
+  };
 }
 
 function describeError(err: any): string {
@@ -195,13 +201,19 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(400).json({ error: 'Requisição inválida' });
     }
 
-    const { name, email, password, website, usageType, inviteCode } = rawBody;
+    const { name, email, password, website, usageType, inviteCode, acceptedTerms } = rawBody;
 
     // Honeypot contra bots: se "website" vier preenchido, finge sucesso sem criar nada
     if (website && String(website).trim() !== '') {
       return res.status(200).json({
         success: true,
         message: 'Cadastro enviado, aguarde a aprovação do administrador',
+      });
+    }
+
+    if (acceptedTerms !== true) {
+      return res.status(400).json({
+        error: 'Você precisa aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.',
       });
     }
 
@@ -224,7 +236,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(400).json({ error: 'Informe o código de convite da família' });
     }
 
-    const { appMod, getAuth, getFirestore } = await loadFirebaseAdmin();
+    const { appMod, getAuth, getFirestore, FieldValue } = await loadFirebaseAdmin();
     const app = getAdminApp(appMod);
     const auth = getAuth(app);
     const db = getFirestore(app);
@@ -274,6 +286,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       allowedPersonKeys: [],
       familyId: finalFamilyId,
       inviteCode: isIndividual ? uid.slice(0, 8).toUpperCase() : '',
+      termsVersion: TERMS_VERSION,
+      privacyVersion: PRIVACY_VERSION,
+      acceptedAt: FieldValue.serverTimestamp(),
       createdAt: new Date().toISOString(),
     };
 
@@ -285,6 +300,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
 
     await db.collection('users').doc(uid).set(record);
+
+    await db
+      .collection('consentLogs')
+      .doc(`${uid}_${TERMS_VERSION}`)
+      .set({
+        uid,
+        termsVersion: TERMS_VERSION,
+        privacyVersion: PRIVACY_VERSION,
+        acceptedAt: FieldValue.serverTimestamp(),
+        origem: 'signup',
+      });
 
     // Cria os atalhos em user_lookup SOMENTE se ainda não existirem (.create()),
     // ignorando conflito caso o username já pertença a alguém de outra família.

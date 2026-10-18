@@ -6,7 +6,7 @@ import { formatCurrency, maskCurrency, normalize } from '../utils/format';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { useUIStore } from '../stores/useUIStore';
 import { CustomSelect } from '../components/CustomSelect';
-import { MoneyField, Tooltip } from '../components/ui';
+import { MoneyField, Tooltip, Icon } from '../components/ui';
 import { Account, Person, User } from '../types';
 
 const emptyForm = { name: '', bank: '', balance: '', owner: '' };
@@ -110,16 +110,16 @@ export default function Accounts() {
               aria-label={privacyMode ? 'Mostrar saldos' : 'Esconder saldos'}
               className="w-10 h-10 rounded-full border border-border bg-card text-muted hover:text-ink flex items-center justify-center transition-colors shadow-xs"
             >
-              <i className={`fa-solid ${privacyMode ? 'fa-eye-slash' : 'fa-eye'} text-sm`} />
+              <Icon name={privacyMode ? 'eye-slash' : 'eye'} className="text-sm" />
             </button>
           </Tooltip>
 
           {canEdit && (
             <button
               onClick={openNewAccount}
-              className="px-4 py-2.5 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+              className="px-4 py-2.5 rounded-full bg-fab text-fabIcon font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
             >
-              <i className="fa-solid fa-plus text-xs" /> Nova conta
+              <Icon name="plus" className="text-xs" /> Nova conta
             </button>
           )}
         </div>
@@ -131,7 +131,7 @@ export default function Accounts() {
           onClick={() => setTab('contas')}
           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
             tab === 'contas'
-              ? 'bg-pri text-white shadow-xs'
+              ? 'bg-fab text-fabIcon shadow-xs'
               : 'text-muted hover:text-ink'
           }`}
         >
@@ -141,7 +141,7 @@ export default function Accounts() {
           onClick={() => setTab('pessoas')}
           className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
             tab === 'pessoas'
-              ? 'bg-pri text-white shadow-xs'
+              ? 'bg-fab text-fabIcon shadow-xs'
               : 'text-muted hover:text-ink'
           }`}
         >
@@ -153,14 +153,14 @@ export default function Accounts() {
       {tab === 'contas' && (
         <>
           {/* CARTÃO VERDE HERO COM TOTAL */}
-          <div className="bg-pri text-white rounded-3xl p-6 sm:p-8 mb-8 shadow-sm flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div className="bg-gradient-to-br from-heroStart to-heroEnd text-heroInk rounded-3xl p-6 sm:p-8 mb-8 shadow-sm flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <span className="text-xs sm:text-sm text-white/80 font-medium block mb-1">Total em contas</span>
+              <span className="text-xs sm:text-sm text-heroMuted font-medium block mb-1">Total em contas</span>
               <strong className="text-3xl sm:text-5xl font-bold font-heading tracking-tight block">
                 {privacyMode ? '••••••' : formatCurrency(totalBalance)}
               </strong>
             </div>
-            <span className="text-xs sm:text-sm text-white/80 font-medium">
+            <span className="text-xs sm:text-sm text-heroMuted font-medium">
               {visible.length} {visible.length === 1 ? 'conta ativa' : 'contas ativas'}
             </span>
           </div>
@@ -193,7 +193,7 @@ export default function Accounts() {
                           aria-label="Editar conta"
                           className="w-8 h-8 rounded-lg hover:text-ink hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-pen text-xs" />
+                          <Icon name="pen" className="text-xs" />
                         </button>
                         <button
                           onClick={() => setDeleteAccountId(acc.id)}
@@ -201,7 +201,7 @@ export default function Accounts() {
                           aria-label="Excluir conta"
                           className="w-8 h-8 rounded-lg hover:text-spendText hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-trash text-xs" />
+                          <Icon name="trash" className="text-xs" />
                         </button>
                       </div>
                     )}
@@ -236,7 +236,7 @@ export default function Accounts() {
                   onClick={openNewPerson}
                   className="px-3.5 py-1.5 rounded-full border border-border text-ink hover:bg-border/20 text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0"
                 >
-                  <i className="fa-solid fa-plus text-[10px]" /> Nova pessoa
+                  <Icon name="plus" className="text-[10px]" /> Nova pessoa
                 </button>
               )}
             </div>
@@ -263,7 +263,7 @@ export default function Accounts() {
                           aria-label="Editar pessoa"
                           className="w-8 h-8 rounded-lg hover:text-ink hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-pen text-xs" />
+                          <Icon name="pen" className="text-xs" />
                         </button>
                         <button
                           onClick={() => setDeletePersonId(p.id!)}
@@ -271,7 +271,7 @@ export default function Accounts() {
                           aria-label="Excluir pessoa"
                           className="w-8 h-8 rounded-lg hover:text-spendText hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-trash text-xs" />
+                          <Icon name="trash" className="text-xs" />
                         </button>
                       </div>
                     )}
@@ -297,9 +297,9 @@ export default function Accounts() {
             {canEdit && (
               <button
                 onClick={openNewPerson}
-                className="px-4 py-2 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 shrink-0"
+                className="px-4 py-2 rounded-full bg-fab text-fabIcon font-medium text-sm shadow-sm hover:opacity-95 transition-all flex items-center gap-1.5 shrink-0"
               >
-                <i className="fa-solid fa-plus text-xs" /> Nova pessoa
+                <Icon name="plus" className="text-xs" /> Nova pessoa
               </button>
             )}
           </div>
@@ -329,7 +329,7 @@ export default function Accounts() {
                           aria-label="Editar pessoa"
                           className="w-8 h-8 rounded-lg hover:text-ink hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-pen text-xs" />
+                          <Icon name="pen" className="text-xs" />
                         </button>
                         <button
                           onClick={() => setDeletePersonId(p.id!)}
@@ -337,7 +337,7 @@ export default function Accounts() {
                           aria-label="Excluir pessoa"
                           className="w-8 h-8 rounded-lg hover:text-spendText hover:bg-border/30 flex items-center justify-center transition-colors"
                         >
-                          <i className="fa-solid fa-trash text-xs" />
+                          <Icon name="trash" className="text-xs" />
                         </button>
                       </div>
                     )}
@@ -415,7 +415,7 @@ export default function Accounts() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-pri text-white font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
+                  className="flex-1 bg-fab text-fabIcon font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
                 >
                   Salvar
                 </button>
@@ -456,7 +456,7 @@ export default function Accounts() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-pri text-white font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
+                  className="flex-1 bg-fab text-fabIcon font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
                 >
                   Salvar
                 </button>

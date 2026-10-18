@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate } from '../utils/format';
 import { Transaction, User } from '../types';
+import { Icon } from './ui/Icon';
 
 interface GlobalSearchProps {
   isOpen: boolean;
@@ -51,7 +52,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-          <i className="fa-solid fa-magnifying-glass text-[#8fa39a]" />
+          <Icon name="magnifying-glass" className="text-[#8fa39a]" />
           <input
             ref={inputRef}
             value={query}
@@ -60,7 +61,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
             className="flex-1 bg-transparent outline-none text-white placeholder:text-[#5c6b66]"
           />
           <button onClick={onClose} className="text-[#8fa39a] hover:text-white">
-            <i className="fa-solid fa-xmark" />
+            <Icon name="xmark" />
           </button>
         </div>
 

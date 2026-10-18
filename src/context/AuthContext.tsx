@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import { normalize } from '../utils/format';
@@ -10,7 +10,9 @@ interface AuthContextType {
   session: User | null;
   loading: boolean;
   login: (identifier: string, pass: string) => Promise<FirebaseUser>;
+  loginWithGoogle: () => Promise<FirebaseUser>;
   logout: () => Promise<void>;
+  refreshSession: () => Promise<void>;
   hasPermission: (module: string, action?: string) => boolean;
   canAccessPerson: (personName?: string | null, tx?: any) => boolean;
   canAccessTransaction: (tx: any) => boolean;
@@ -78,6 +80,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           superAdmin: userData.superAdmin === true,
           photo: typeof userData.photo === 'string' ? userData.photo : undefined,
           inviteCode: typeof userData.inviteCode === 'string' ? userData.inviteCode : undefined,
+          termsVersion: typeof userData.termsVersion === 'string' ? userData.termsVersion : undefined,
+          privacyVersion: typeof userData.privacyVersion === 'string' ? userData.privacyVersion : undefined,
+          acceptedAt: userData.acceptedAt || undefined,
         };
         // Propriedades dinâmicas de permissões que não ficam no User base:
         (newSession as any).permissions = resolvePermissions(newSession.role, userData.permissions);
@@ -145,10 +150,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return cred.user;
   }, [syncSessionFromFirestore]);
 
+  const loginWithGoogle = useCallback(async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const cred = await signInWithPopup(auth, provider);
+    const status = await syncSessionFromFirestore(cred.user.uid, cred.user.email);
+    if (status === 'pendente') throw { code: 'auth/account-pending' };
+    if (status === 'inativo') throw { code: 'auth/account-blocked' };
+    if (status === 'missing') throw { code: 'auth/user-not-found' };
+    return cred.user;
+  }, [syncSessionFromFirestore]);
+
   const logout = useCallback(async () => {
     await signOut(auth);
     setSession(null);
   }, []);
+
+  const refreshSession = useCallback(async () => {
+    const current = auth.currentUser;
+    if (!current) return;
+    await syncSessionFromFirestore(current.uid, current.email);
+  }, [syncSessionFromFirestore]);
 
   const hasPermission = useCallback((module: string, action = 'view') => {
     if (!session) return false;
@@ -221,7 +243,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
     session,
     loading,
     login,
+    loginWithGoogle,
     logout,
+    refreshSession,
     hasPermission,
     canAccessPerson,
     canAccessTransaction,

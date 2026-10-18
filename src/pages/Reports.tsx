@@ -15,6 +15,7 @@ import { auth } from '../firebase';
 import { Select } from '../components/ui/Select';
 import { MoneyField } from '../components/ui/MoneyField';
 import { NumberField } from '../components/ui/NumberField';
+import { PageContainer } from '../components/ui/PageContainer';
 
 const MONTH_NAMES = [
   'janeiro',
@@ -472,7 +473,7 @@ export function Reports() {
     circleCircumference - (summary.ringProgress / 100) * circleCircumference;
 
   return (
-    <div className="space-y-5 pb-8">
+    <PageContainer className="space-y-5">
       {/* Header Filters & Export Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <div className="flex items-center gap-2">
@@ -830,7 +831,7 @@ export function Reports() {
           </div>
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import * as Accordion from '@radix-ui/react-accordion';
 import * as Dialog from '@radix-ui/react-dialog';
 import {
@@ -8,6 +9,11 @@ import {
   isAppDownloadAvailable,
 } from '../config/app';
 import { normalize } from '../utils/format';
+import { PageContainer } from '../components/ui/PageContainer';
+import { TERMS_MARKDOWN } from '../legal/terms';
+import { PRIVACY_MARKDOWN } from '../legal/privacy';
+import { TERMS_VERSION, PRIVACY_VERSION } from '../legal/versions';
+import { LegalMarkdown } from '../components/LegalMarkdown';
 
 interface TopicItem {
   id: string;
@@ -161,7 +167,8 @@ export function Help() {
   const showApkCard = isAppDownloadAvailable();
 
   return (
-    <div className="max-w-4xl mx-auto space-y-5 pb-8">
+    <PageContainer>
+      <div className="max-w-4xl mx-auto space-y-5">
       {/* Search Bar */}
       <div className="relative">
         <svg
@@ -382,65 +389,35 @@ export function Help() {
 
             {infoModal === 'termos' && (
               <div className="space-y-3 text-xs text-muted leading-relaxed">
-                <p className="font-semibold text-ink">
-                  Atualizados em 1 de outubro de 2026
-                </p>
-                <div>
-                  <div className="font-bold text-ink">1. O que é o Wynd</div>
-                  <p>
-                    Um app para você organizar suas finanças pessoais: contas, cartões, metas e gastos.
-                  </p>
+                <div className="flex items-center justify-between gap-2 pb-1 border-b border-border">
+                  <span className="font-semibold text-ink">
+                    Versão {TERMS_VERSION}
+                  </span>
+                  <Link
+                    to="/termos"
+                    className="font-bold text-priInk hover:underline"
+                  >
+                    Abrir página completa
+                  </Link>
                 </div>
-                <div>
-                  <div className="font-bold text-ink">2. Sua conta</div>
-                  <p>
-                    Você cuida da senha e das informações que lança. O Wynd não movimenta seu dinheiro: ele só registra o que você informa.
-                  </p>
-                </div>
-                <div>
-                  <div className="font-bold text-ink">3. Uso correto</div>
-                  <p>
-                    Use o app só para finanças pessoais e não tente acessar dados de outras pessoas.
-                  </p>
-                </div>
-                <div>
-                  <div className="font-bold text-ink">4. Mudanças</div>
-                  <p>
-                    Podemos atualizar estes termos. Avisamos no app antes de valerem.
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-border text-ink font-semibold">
-                  Dúvidas: {SUPPORT_EMAIL}
-                </div>
+                <LegalMarkdown markdown={TERMS_MARKDOWN} compact />
               </div>
             )}
 
             {infoModal === 'privacidade' && (
               <div className="space-y-3 text-xs text-muted leading-relaxed">
-                <p className="font-semibold text-ink">
-                  Atualizados em 1 de outubro de 2026
-                </p>
-                <div>
-                  <div className="font-bold text-ink">O que guardamos</div>
-                  <p>
-                    Seu nome, e-mail e os dados financeiros que você lança. Nada é lido do seu banco.
-                  </p>
+                <div className="flex items-center justify-between gap-2 pb-1 border-b border-border">
+                  <span className="font-semibold text-ink">
+                    Versão {PRIVACY_VERSION}
+                  </span>
+                  <Link
+                    to="/privacidade"
+                    className="font-bold text-priInk hover:underline"
+                  >
+                    Abrir página completa
+                  </Link>
                 </div>
-                <div>
-                  <div className="font-bold text-ink">Para que usamos</div>
-                  <p>
-                    Só para o app funcionar e mostrar seus resumos. Não vendemos seus dados.
-                  </p>
-                </div>
-                <div>
-                  <div className="font-bold text-ink">Seus direitos</div>
-                  <p>
-                    Você pode ver, exportar, corrigir e excluir seus dados quando quiser, como prevê a LGPD.
-                  </p>
-                </div>
-                <div className="pt-2 border-t border-border text-ink font-semibold">
-                  Fale com a gente em Ajuda ou pelo e-mail {SUPPORT_EMAIL}.
-                </div>
+                <LegalMarkdown markdown={PRIVACY_MARKDOWN} compact />
               </div>
             )}
 
@@ -474,7 +451,8 @@ export function Help() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-    </div>
+      </div>
+    </PageContainer>
   );
 }
 

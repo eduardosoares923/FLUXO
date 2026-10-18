@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, getCardInvoiceMonth, normalize, toPersonKey
 import { toast } from '../stores/useToastStore';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { CustomSelect } from '../components/CustomSelect';
-import { MoneyField, NumberField, Tooltip } from '../components/ui';
+import { MoneyField, NumberField, Tooltip, Icon } from '../components/ui';
 import { Account, Card, Transaction, User } from '../types';
 
 const emptyForm = { name: '', limit: '', closeDay: '28', dueDay: '10', owner: '', color: '' };
@@ -52,16 +52,16 @@ function getCardDigits(card: Card) {
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
-  alimentação: 'fa-utensils', mercado: 'fa-cart-shopping', moradia: 'fa-house', transporte: 'fa-car',
-  saúde: 'fa-heart-pulse', educação: 'fa-graduation-cap', lazer: 'fa-champagne-glasses',
-  salário: 'fa-sack-dollar', investimentos: 'fa-chart-line', assinaturas: 'fa-rotate', 'roupas e acessórios': 'fa-shirt',
-  internet: 'fa-wifi', farmácia: 'fa-kit-medical', casa: 'fa-house', trabalho: 'fa-briefcase',
+  alimentação: 'utensils', mercado: 'cart-shopping', moradia: 'house', transporte: 'car',
+  saúde: 'heart-pulse', educação: 'graduation-cap', lazer: 'champagne-glasses',
+  salário: 'sack-dollar', investimentos: 'chart-line', assinaturas: 'rotate', 'roupas e acessórios': 'shirt',
+  internet: 'wifi', farmácia: 'kit-medical', casa: 'house', trabalho: 'briefcase',
 };
 
 function iconForCategory(category?: string) {
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
-  return 'fa-bag-shopping';
+  return 'bag-shopping';
 }
 
 function formatMonthLabel(monthStr: string) {
@@ -242,7 +242,7 @@ export default function Cards() {
             </h2>
             <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
               isPaid
-                ? 'bg-pri text-white'
+                ? 'bg-fab text-fabIcon'
                 : 'bg-priSoft text-pri'
             }`}>
               {isPaid ? 'Paga' : 'Em aberto'}
@@ -257,7 +257,7 @@ export default function Cards() {
               aria-label="Mês anterior"
               className="w-7 h-7 rounded-full hover:bg-border/40 flex items-center justify-center text-muted hover:text-ink transition-colors"
             >
-              <i className="fa-solid fa-chevron-left text-xs" />
+              <Icon name="chevron-left" className="text-xs" />
             </button>
             <span className="font-heading font-bold text-sm text-ink capitalize">
               {formatMonthLabel(invoiceMonth)}
@@ -268,7 +268,7 @@ export default function Cards() {
               aria-label="Próximo mês"
               className="w-7 h-7 rounded-full hover:bg-border/40 flex items-center justify-center text-muted hover:text-ink transition-colors"
             >
-              <i className="fa-solid fa-chevron-right text-xs" />
+              <Icon name="chevron-right" className="text-xs" />
             </button>
           </div>
 
@@ -281,7 +281,7 @@ export default function Cards() {
                 <div key={tx.id} className="py-2.5 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-xl bg-spendSoft/30 text-spendText flex items-center justify-center text-sm shrink-0">
-                      <i className={`fa-solid ${iconForCategory(tx.category)}`} />
+                      <Icon name={iconForCategory(tx.category)} />
                     </div>
                     <div className="min-w-0">
                       <div className="font-medium text-sm text-ink truncate">{tx.description}</div>
@@ -331,10 +331,10 @@ export default function Cards() {
             className={`w-full py-3 rounded-full font-medium text-sm transition-all shadow-xs flex items-center justify-center gap-2 ${
               isPaid
                 ? 'border border-border text-ink hover:bg-border/20'
-                : 'bg-pri text-white hover:opacity-95'
+                : 'bg-fab text-fabIcon hover:opacity-95'
             }`}
           >
-            <i className={`fa-solid ${isPaid ? 'fa-rotate-left' : 'fa-check'} text-xs`} />
+            <Icon name={isPaid ? 'rotate-left' : 'check'} className="text-xs" />
             {isPaid ? 'Reabrir fatura' : 'Marcar como paga'}
           </button>
         </div>
@@ -359,9 +359,9 @@ export default function Cards() {
         {canEdit && (
           <button
             onClick={openNewCard}
-            className="px-4 py-2.5 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+            className="px-4 py-2.5 rounded-full bg-fab text-fabIcon font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
           >
-            <i className="fa-solid fa-plus text-xs" /> Novo cartão
+            <Icon name="plus" className="text-xs" /> Novo cartão
           </button>
         )}
       </div>
@@ -397,7 +397,7 @@ export default function Cards() {
                   {card.id === bestCardTodayId && (
                     <div className="absolute -top-3 left-6 z-10">
                       <span className="bg-[#208b5e] text-white text-[11px] font-semibold px-3 py-0.5 rounded-full shadow-xs flex items-center gap-1.5">
-                        <i className="fa-solid fa-sparkles text-[10px]" /> Melhor para comprar hoje
+                        <Icon name="sparkles" className="text-[10px]" /> Melhor para comprar hoje
                       </span>
                     </div>
                   )}
@@ -439,7 +439,7 @@ export default function Cards() {
                             aria-label="Editar cartão"
                             className="w-6 h-6 rounded hover:bg-white/20 flex items-center justify-center transition-colors text-white"
                           >
-                            <i className="fa-solid fa-pen text-[10px]" />
+                            <Icon name="pen" className="text-[10px]" />
                           </button>
                           <button
                             onClick={() => setDeleteCardId(card.id!)}
@@ -447,7 +447,7 @@ export default function Cards() {
                             aria-label="Excluir cartão"
                             className="w-6 h-6 rounded hover:bg-red-500/30 flex items-center justify-center transition-colors text-white"
                           >
-                            <i className="fa-solid fa-trash text-[10px]" />
+                            <Icon name="trash" className="text-[10px]" />
                           </button>
                         </div>
                       )}
@@ -588,7 +588,7 @@ export default function Cards() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 bg-pri text-white font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
+                  className="flex-1 bg-fab text-fabIcon font-semibold py-2.5 rounded-full hover:opacity-95 transition-opacity text-sm shadow-xs"
                 >
                   Salvar
                 </button>

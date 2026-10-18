@@ -4,6 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useAuth } from '../context/AuthContext';
 import { RouteLoading } from './RouteLoading';
 import { GlobalSearch } from './GlobalSearch';
+import { TermsGate } from './TermsGate';
 import { MonthPicker, NotificationsBell, Tooltip } from './ui';
 import { APP_DOWNLOAD_URL, isAppDownloadAvailable } from '../config/app';
 import { useUIStore } from '../stores/useUIStore';
@@ -245,8 +246,20 @@ export function ProtectedRoute() {
 
 export function PublicOnlyRoute() {
   const { session, loading } = useAuth() as { session: User | null; loading: boolean };
+  const location = useLocation();
   if (loading) return <RouteLoading />;
-  return session ? <Navigate to="/" replace /> : <Outlet />;
+  if (session) {
+    const params = new URLSearchParams(location.search);
+    const rawRedirect = (params.get('redirect') || '').trim();
+    const safeRedirect =
+      rawRedirect.startsWith('/') &&
+      !rawRedirect.startsWith('//') &&
+      !rawRedirect.includes('\\')
+        ? rawRedirect
+        : '/';
+    return <Navigate to={safeRedirect} replace />;
+  }
+  return <Outlet />;
 }
 
 export function Layout() {
@@ -300,11 +313,11 @@ export function Layout() {
         className="hidden md:flex flex-col w-[248px] shrink-0 bg-nav text-white z-20 select-none"
       >
         {/* Marca W wynd no topo em degradê dourado (wordA -> wordB) */}
-        <div className="px-6 pt-6 pb-4 flex items-center gap-2.5">
-          <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/[0.06] font-display text-xl font-bold bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
+        <div className="px-6 pt-6 pb-4 flex items-baseline gap-[10px]">
+          <span className="font-display text-[26px] font-bold leading-none bg-gradient-to-br from-wordA to-wordB bg-clip-text text-transparent">
             W
           </span>
-          <span className="font-display text-2xl font-bold tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
+          <span className="font-display text-2xl font-bold leading-none tracking-tight bg-gradient-to-r from-wordA to-wordB bg-clip-text text-transparent">
             wynd
           </span>
         </div>
@@ -502,6 +515,7 @@ export function Layout() {
       </nav>
 
       <GlobalSearch isOpen={searchOpen} onClose={() => setSearchOpen(false)} />
+      <TermsGate />
 
       {/* Menu Mobile "Mais" (Dialog Radix UI) */}
       <Dialog.Root open={mobileMoreOpen} onOpenChange={setMobileMoreOpen}>

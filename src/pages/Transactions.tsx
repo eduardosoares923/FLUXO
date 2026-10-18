@@ -10,7 +10,7 @@ import { formatCurrency, formatDate, getCardInvoiceMonth, toPersonKeys, generate
 import * as Popover from '@radix-ui/react-popover';
 import { PageLoading, PageError, EmptyState } from '../components/StateFeedback';
 import { ConfirmModal } from '../components/ConfirmModal';
-import { DatePicker, MonthPicker, MoneyField, NumberField, Tooltip } from '../components/ui';
+import { DatePicker, MonthPicker, MoneyField, NumberField, Tooltip, Icon } from '../components/ui';
 import { useUIStore } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { Transaction, Account, User } from '../types';
@@ -18,17 +18,17 @@ import { useTripState, getTripCurrencySymbol, formatTripRate } from '../utils/tr
 
 
 const CATEGORY_ICONS: Record<string, string> = {
-  alimentação: 'fa-utensils', mercado: 'fa-cart-shopping', moradia: 'fa-house', transporte: 'fa-car',
-  saúde: 'fa-heart-pulse', educação: 'fa-graduation-cap', lazer: 'fa-champagne-glasses',
-  salário: 'fa-sack-dollar', investimentos: 'fa-chart-line', assinaturas: 'fa-rotate', 'roupas e acessórios': 'fa-shirt',
+  alimentação: 'utensils', mercado: 'cart-shopping', moradia: 'house', transporte: 'car',
+  saúde: 'heart-pulse', educação: 'graduation-cap', lazer: 'champagne-glasses',
+  salário: 'sack-dollar', investimentos: 'chart-line', assinaturas: 'rotate', 'roupas e acessórios': 'shirt',
 };
 
 function iconForCategory(category?: string, type?: string) {
-  if (type === 'transfer_out' || type === 'transfer_in') return 'fa-right-left';
-  if (type === 'invoice_payment') return 'fa-file-invoice-dollar';
+  if (type === 'transfer_out' || type === 'transfer_in') return 'right-left';
+  if (type === 'invoice_payment') return 'file-invoice-dollar';
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
-  return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
+  return type === 'income' ? 'arrow-down' : 'bag-shopping';
 }
 
 function addMonthsClamped(dateStr: string, months: number) {
@@ -615,9 +615,9 @@ export default function Transactions() {
           {canEdit && (
             <button
               onClick={openNew}
-              className="px-4 py-2.5 rounded-full bg-pri text-white font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
+              className="px-4 py-2.5 rounded-full bg-fab text-fabIcon font-medium text-sm shadow-sm hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5 shrink-0"
             >
-              <i className="fa-solid fa-plus text-xs" /> Nova transação
+              <Icon name="plus" className="text-xs" /> Nova transação
             </button>
           )}
         </div>
@@ -662,7 +662,7 @@ export default function Transactions() {
                 onClick={() => { setTypeFilter(tab.id); setDayFilter(null); }}
                 className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all whitespace-nowrap ${
                   active
-                    ? 'bg-pri text-white shadow-xs'
+                    ? 'bg-fab text-fabIcon shadow-xs'
                     : 'text-muted hover:text-ink'
                 }`}
               >
@@ -675,7 +675,7 @@ export default function Transactions() {
         {/* Busca e Botão de Filtros */}
         <div className="flex items-center gap-2 flex-1 md:max-w-md">
           <div className="relative flex-1">
-            <i className="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-xs" />
+            <Icon name="magnifying-glass" className=" absolute left-3.5 top-1/2 -translate-y-1/2 text-muted text-xs" />
             <input
               type="text"
               placeholder="Buscar por descrição, categoria ou tag"
@@ -688,7 +688,7 @@ export default function Transactions() {
           <Popover.Root>
             <Popover.Trigger asChild>
               <button className="px-4 py-2 rounded-full border border-border bg-card text-ink text-sm font-medium hover:bg-priSoft/20 transition-colors flex items-center gap-1.5 shrink-0">
-                <i className="fa-solid fa-sliders text-xs text-muted" />
+                <Icon name="sliders" className="text-xs text-muted" />
                 Filtros
                 {(categoryFilter !== 'all' || tagFilter !== 'all' || viewMode === 'calendar') && (
                   <span className="w-2 h-2 rounded-full bg-pri" />
@@ -723,7 +723,7 @@ export default function Transactions() {
                         viewMode === 'list' ? 'bg-card text-ink shadow-xs' : 'text-muted hover:text-ink'
                       }`}
                     >
-                      <i className="fa-solid fa-list" /> Lista
+                      <Icon name="list" /> Lista
                     </button>
                     <button
                       type="button"
@@ -732,7 +732,7 @@ export default function Transactions() {
                         viewMode === 'calendar' ? 'bg-card text-ink shadow-xs' : 'text-muted hover:text-ink'
                       }`}
                     >
-                      <i className="fa-solid fa-calendar-days" /> Calendário
+                      <Icon name="calendar-days" /> Calendário
                     </button>
                   </div>
                 </div>
@@ -766,17 +766,17 @@ export default function Transactions() {
 
       {dayFilter && (
         <div className="flex items-center gap-2 mb-4 bg-priSoft/40 text-pri px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold w-fit">
-          <i className="fa-solid fa-calendar-day" /> Filtrado por {formatDate(dayFilter)}
-          <button onClick={() => setDayFilter(null)} className="hover:opacity-75 ml-2"><i className="fa-solid fa-xmark" /></button>
+          <Icon name="calendar-day" /> Filtrado por {formatDate(dayFilter)}
+          <button onClick={() => setDayFilter(null)} className="hover:opacity-75 ml-2"><Icon name="xmark" /></button>
         </div>
       )}
 
       {viewMode === 'calendar' && (
         <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 mb-6 shadow-xs">
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><i className="fa-solid fa-chevron-left text-xs" /></button>
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><Icon name="chevron-left" className="text-xs" /></button>
             <strong className="text-ink capitalize font-heading">{calDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>
-            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><i className="fa-solid fa-chevron-right text-xs" /></button>
+            <button onClick={() => setCalDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))} className="w-9 h-9 rounded-lg bg-card border border-border hover:bg-priSoft/20 text-muted hover:text-ink flex items-center justify-center"><Icon name="chevron-right" className="text-xs" /></button>
           </div>
           <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
             {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (<div key={i} className="text-center text-[10px] font-bold text-muted uppercase">{d}</div>))}
@@ -805,10 +805,10 @@ export default function Transactions() {
           <span className="text-spendText font-bold">{selectedIds.size} selecionada(s)</span>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-card border border-border text-ink hover:bg-border/30 transition-colors font-semibold text-xs flex items-center justify-center gap-2" onClick={() => setBulkEditOpen(true)}>
-              <i className="fa-solid fa-pen" /> Editar selecionadas
+              <Icon name="pen" /> Editar selecionadas
             </button>
             <button className="w-full sm:w-auto px-4 py-2 rounded-xl bg-spendText text-white hover:opacity-90 transition-opacity font-semibold text-xs flex items-center justify-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
-              <i className="fa-solid fa-trash" /> Excluir selecionadas
+              <Icon name="trash" /> Excluir selecionadas
             </button>
           </div>
         </div>
@@ -816,7 +816,7 @@ export default function Transactions() {
 
       {/* LISTA DE TRANSAÇÕES AGRUPADA POR DIA */}
       {viewMode === 'calendar' && !dayFilter ? null : visible.length === 0 ? (
-        <EmptyState icon="fa-receipt" title={'Nenhuma transação encontrada'} description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
+        <EmptyState icon="receipt" title={'Nenhuma transação encontrada'} description="Ajuste os filtros ou registre um novo lançamento no sistema." actionLabel={canEdit ? 'Nova transação' : undefined} onAction={canEdit ? openNew : undefined} />
       ) : (
         <div className="bg-card border border-border rounded-2xl p-4 sm:p-6 shadow-xs divide-y divide-border/60">
           {groupedByDay.map((group) => (
@@ -848,14 +848,14 @@ export default function Transactions() {
                           ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400'
                           : 'bg-spendSoft/30 text-spendText'
                       }`}>
-                        <i className={`fa-solid ${iconForCategory(tx.category, tx.type)}`} />
+                        <Icon name={iconForCategory(tx.category, tx.type)} />
                       </div>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-ink text-sm sm:text-base truncate">{tx.description}</span>
                           {tx.groupId && (
                             <span className="inline-flex items-center text-[10px] text-muted font-medium">
-                              <i className="fa-solid fa-layer-group text-[9px]" />
+                              <Icon name="layer-group" className="text-[9px]" />
                             </span>
                           )}
                         </div>
@@ -905,7 +905,7 @@ export default function Transactions() {
                                   className="w-7 h-7 rounded-lg text-muted hover:text-ink hover:bg-card flex items-center justify-center transition-colors"
                                   aria-label="Duplicar"
                                 >
-                                  <i className="fa-solid fa-copy text-xs" />
+                                  <Icon name="copy" className="text-xs" />
                                 </button>
                               </Tooltip>
                             )}
@@ -914,14 +914,14 @@ export default function Transactions() {
                               className="w-7 h-7 rounded-lg text-muted hover:text-ink hover:bg-card flex items-center justify-center transition-colors"
                               aria-label="Editar"
                             >
-                              <i className="fa-solid fa-pen text-xs" />
+                              <Icon name="pen" className="text-xs" />
                             </button>
                             <button
                               onClick={() => requestDelete(tx)}
                               className="w-7 h-7 rounded-lg text-muted hover:text-spendText hover:bg-card flex items-center justify-center transition-colors"
                               aria-label="Excluir"
                             >
-                              <i className="fa-solid fa-trash text-xs" />
+                              <Icon name="trash" className="text-xs" />
                             </button>
                           </>
                         )}
@@ -947,7 +947,7 @@ export default function Transactions() {
               {errors.description && <span className="text-spendText text-xs mt-1">{(errors.description as any).message}</span>}
               {smartSuggestion && (
                 <button type="button" onClick={applySuggestion} className="mt-1 text-left text-xs bg-priSoft/40 text-pri hover:bg-priSoft/60 rounded-lg px-3 py-2 transition-colors">
-                  <i className="fa-solid fa-lightbulb mr-1.5" />
+                  <Icon name="lightbulb" className="mr-1.5" />
                   Última vez: {smartSuggestion.category || 'sem categoria'} &bull; {formatCurrency(smartSuggestion.amount)} &bull; {accountNameFor(smartSuggestion.paymentMethod)}. Usar esses dados?
                 </button>
               )}
@@ -1093,7 +1093,7 @@ export default function Transactions() {
                   </div>
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs text-muted">Marque quem participa:</span>
-                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-pri bg-priSoft/40 px-2 py-1 rounded hover:bg-priSoft/60 transition-colors"><i className="fa-solid fa-calculator" /> Dividir igual</button>
+                    <button type="button" onClick={splitEqually} className="text-xs font-bold text-pri bg-priSoft/40 px-2 py-1 rounded hover:bg-priSoft/60 transition-colors"><Icon name="calculator" /> Dividir igual</button>
                   </div>
                   <div className="flex flex-col gap-2">
                     {availablePersons.map((pName) => {
@@ -1137,7 +1137,7 @@ export default function Transactions() {
                   <div className="flex flex-wrap gap-2 mt-1">
                     {tags.map((t) => (
                       <span key={t} className="flex items-center gap-1.5 bg-priSoft/40 text-pri text-xs font-bold px-2.5 py-1 rounded-full">
-                        #{t} <button type="button" onClick={() => removeTag(t)} className="hover:opacity-75"><i className="fa-solid fa-xmark" /></button>
+                        #{t} <button type="button" onClick={() => removeTag(t)} className="hover:opacity-75"><Icon name="xmark" /></button>
                       </span>
                     ))}
                   </div>
@@ -1147,8 +1147,8 @@ export default function Transactions() {
 
             <div className="flex flex-col sm:flex-row items-center gap-3 mt-6">
               <button type="button" onClick={() => setShowForm(false)} className="w-full sm:w-auto px-6 py-3 rounded-full border border-border text-ink font-semibold hover:bg-border/20 transition-colors">Cancelar</button>
-              <button type="submit" disabled={isSubmitting} className="w-full sm:flex-1 px-6 py-3 rounded-full bg-pri text-white font-bold shadow-sm hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {isSubmitting ? <><i className="fa-solid fa-spinner fa-spin" /> Salvando...</> : <><i className="fa-solid fa-check" /> Salvar Transação</>}
+              <button type="submit" disabled={isSubmitting} className="w-full sm:flex-1 px-6 py-3 rounded-full bg-fab text-fabIcon font-bold shadow-sm hover:opacity-95 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {isSubmitting ? <><Icon name="spinner" spin /> Salvando...</> : <><Icon name="check" /> Salvar Transação</>}
               </button>
             </div>
           </form>
@@ -1174,7 +1174,7 @@ export default function Transactions() {
             </div>
             <div className="flex gap-3 mt-2">
               <button onClick={() => setBulkEditOpen(false)} className="flex-1 border border-border hover:bg-border/20 py-3 rounded-full font-bold transition-colors">Cancelar</button>
-              <button onClick={handleBulkEdit} className="flex-1 bg-pri text-white font-bold py-3 rounded-full hover:opacity-95 transition-opacity">Aplicar</button>
+              <button onClick={handleBulkEdit} className="flex-1 bg-fab text-fabIcon font-bold py-3 rounded-full hover:opacity-95 transition-opacity">Aplicar</button>
             </div>
           </div>
         </div>
@@ -1185,7 +1185,7 @@ export default function Transactions() {
       {groupDeleteTx && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in" onClick={() => setGroupDeleteTx(null)}>
           <div className="w-full max-w-md bg-card border border-border rounded-3xl p-6 shadow-2xl text-center text-ink" onClick={(e) => e.stopPropagation()}>
-            <div className="w-16 h-16 mx-auto bg-spendSoft/30 text-spendText rounded-full flex items-center justify-center text-3xl mb-4"><i className="fa-solid fa-trash" /></div>
+            <div className="w-16 h-16 mx-auto bg-spendSoft/30 text-spendText rounded-full flex items-center justify-center text-3xl mb-4"><Icon name="trash" /></div>
             <h3 className="text-xl font-bold font-heading text-ink mb-2">Excluir parcelamento</h3>
             <p className="text-sm text-muted mb-6">"{groupDeleteTx.description}" faz parte de um parcelamento. Você deseja excluir só esta parcela, ou a compra inteira?</p>
             <div className="flex flex-col gap-2">

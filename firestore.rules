@@ -163,5 +163,10 @@ service cloud.firestore {
     match /_rate_limits/{id} {
       allow read, write: if false;
     }
+
+    // --- consentLogs: registros de aceite dos Termos e Política (somente Admin SDK) ---
+    match /consentLogs/{id} {
+      allow read, write: if false;
+    }
   }
 }

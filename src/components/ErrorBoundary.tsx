@@ -1,4 +1,5 @@
 import React from 'react';
+import { Icon } from './ui/Icon';
 
 interface ErrorBoundaryProps {
   name?: string;
@@ -72,7 +73,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
           }}
         >
           <div style={{ fontSize: '3rem', color: '#ef4444', marginBottom: '1rem' }}>
-            <i className="fa-solid fa-triangle-exclamation" />
+            <Icon name="triangle-exclamation" />
           </div>
           <h2 style={{ fontSize: '1.5rem', marginBottom: '0.5rem', fontWeight: 600 }}>
             {this.props.title || 'Algo deu errado nesta seção'}
@@ -112,7 +113,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 fontWeight: 500,
               }}
             >
-              <i className="fa-solid fa-rotate-right" style={{ marginRight: '6px' }} /> Tentar novamente
+              <Icon name="rotate-right" style={{ marginRight: '6px' }} /> Tentar novamente
             </button>
             <a
               href="/"
@@ -129,7 +130,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
                 alignItems: 'center',
               }}
             >
-              <i className="fa-solid fa-house" style={{ marginRight: '6px' }} /> Ir para o Início
+              <Icon name="house" style={{ marginRight: '6px' }} /> Ir para o Início
             </a>
           </div>
         </div>

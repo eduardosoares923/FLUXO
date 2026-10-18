@@ -7,7 +7,7 @@ import { useCollection } from '../hooks/useCollection';
 import { formatCurrency, formatDate, parseTxDate, maskCurrency, getCardInvoiceMonth } from '../utils/format';
 import { useUIStore } from '../stores/useUIStore';
 import { CustomSelect } from '../components/CustomSelect';
-import { Tooltip, MonthPicker } from '../components/ui';
+import { Tooltip, MonthPicker, Icon } from '../components/ui';
 import { AndroidAppBanner } from '../components/AndroidAppBanner';
 import { Transaction, Account, Card, User } from '../types';
 
@@ -16,25 +16,25 @@ function getEffectiveAmount(tx: Transaction) {
 }
 
 const CATEGORY_ICONS: Record<string, string> = {
-  alimentação: 'fa-utensils',
-  mercado: 'fa-cart-shopping',
-  moradia: 'fa-house',
-  transporte: 'fa-car',
-  saúde: 'fa-heart-pulse',
-  educação: 'fa-graduation-cap',
-  lazer: 'fa-champagne-glasses',
-  salário: 'fa-sack-dollar',
-  investimentos: 'fa-chart-line',
-  assinaturas: 'fa-rotate',
-  'roupas e acessórios': 'fa-shirt',
+  alimentação: 'utensils',
+  mercado: 'cart-shopping',
+  moradia: 'house',
+  transporte: 'car',
+  saúde: 'heart-pulse',
+  educação: 'graduation-cap',
+  lazer: 'champagne-glasses',
+  salário: 'sack-dollar',
+  investimentos: 'chart-line',
+  assinaturas: 'rotate',
+  'roupas e acessórios': 'shirt',
 };
 
 function iconForCategory(category?: string, type?: string) {
-  if (type === 'transfer_out' || type === 'transfer_in') return 'fa-right-left';
-  if (type === 'invoice_payment') return 'fa-file-invoice-dollar';
+  if (type === 'transfer_out' || type === 'transfer_in') return 'right-left';
+  if (type === 'invoice_payment') return 'file-invoice-dollar';
   const key = (category || '').trim().toLowerCase();
   if (CATEGORY_ICONS[key]) return CATEGORY_ICONS[key];
-  return type === 'income' ? 'fa-arrow-down' : 'fa-bag-shopping';
+  return type === 'income' ? 'arrow-down' : 'bag-shopping';
 }
 
 function TargetSvg() {
@@ -363,14 +363,14 @@ export default function Dashboard() {
                   onClick={togglePrivacyMode}
                   onContextMenu={(e) => e.preventDefault()}
                   aria-label={privacyMode ? 'Mostrar valores' : 'Esconder valores'}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center text-heroMuted hover:text-white transition-colors"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center text-heroMuted hover:text-heroInk transition-colors"
                 >
                   <EyeSvg show={!privacyMode} />
                 </button>
               </Tooltip>
             </div>
 
-            <div className="font-display text-[40px] sm:text-[56px] font-bold text-white tracking-tight leading-none mb-3 break-all">
+            <div className="font-display text-[40px] sm:text-[56px] font-bold text-heroInk tracking-tight leading-none mb-3 break-all">
               {maskCurrency(periodBalance, privacyMode)}
             </div>
 
@@ -382,7 +382,7 @@ export default function Dashboard() {
             {/* Barra de gasto */}
             <div className="w-full h-2 rounded-full bg-white/20 overflow-hidden mb-6">
               <div
-                className="h-full rounded-full bg-white transition-all duration-500"
+                className="h-full rounded-full bg-heroInk transition-all duration-500"
                 style={{ width: `${Math.min(100, spentPct)}%` }}
               />
             </div>
@@ -392,13 +392,13 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/15">
             <div>
               <span className="block text-xs text-heroMuted font-medium mb-1">Receitas</span>
-              <strong className="font-display text-lg sm:text-2xl font-bold text-white">
+              <strong className="font-display text-lg sm:text-2xl font-bold text-heroInk">
                 {maskCurrency(totalIncome, privacyMode)}
               </strong>
             </div>
             <div>
               <span className="block text-xs text-heroMuted font-medium mb-1">Despesas</span>
-              <strong className="font-display text-lg sm:text-2xl font-bold text-white">
+              <strong className="font-display text-lg sm:text-2xl font-bold text-heroInk">
                 {maskCurrency(totalExpense, privacyMode)}
               </strong>
             </div>
@@ -520,7 +520,7 @@ export default function Dashboard() {
                           isInc ? 'bg-priSoft/40 text-pri' : 'bg-spendSoft/40 text-spendText'
                         }`}
                       >
-                        <i className={`fa-solid ${categoryStyles[tx.category]?.icon || iconForCategory(tx.category, tx.type)} text-sm`} />
+                        <Icon name={categoryStyles[tx.category]?.icon || iconForCategory(tx.category, tx.type)} className="text-sm" />
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-sm text-ink truncate">{tx.description}</div>
