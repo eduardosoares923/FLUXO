@@ -380,20 +380,37 @@ export function Users() {
     try {
       const allUsersSnap = await getDocs(collection(db, 'users'));
       const userByName: Record<string, { uid: string; familyId: string }> = {};
+      const updatedCounts: Record<string, number> = {};
+      const failedCols: string[] = [];
+
       let batch = writeBatch(db);
       let ops = 0;
+      let usersUpdated = 0;
 
-      allUsersSnap.docs.forEach((d) => {
+      for (const d of allUsersSnap.docs) {
         const data = d.data() as any;
         const famId = data.familyId || myFamilyId || d.id;
         if (!data.familyId) {
           batch.update(doc(db, 'users', d.id), { familyId: famId });
           ops++;
+          usersUpdated++;
+          if (ops >= 400) {
+            await batch.commit();
+            batch = writeBatch(db);
+            ops = 0;
+          }
         }
         if (data.name) userByName[normalize(data.name)] = { uid: d.id, familyId: famId };
         if (data.person) userByName[normalize(data.person)] = { uid: d.id, familyId: famId };
         if (data.username) userByName[normalize(data.username)] = { uid: d.id, familyId: famId };
-      });
+      }
+
+      if (ops > 0) {
+        await batch.commit();
+        batch = writeBatch(db);
+        ops = 0;
+      }
+      updatedCounts.users = usersUpdated;
 
       const cols = [
         'accounts',
@@ -401,6 +418,7 @@ export function Users() {
         'transactions',
         'subscriptions',
         'persons',
+        'paidInvoices',
         'paid_invoices',
         'settings',
         'goals',
@@ -408,28 +426,63 @@ export function Users() {
       ];
 
       for (const colName of cols) {
-        const snap = await getDocs(collection(db, colName));
-        for (const d of snap.docs) {
-          const data = d.data() as any;
-          if (data.familyId && data.ownerUid) continue;
-          const ownerName = normalize(data.owner || data.person || data.createdBy || '');
-          const match = userByName[ownerName];
-          const ownerUid = data.ownerUid || match?.uid || session?.id || '';
-          const familyId = data.familyId || match?.familyId || myFamilyId;
-          batch.update(doc(db, colName, d.id), { familyId, ownerUid });
-          ops++;
-          if (ops >= 400) {
-            await batch.commit();
-            batch = writeBatch(db);
-            ops = 0;
+        try {
+          const snap = await getDocs(collection(db, colName));
+          if (snap.empty) {
+            if (colName !== 'paid_invoices') {
+              updatedCounts[colName] = 0;
+            }
+            continue;
           }
+
+          let colBatch = writeBatch(db);
+          let colOps = 0;
+          let colUpdated = 0;
+
+          for (const d of snap.docs) {
+            const data = d.data() as any;
+            if (data.familyId && data.ownerUid) continue;
+            const ownerName = normalize(data.owner || data.person || data.createdBy || '');
+            const match = userByName[ownerName];
+            const ownerUid = data.ownerUid || match?.uid || session?.id || '';
+            const familyId = data.familyId || match?.familyId || myFamilyId;
+            colBatch.update(doc(db, colName, d.id), { familyId, ownerUid });
+            colOps++;
+            colUpdated++;
+            if (colOps >= 400) {
+              await colBatch.commit();
+              colBatch = writeBatch(db);
+              colOps = 0;
+            }
+          }
+
+          if (colOps > 0) {
+            await colBatch.commit();
+          }
+          updatedCounts[colName] = colUpdated;
+        } catch (colErr: any) {
+          console.error(`prepareDatabaseScope [${colName}]`, colErr);
+          failedCols.push(colName);
         }
       }
 
-      if (ops > 0) await batch.commit();
-      toast.success('Dados preparados e vinculados com sucesso.');
-    } catch {
-      toast.error('Erro ao preparar dados.');
+      const summaryEntries = Object.entries(updatedCounts);
+      const nonZeroEntries = summaryEntries.filter(([, count]) => count > 0);
+      const summaryText =
+        nonZeroEntries.length > 0
+          ? nonZeroEntries.map(([col, count]) => `${col}: ${count}`).join(', ')
+          : summaryEntries.map(([col, count]) => `${col}: ${count}`).join(', ');
+
+      if (failedCols.length > 0) {
+        toast.warning(
+          `Coleções que falharam: ${failedCols.join(', ')}. Atualizados: ${summaryText}`
+        );
+      } else {
+        toast.success(`Dados preparados com sucesso (${summaryText}).`);
+      }
+    } catch (e: any) {
+      console.error('prepareDatabaseScope', e);
+      toast.error(`Erro ao preparar dados: ${e?.code || e?.message || ''}`);
     } finally {
       setMigratingScope(false);
     }
