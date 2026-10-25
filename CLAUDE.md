@@ -43,15 +43,18 @@ Arquivos: firestore.rules, api/, src/context/AuthContext.tsx, src/pages/Login.ts
 ## Regras de todos
 - Toda query do Firestore usa scopedQuery (src/utils/scope.ts) com familyId. As regras v2 exigem e negam o resto.
 - Design: Floresta (claro), Verde calmo (escuro), Bricolage Grotesque e DM Sans. Contraste, estados vazio e erro sempre. Fonte de verdade: docs/design-wynd.md (copiado do canvas). Nunca usar cor literal: sempre o token.
-- Nunca dizer "pronto" ou "passou" sem a saída do comando como prova.
+- Pensar antes de codar: dizer as suposições e perguntar quando algo estiver pouco claro, em vez de escolher em silêncio.
+- Simplicidade primeiro: o mínimo de código que resolve, sem nada especulativo.
+- Execução guiada por meta: definir o critério de sucesso verificável antes de começar e repetir até provar que passou. Nunca dizer "pronto" ou "passou" sem a saída do comando como prova.
 - Errou duas vezes na mesma tarefa: parar e perguntar ao Eduardo.
-- Mudar só o que foi pedido.
+- Mudanças cirúrgicas: mudar só o que foi pedido e seguir o estilo que já existe no código.
 - Entregar sempre: resumo do diff e lista de arquivos tocados.
 - Para API de biblioteca (React, Firebase, Tailwind), consultar o Context7 antes de escrever o código. Nunca colocar dados de usuários, valores reais ou segredos na consulta.
 - Playwright CLI: só navegador de teste e conta de teste; nunca attach no navegador pessoal do Eduardo, nunca salvar ou mostrar cookies, localStorage ou login de conta real, e nunca testar em produção com dados reais (usar localhost).
+- Entrega: quando eu pedir para enviar uma mudança, criar uma branch com nome descritivo (nunca trabalhar direto no main), fazer o commit com mensagem curta em português e enviar só a branch com git push -u origin <branch>. Nunca enviar para main, nunca usar force. Depois me dar o link do pull request (https://github.com/eduardosoares923/FLUXO/pull/new/<branch>). Quem faz o Merge e publica sou eu.
 
 ## Publicação (só o Eduardo)
-- git push publica o site na Vercel. Nenhum agente faz push.
+- Publicar (merge no main, Vercel, firebase deploy, build final) é só do Eduardo. Os agentes podem enviar uma branch quando ele pedir, nunca o main.
 - firestore.rules é publicado pelo Eduardo no Console do Firebase. Antes, rodar `npm run test:rules`.
 - Nenhum agente roda vercel, firebase deploy ou muda variáveis de ambiente.
 
