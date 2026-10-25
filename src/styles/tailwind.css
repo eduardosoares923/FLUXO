@@ -186,6 +186,14 @@ input:-webkit-autofill:active {
   transition: background-color 9999s ease-in-out 0s;
 }
 
+/* Placeholder dos campos: o token --muted com opacidade reduzida (/50, /70) falha AA.
+   Força o token cheio (4,5:1 ou mais sobre --card nos dois temas). */
+.placeholder\:text-muted\/50::placeholder,
+.placeholder\:text-muted\/70::placeholder {
+  color: var(--muted) !important;
+  opacity: 1;
+}
+
 /* Foco visível por teclado em tudo */
 :focus-visible {
   outline: 2px solid var(--pri) !important;
