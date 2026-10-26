@@ -218,8 +218,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     // 2. PREPARAR DADOS (migração de familyId e ownerUid em documentos antigos)
     // -----------------------------------------------------------------------
     if (action === 'prepare-data') {
-      if (!isSuperAdmin && !isCallerFamilyHead) {
-        return res.status(403).json({ error: 'Apenas administradores podem preparar os dados' });
+      if (!isSuperAdmin) {
+        return res.status(403).json({ error: 'Apenas o administrador geral pode preparar os dados' });
       }
       const defaultFamilyId = callerFamilyId;
       const usersSnap = await db.collection('users').get();
