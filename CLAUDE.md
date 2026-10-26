@@ -63,14 +63,15 @@ Nunca ler, mostrar, copiar ou enviar: .env (exceto .env.example), service accoun
 
 ## Gemini (trabalho braçal)
 Chamar o Gemini pelo agy em modo headless, sem criar agente.
+- Uso automático permitido para leitura, resumo, texto e edição de código comum. As áreas sensíveis e os segredos já estão bloqueados nas regras do próprio agy; nunca tentar contornar. Commit e envio continuam só por pedido meu.
+- Depois de qualquer edição do Gemini: mostrar o git diff, rodar o build e só então seguir.
+- O Gemini erra duas vezes na mesma tarefa: parar e me perguntar (instrução mais exata, o Claude faz, ou adiar).
 - Pode: aplicar uma tela já especificada, escrever textos, resumir arquivos, revisar em leitura.
 - Flash Low para leitura e resumo. Argon High para revisão difícil enquanto durar a cota semanal, depois Flash.
 - Passar só os caminhos exatos dos arquivos da tarefa. Repomix só para leitura ampla, com lista de arquivos permitidos e nunca incluindo segredos.
 - agy headless não executa comandos. O build é rodado aqui. Nunca usar --dangerously-skip-permissions.
 - Nunca mandar ao Gemini, nem para leitura: .env, chaves, service account, keystore, dados reais de usuários.
 - O Gemini pode LER as áreas sensíveis, só para dar revisão (Argon High). Ele nunca EDITA essas áreas: quem edita é esta sessão, com o OK do Eduardo.
-- Depois que o Gemini editar: resumo do diff e `npm run build`. Se tocou dados, Firebase ou dinheiro, mostrar o diff inteiro ao Eduardo.
-- Gemini errou duas vezes: parar e perguntar ao Eduardo (instrução mais exata, o Claude faz, ou adiar).
 
 ## Outros arquivos
 - Textos legais: docs/prompt-juridico.md. Tudo é rascunho para o advogado.
