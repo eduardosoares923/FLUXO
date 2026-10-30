@@ -47,6 +47,7 @@ async function loadFirebaseAdmin() {
     appMod,
     getAuth: authMod.getAuth,
     getFirestore: firestoreMod.getFirestore,
+    FieldValue: firestoreMod.FieldValue,
   };
 }
 
@@ -168,6 +169,100 @@ async function deleteRefsInBatches(db: Firestore, refs: DocumentReference[]) {
   }
 }
 
+/** Desfaz o status 'inativo' gravado antes de apagar o login (se não havia status, remove o campo). */
+async function restoreStatus(
+  userRef: DocumentReference,
+  FieldValue: typeof import('firebase-admin/firestore').FieldValue,
+  previousStatus: unknown
+) {
+  try {
+    await userRef.set(
+      { status: previousStatus === undefined ? FieldValue.delete() : previousStatus },
+      { merge: true }
+    );
+  } catch (restoreErr: any) {
+    console.error('Exclusão de conta: não foi possível restaurar o status', describeError(restoreErr));
+  }
+}
+
+/** Apaga os documentos do usuário em todas as coleções (mantendo consentLogs intocado). */
+async function deleteUserDataCollections(
+  db: Firestore,
+  uid: string,
+  callerFamilyId: string,
+  includeFamilyDocs: boolean
+) {
+  for (const colName of USER_DATA_COLLECTIONS) {
+    const refMap = new Map<string, DocumentReference>();
+
+    const byOwner = await db
+      .collection(colName)
+      .where('ownerUid', '==', uid)
+      .get();
+    byOwner.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+
+    const byUserId = await db
+      .collection(colName)
+      .where('userId', '==', uid)
+      .get();
+    byUserId.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+
+    const byCreatedByUid = await db
+      .collection(colName)
+      .where('createdByUid', '==', uid)
+      .get();
+    byCreatedByUid.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+
+    if (includeFamilyDocs && callerFamilyId) {
+      const byFamily = await db
+        .collection(colName)
+        .where('familyId', '==', callerFamilyId)
+        .get();
+      byFamily.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
+    }
+
+    if (refMap.size > 0) {
+      await deleteRefsInBatches(db, [...refMap.values()]);
+    }
+  }
+}
+
+/** Apaga as entradas de user_lookup vinculadas ao e-mail, username ou CPF do usuário. */
+async function deleteUserLookups(db: Firestore, authEmail: string, userData: Record<string, any>) {
+  const lookupRefs = new Map<string, DocumentReference>();
+  if (authEmail) {
+    const byEmailSnap = await db
+      .collection('user_lookup')
+      .where('email', '==', authEmail)
+      .get();
+    byEmailSnap.docs.forEach((d) => lookupRefs.set(d.ref.path, d.ref));
+  }
+
+  const candidateKeys = new Set<string>();
+  if (authEmail) candidateKeys.add(normalize(authEmail));
+  if (userData.username) candidateKeys.add(normalize(userData.username));
+  if (userData.cpf) {
+    const cpfDigits = String(userData.cpf).replace(/\D/g, '');
+    if (cpfDigits.length >= 11) candidateKeys.add(cpfDigits);
+  }
+
+  for (const key of candidateKeys) {
+    if (!key) continue;
+    const snap = await db.collection('user_lookup').doc(key).get();
+    if (snap.exists) {
+      const snapEmail = String(snap.data()?.email || '').trim().toLowerCase();
+      if (!authEmail || !snapEmail || snapEmail === authEmail) {
+        lookupRefs.set(snap.ref.path, snap.ref);
+      }
+    }
+  }
+
+  if (lookupRefs.size > 0) {
+    await deleteRefsInBatches(db, [...lookupRefs.values()]);
+  }
+}
+
+
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Método não permitido' });
@@ -179,13 +274,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       return res.status(401).json({ error: 'Token de autenticação ausente' });
     }
 
-    const { appMod, getAuth, getFirestore } = await loadFirebaseAdmin();
+    const { appMod, getAuth, getFirestore, FieldValue } = await loadFirebaseAdmin();
     const app = getAdminApp(appMod);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
     const decoded = await auth.verifyIdToken(idToken);
     const uid = decoded.uid;
+
+    // Exige login recente (até 5 min) para uma ação irreversível
+    const authAgeSec = Math.floor(Date.now() / 1000) - Number(decoded.auth_time || 0);
+    if (!decoded.auth_time || authAgeSec > 5 * 60) {
+      return res.status(401).json({
+        code: 'requires-recent-login',
+        error: 'Por segurança, confirme sua senha para excluir a conta.',
+      });
+    }
 
     const ipHash = getClientIpHash(req);
     const allowed = await checkRateLimit(db, `${uid}_${ipHash}`);
@@ -198,6 +302,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     const userRef = db.collection('users').doc(uid);
     const userSnap = await userRef.get();
     const userData = userSnap.exists ? userSnap.data() || {} : {};
+
+    if (userData.superAdmin === true) {
+      return res.status(403).json({ error: 'O administrador geral não pode excluir a própria conta por aqui' });
+    }
 
     const callerFamilyId =
       typeof userData.familyId === 'string' && userData.familyId.trim()
@@ -232,43 +340,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     const includeFamilyDocs = isFamilyAdmin && !hasOtherFamilyMembers;
 
-    // 1. Apaga todos os documentos pertencentes ao usuário em todas as coleções
-    //    (mantendo consentLogs intocado)
-    for (const colName of USER_DATA_COLLECTIONS) {
-      const refMap = new Map<string, DocumentReference>();
-
-      const byOwner = await db
-        .collection(colName)
-        .where('ownerUid', '==', uid)
-        .get();
-      byOwner.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-
-      const byUserId = await db
-        .collection(colName)
-        .where('userId', '==', uid)
-        .get();
-      byUserId.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-
-      const byCreatedByUid = await db
-        .collection(colName)
-        .where('createdByUid', '==', uid)
-        .get();
-      byCreatedByUid.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-
-      if (includeFamilyDocs && callerFamilyId) {
-        const byFamily = await db
-          .collection(colName)
-          .where('familyId', '==', callerFamilyId)
-          .get();
-        byFamily.docs.forEach((d) => refMap.set(d.ref.path, d.ref));
-      }
-
-      if (refMap.size > 0) {
-        await deleteRefsInBatches(db, [...refMap.values()]);
-      }
-    }
-
-    // 2. Apaga entradas de user_lookup vinculadas ao e-mail, username ou CPF do usuário
+    // Ordem segura: bloqueia o cadastro, apaga o login e só então limpa os dados.
+    // O e-mail é lido antes de apagar o login (depois não dá mais para consultar).
     let authEmail = String(userData.email || decoded.email || '').trim().toLowerCase();
     try {
       const authRecord = await auth.getUser(uid);
@@ -279,48 +352,34 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
       if (e.code !== 'auth/user-not-found') throw e;
     }
 
-    const lookupRefs = new Map<string, DocumentReference>();
-    if (authEmail) {
-      const byEmailSnap = await db
-        .collection('user_lookup')
-        .where('email', '==', authEmail)
-        .get();
-      byEmailSnap.docs.forEach((d) => lookupRefs.set(d.ref.path, d.ref));
-    }
-
-    const candidateKeys = new Set<string>();
-    if (authEmail) candidateKeys.add(normalize(authEmail));
-    if (userData.username) candidateKeys.add(normalize(userData.username));
-    if (userData.cpf) {
-      const cpfDigits = String(userData.cpf).replace(/\D/g, '');
-      if (cpfDigits.length >= 11) candidateKeys.add(cpfDigits);
-    }
-
-    for (const key of candidateKeys) {
-      if (!key) continue;
-      const snap = await db.collection('user_lookup').doc(key).get();
-      if (snap.exists) {
-        const snapEmail = String(snap.data()?.email || '').trim().toLowerCase();
-        if (!authEmail || !snapEmail || snapEmail === authEmail) {
-          lookupRefs.set(snap.ref.path, snap.ref);
-        }
-      }
-    }
-
-    if (lookupRefs.size > 0) {
-      await deleteRefsInBatches(db, [...lookupRefs.values()]);
-    }
-
-    // 3. Apaga o documento users/{uid}
+    // 1. Marca como inativo (bloqueia o uso e dá para desfazer)
+    const previousStatus = userData.status;
     if (userSnap.exists) {
-      await userRef.delete();
+      await userRef.set({ status: 'inativo' }, { merge: true });
     }
 
-    // 4. Apaga o usuário no Firebase Authentication por último
+    // 2. Apaga o usuário no Firebase Authentication.
+    //    Se falhar, desfaz o status e não apaga mais nada.
     try {
       await auth.deleteUser(uid);
     } catch (e: any) {
-      if (e.code !== 'auth/user-not-found') throw e;
+      if (e.code !== 'auth/user-not-found') {
+        if (userSnap.exists) await restoreStatus(userRef, FieldValue, previousStatus);
+        return res.status(500).json({ error: describeError(e) });
+      }
+    }
+
+    // 3. Com o login já apagado, apaga os dados, os atalhos e, por último, users/{uid}.
+    //    Se algo falhar, users/{uid} fica 'inativo' como marca para retomar a limpeza.
+    try {
+      await deleteUserDataCollections(db, uid, callerFamilyId, includeFamilyDocs);
+      await deleteUserLookups(db, authEmail, userData);
+      if (userSnap.exists) {
+        await userRef.delete();
+      }
+    } catch (cleanupErr: any) {
+      console.error('Exclusão de conta: limpeza pendente', describeError(cleanupErr));
+      return res.status(200).json({ success: true, cleanup: 'pending' });
     }
 
     return res.status(200).json({ success: true });

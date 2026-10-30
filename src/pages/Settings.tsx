@@ -6,6 +6,12 @@ import { useUIStore, THEME_OPTIONS, ThemeMode } from '../stores/useUIStore';
 import { toast } from '../stores/useToastStore';
 import { db, auth } from '../firebase';
 import {
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  reauthenticateWithCredential,
+  reauthenticateWithPopup,
+} from 'firebase/auth';
+import {
   collection,
   getDocs,
   writeBatch,
@@ -52,6 +58,10 @@ export function Settings() {
   // Excluir minha conta
   const [deleteText, setDeleteText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const deleteProviders = (auth?.currentUser?.providerData || []).map((p) => p.providerId);
+  const deleteUsesPassword = deleteProviders.includes('password');
 
   const myUserDoc = useMemo(
     () => (allUsers || []).find((u: any) => u.id === session?.id),
@@ -353,9 +363,42 @@ export function Settings() {
       return;
     }
 
+    if (deleteUsesPassword && (!deletePassword || !fbUser.email)) return;
+
     setDeletingAccount(true);
+    setDeleteError('');
+    const password = deletePassword;
     try {
-      const idToken = await fbUser.getIdToken();
+      // Reautentica para o servidor aceitar (login recente, até 5 minutos)
+      try {
+        if (deleteUsesPassword) {
+          await reauthenticateWithCredential(
+            fbUser,
+            EmailAuthProvider.credential(fbUser.email as string, password)
+          );
+        } else {
+          await reauthenticateWithPopup(fbUser, new GoogleAuthProvider());
+        }
+      } catch (err: any) {
+        const code = err?.code as string | undefined;
+        let message = 'Não foi possível confirmar sua identidade.';
+        if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+          message = 'Senha incorreta.';
+        } else if (code === 'auth/too-many-requests') {
+          message = 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+        } else if (
+          code === 'auth/popup-closed-by-user' ||
+          code === 'auth/cancelled-popup-request'
+        ) {
+          message = 'Confirmação cancelada.';
+        }
+        setDeleteError(message);
+        toast.error(message);
+        return;
+      }
+
+      // true força renovar o token, para o auth_time ficar novo
+      const idToken = await fbUser.getIdToken(true);
       const response = await fetch('/api/delete-account', {
         method: 'POST',
         headers: {
@@ -366,7 +409,9 @@ export function Settings() {
 
       const data = await response.json().catch(() => ({}));
       if (response.status !== 200) {
-        toast.error(data?.error || 'Não foi possível excluir sua conta.');
+        const message = data?.error || 'Não foi possível excluir sua conta.';
+        setDeleteError(message);
+        toast.error(message);
         return;
       }
 
@@ -375,6 +420,7 @@ export function Settings() {
     } catch {
       toast.error('Erro ao excluir sua conta.');
     } finally {
+      setDeletePassword('');
       setDeletingAccount(false);
     }
   };
@@ -653,7 +699,9 @@ export function Settings() {
               Excluir minha conta
             </h2>
             <p className="text-xs text-muted mt-1 leading-relaxed">
-              Apaga seu usuário e seus lançamentos pessoais. Para confirmar, digite EXCLUIR abaixo.
+              {deleteUsesPassword
+                ? 'Apaga seu usuário e seus lançamentos pessoais. Para confirmar, digite EXCLUIR e sua senha abaixo.'
+                : 'Apaga seu usuário e seus lançamentos pessoais. Para confirmar, digite EXCLUIR abaixo. Vamos pedir para você entrar com o Google de novo.'}
             </p>
           </div>
 
@@ -666,10 +714,28 @@ export function Settings() {
               aria-label="Digite EXCLUIR para confirmar exclusão da conta"
               className="flex-1 min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-spend"
             />
+            {deleteUsesPassword && (
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => {
+                  setDeletePassword(e.target.value);
+                  setDeleteError('');
+                }}
+                autoComplete="current-password"
+                placeholder="Sua senha"
+                aria-label="Sua senha para confirmar exclusão da conta"
+                aria-invalid={!!deleteError}
+                aria-describedby={deleteError ? 'delete-account-error' : undefined}
+                className="flex-1 min-h-[44px] px-4 py-2.5 rounded-[18px] border border-border bg-card text-sm text-ink outline-none focus:border-spend"
+              />
+            )}
             <button
               type="button"
               disabled={
-                deletingAccount || deleteText.trim().toUpperCase() !== 'EXCLUIR'
+                deletingAccount ||
+                deleteText.trim().toUpperCase() !== 'EXCLUIR' ||
+                (deleteUsesPassword && !deletePassword)
               }
               onClick={handleDeleteMyAccount}
               className="px-4 min-h-[44px] rounded-[18px] bg-spend text-white font-bold text-xs md:text-sm hover:opacity-95 transition-opacity shrink-0 disabled:opacity-40"
@@ -677,6 +743,11 @@ export function Settings() {
               {deletingAccount ? 'Excluindo...' : 'Excluir minha conta'}
             </button>
           </div>
+          {deleteError && (
+            <p id="delete-account-error" role="alert" className="text-xs text-spendText">
+              {deleteError}
+            </p>
+          )}
         </div>
 
         {/* Links legais */}

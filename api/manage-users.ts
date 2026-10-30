@@ -34,7 +34,7 @@ async function loadFirebaseAdmin() {
     import('firebase-admin/auth'),
     import('firebase-admin/firestore'),
   ]);
-  return { appMod, getAuth: authMod.getAuth, getFirestore: firestoreMod.getFirestore };
+  return { appMod, getAuth: authMod.getAuth, getFirestore: firestoreMod.getFirestore, FieldValue: firestoreMod.FieldValue };
 }
 
 function describeError(err: any): string {
@@ -94,6 +94,15 @@ async function deleteRefsInBatches(db: Firestore, refs: DocumentReference[]) {
   }
 }
 
+/** Desfaz o status 'inativo' gravado antes de apagar o login (se não havia status, remove o campo). */
+async function restoreStatus(userRef: DocumentReference, FieldValue: typeof import('firebase-admin/firestore').FieldValue, previousStatus: unknown) {
+  try {
+    await userRef.set({ status: previousStatus === undefined ? FieldValue.delete() : previousStatus }, { merge: true });
+  } catch (restoreErr: any) {
+    console.error('Exclusão de conta: não foi possível restaurar o status', describeError(restoreErr));
+  }
+}
+
 async function deleteUserFinancialData(db: Firestore, uid: string, includeFamilyDocs: boolean) {
   for (const colName of SCOPED_COLLECTIONS) {
     const refMap = new Map<string, DocumentReference>();
@@ -150,26 +159,27 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   try {
-    const { appMod, getAuth, getFirestore } = await loadFirebaseAdmin();
+    const { appMod, getAuth, getFirestore, FieldValue } = await loadFirebaseAdmin();
     const app = getAdminApp(appMod);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // Quem chama precisa estar logado e ativo (não pode ser 'inativo' nem 'pendente')
+    // Quem chama precisa estar logado e ativo (não pode ser 'inativo' nem 'pendente').
+    // Exceção: conta 'pendente' pode excluir a PRÓPRIA conta ('inativo' é bloqueio de administrador e segue barrado).
     const idToken = getBearerToken(req);
     if (!idToken) return res.status(401).json({ error: 'Token de autenticação ausente' });
     const decoded = await auth.verifyIdToken(idToken);
+    const { action, uid, inviteCode, targetFamilyId } = req.body || {};
+    const isSelfDelete = action === 'delete' && uid === decoded.uid;
     const callerDoc = await db.collection('users').doc(decoded.uid).get();
     const callerData = callerDoc.data() || {};
-    if (!callerDoc.exists || callerData.status === 'inativo' || callerData.status === 'pendente') {
+    if (!callerDoc.exists || callerData.status === 'inativo' || (callerData.status === 'pendente' && !isSelfDelete)) {
       return res.status(403).json({ error: 'Usuário sem acesso ativo' });
     }
 
     const isSuperAdmin = callerData.superAdmin === true;
     const callerFamilyId = callerData.familyId || decoded.uid;
     const isCallerFamilyHead = callerData.role === 'admin' && callerFamilyId === decoded.uid;
-
-    const { action, uid, inviteCode, targetFamilyId } = req.body || {};
 
     // -----------------------------------------------------------------------
     // 1. LISTAR PENDENTES (superAdmin vê todos; chefe de família vê os da própria família)
@@ -533,6 +543,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     if (action === 'delete') {
       // Caso 1: exclusão da PRÓPRIA conta ("Excluir minha conta")
       if (uid === decoded.uid) {
+        const authAgeSec = Math.floor(Date.now() / 1000) - Number(decoded.auth_time || 0);
+        if (!decoded.auth_time || authAgeSec > 5 * 60) {
+          return res.status(401).json({ code: 'requires-recent-login', error: 'Por segurança, confirme sua senha para excluir a conta.' });
+        }
         if (isSuperAdmin) {
           return res.status(400).json({ error: 'O administrador geral não pode excluir a própria conta por aqui' });
         }
@@ -549,22 +563,43 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
           }
         }
 
-        await deleteUserFinancialData(db, uid, isFamilyHead);
+        // Ordem segura: bloqueia o cadastro, apaga o login e só então limpa os dados.
+        const userRef = db.collection('users').doc(uid);
+        const previousStatus = callerData.status;
 
+        // O e-mail é lido antes de apagar o login (depois não dá mais para consultar)
         let selfEmail = String(callerData.email || '');
         try {
-          const authUser = await auth.getUser(uid);
-          selfEmail = selfEmail || authUser.email || '';
-          await auth.deleteUser(uid);
+          selfEmail = selfEmail || (await auth.getUser(uid)).email || '';
         } catch (e: any) {
           if (e.code !== 'auth/user-not-found') throw e;
         }
 
-        await db.collection('users').doc(uid).delete();
+        // 1. Marca como inativo (bloqueia o uso e dá para desfazer)
+        await userRef.set({ status: 'inativo' }, { merge: true });
 
-        if (selfEmail) {
-          const lookups = await db.collection('user_lookup').where('email', '==', selfEmail.toLowerCase()).get();
-          await Promise.all(lookups.docs.map((d) => d.ref.delete()));
+        // 2. Apaga o login. Se falhar, desfaz o status e não apaga mais nada.
+        try {
+          await auth.deleteUser(uid);
+        } catch (e: any) {
+          if (e.code !== 'auth/user-not-found') {
+            await restoreStatus(userRef, FieldValue, previousStatus);
+            return res.status(500).json({ error: describeError(e) });
+          }
+        }
+
+        // 3. Com o login já apagado, apaga os dados, os atalhos e, por último, o cadastro.
+        //    Se algo falhar, users/<uid> fica 'inativo' como marca para retomar a limpeza.
+        try {
+          await deleteUserFinancialData(db, uid, isFamilyHead);
+          if (selfEmail) {
+            const lookups = await db.collection('user_lookup').where('email', '==', selfEmail.toLowerCase()).get();
+            await Promise.all(lookups.docs.map((d) => d.ref.delete()));
+          }
+          await userRef.delete();
+        } catch (cleanupErr: any) {
+          console.error('Exclusão de conta: limpeza pendente', describeError(cleanupErr));
+          return res.status(200).json({ success: true, cleanup: 'pending' });
         }
 
         return res.status(200).json({ success: true });
