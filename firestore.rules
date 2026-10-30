@@ -1,171 +1,250 @@
 rules_version = '2';
+
+// Regras do Wynd / FLUXO, versao 2: acesso por familia e por dono.
+// Cada registro financeiro tem familyId (id do administrador da familia) e ownerUid (dono).
+// - Administrador da familia (uid == familyId): le e edita tudo da propria familia.
+// - Membro: le e edita so o que e dele (ownerUid) ou foi compartilhado com ele (sharedWith, so leitura).
+// - Administrador geral (superAdmin): gerencia contas e familias, mas NAO le dinheiro de ninguem.
+// Ordem de uso: primeiro rodar "Preparar dados" no app (marca familyId/ownerUid), so depois publicar.
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
+    // ---------------------------------------------------------------- ajudantes
+    function signedIn() {
       return request.auth != null;
     }
 
-    function myUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    function profilePath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
     }
 
-    function isActiveUser() {
-      return isSignedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && !(get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('status', 'ativo') in ['inativo', 'pendente']);
+    function hasProfile() {
+      return signedIn() && exists(profilePath());
     }
 
-    function isAdmin() {
-      return isActiveUser() && myUser().role == 'admin';
+    function profile() {
+      return get(profilePath()).data;
     }
 
-    function isGerente() {
-      return isActiveUser() && myUser().role == 'gerente';
+    function active() {
+      return hasProfile() && profile().get('status', 'ativo') != 'inativo';
     }
 
-    // Qualquer pessoa com cadastro ativo no sistema (documento em /users com status != 'inativo' e != 'pendente').
-    function isMember() {
-      return isActiveUser();
+    function role() {
+      return profile().get('role', 'viewer');
     }
 
-    // Compatibilidade: continua aceitando comparação exata (owner == meu
-    // nome/username/pessoa) pra documentos antigos que ainda não foram
-    // salvos de novo e por isso não têm personKeys/ownerKey ainda.
-    function isMyPersonLegacy(personName) {
-      return isSignedIn() && (
-        personName == myUser().person ||
-        personName == myUser().name ||
-        personName == myUser().username
+    function myFamily() {
+      return profile().get('familyId', '');
+    }
+
+    function isSuperAdmin() {
+      return active() && profile().get('superAdmin', false) == true;
+    }
+
+    // Administrador da familia: o id dele e o id da familia.
+    function isFamilyAdmin() {
+      return active() && myFamily() != '' && myFamily() == request.auth.uid;
+    }
+
+    function isManager() {
+      return active() && (role() == 'admin' || role() == 'gerente');
+    }
+
+    function storedPerms() {
+      return profile().get('permissions', {});
+    }
+
+    function hasStored() {
+      return storedPerms().size() > 0;
+    }
+
+    // modulo: 'transactions', 'accounts', 'cards', 'subscriptions', 'settings'...  acao: 'view' ou 'edit'
+    function can(module, action) {
+      return active() && (
+        role() == 'admin'
+        || (hasStored() && (module in storedPerms()) && (action in storedPerms()[module]))
+        || (!hasStored() && (
+              (role() in ['usuario', 'gerente'] && module in ['transactions', 'accounts', 'cards', 'subscriptions'])
+              || (role() == 'viewer' && action == 'view')
+           ))
       );
     }
 
-    // Um gerente sem "allowedPersonKeys" definido (ou lista vazia) vê todo
-    // mundo, do mesmo jeito que a tela de Usuários trata campo em branco
-    // como "sem restrição". Com lista definida, só vê quem está nela.
-    function gerenteSemRestricao() {
-      return !('allowedPersonKeys' in myUser()) || myUser().allowedPersonKeys.size() == 0;
+    // ---------------------------------------------------------------- registros financeiros
+    // Dono do registro existente, ou o administrador da familia dele.
+    function ownsExisting() {
+      return isFamilyAdmin() || resource.data.get('ownerUid', '') == request.auth.uid;
     }
 
-    function gerentePodeVerChave(personKey) {
-      return isGerente() && (gerenteSemRestricao() || personKey in myUser().allowedPersonKeys);
+    // Quem pode LER: mesma familia e (administrador da familia, dono ou compartilhado).
+    function canReadRecord(module) {
+      return can(module, 'view')
+        && myFamily() != ''
+        && resource.data.get('familyId', '') == myFamily()
+        && (ownsExisting() || request.auth.uid in resource.data.get('sharedWith', []));
     }
 
-    function gerentePodeVerChaves(personKeys) {
-      return isGerente() && (gerenteSemRestricao() || personKeys.hasAny(myUser().allowedPersonKeys));
+    // Campos de controle bem formados.
+    function validMeta() {
+      let d = request.resource.data;
+      return d.get('familyId', '') is string
+        && d.get('ownerUid', '') is string
+        && d.get('sharedWith', []) is list
+        && d.get('sharedWith', []).size() <= 20;
     }
 
-    // --- dono por campo único (accounts/cards: ownerKey normalizado) ---
-    function donoSouEu(data) {
-      return isSignedIn() && (
-        (('ownerKey' in data) && ('personKeys' in myUser()) && data.ownerKey in myUser().personKeys) ||
-        (!('ownerKey' in data) && isMyPersonLegacy(data.owner))
-      );
+    function canCreateRecord(module) {
+      let d = request.resource.data;
+      return can(module, 'edit')
+        && myFamily() != ''
+        && d.get('familyId', '') == myFamily()
+        && validMeta()
+        && (isFamilyAdmin() || d.get('ownerUid', '') == request.auth.uid);
     }
 
-    function donoPermitidoGerente(data) {
-      return ('ownerKey' in data) ? gerentePodeVerChave(data.ownerKey) : isGerente();
+    function canUpdateRecord(module) {
+      let d = request.resource.data;
+      return can(module, 'edit')
+        && myFamily() != ''
+        && resource.data.get('familyId', '') == myFamily()
+        && d.get('familyId', '') == resource.data.get('familyId', '')
+        && validMeta()
+        && ownsExisting()
+        // Membro nao troca o dono nem quem recebe compartilhamento; so o administrador da familia.
+        && (isFamilyAdmin()
+            || (d.get('ownerUid', '') == resource.data.get('ownerUid', '')
+                && d.get('sharedWith', []) == resource.data.get('sharedWith', [])));
     }
 
-    // --- pessoa por campo com possível lista (transactions/subscriptions:
-    //     personKeys normalizado, suporta "Eduardo, Mãe") ---
-    function souUmaDasPessoas(data) {
-      return isSignedIn() && (
-        (('personKeys' in data) && ('personKeys' in myUser()) && data.personKeys.hasAny(myUser().personKeys)) ||
-        (!('personKeys' in data) && isMyPersonLegacy(data.person))
-      );
+    function canDeleteRecord(module) {
+      return can(module, 'edit')
+        && myFamily() != ''
+        && resource.data.get('familyId', '') == myFamily()
+        && ownsExisting();
     }
 
-    function pessoaPermitidaGerente(data) {
-      return ('personKeys' in data) ? gerentePodeVerChaves(data.personKeys) : isGerente();
+    match /transactions/{id} {
+      allow read: if canReadRecord('transactions');
+      allow create: if canCreateRecord('transactions');
+      allow update: if canUpdateRecord('transactions');
+      allow delete: if canDeleteRecord('transactions');
     }
 
-    // --- users: dados completos (nome, e-mail, cpf, cargo, permissões) ---
-    match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin() || isGerente());
-      allow create: if isAdmin();
-      allow update: if isAdmin() || (isSignedIn() && request.auth.uid == userId
-                      && request.resource.data.role == resource.data.role
-                      && request.resource.data.permissions == resource.data.permissions
-                      && request.resource.data.allowedPersonKeys == resource.data.allowedPersonKeys);
-      allow delete: if isAdmin();
+    match /accounts/{id} {
+      allow read: if canReadRecord('accounts');
+      allow create: if canCreateRecord('accounts');
+      allow update: if canUpdateRecord('accounts');
+      allow delete: if canDeleteRecord('accounts');
     }
 
-    // --- user_lookup: SOMENTE mapeamento identificador -> email de login ---
-    match /user_lookup/{lookupId} {
+    match /cards/{id} {
+      allow read: if canReadRecord('cards');
+      allow create: if canCreateRecord('cards');
+      allow update: if canUpdateRecord('cards');
+      allow delete: if canDeleteRecord('cards');
+    }
+
+    match /paidInvoices/{id} {
+      allow read: if canReadRecord('cards');
+      allow create: if canCreateRecord('cards');
+      allow update: if canUpdateRecord('cards');
+      allow delete: if canDeleteRecord('cards');
+    }
+
+    match /subscriptions/{id} {
+      allow read: if canReadRecord('subscriptions');
+      allow create: if canCreateRecord('subscriptions');
+      allow update: if canUpdateRecord('subscriptions');
+      allow delete: if canDeleteRecord('subscriptions');
+    }
+
+    // Lembretes de contas a pagar (mesma permissao das fixas)
+    match /reminders/{id} {
+      allow read: if canReadRecord('subscriptions');
+      allow create: if canCreateRecord('subscriptions');
+      allow update: if canUpdateRecord('subscriptions');
+      allow delete: if canDeleteRecord('subscriptions');
+    }
+
+    // Metas de poupanca (mesma permissao de contas)
+    match /goals/{id} {
+      allow read: if canReadRecord('accounts');
+      allow create: if canCreateRecord('accounts');
+      allow update: if canUpdateRecord('accounts');
+      allow delete: if canDeleteRecord('accounts');
+    }
+
+    // Acertos de contas entre pessoas (tela Pessoas do app): mesma permissao das transacoes.
+    match /settlements/{id} {
+      allow read: if canReadRecord('transactions');
+      allow create: if canCreateRecord('transactions');
+      allow update: if canUpdateRecord('transactions');
+      allow delete: if canDeleteRecord('transactions');
+    }
+
+    // Tags (nome e cor) criadas no app: mesma permissao das transacoes.
+    match /tags/{id} {
+      allow read: if canReadRecord('transactions');
+      allow create: if canCreateRecord('transactions');
+      allow update: if canUpdateRecord('transactions');
+      allow delete: if canDeleteRecord('transactions');
+    }
+
+    // Aviso de manutencao e versao minima do app (config/app). Qualquer um le; so o Console do Firebase escreve.
+    match /config/{id} {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // ---------------------------------------------------------------- cadastro de usuarios
+    function sameFamilyUser() {
+      return myFamily() != '' && resource.data.get('familyId', '') == myFamily();
+    }
+
+    // Campos que ninguem muda no proprio cadastro.
+    function selfLocked() {
+      return ['role', 'permissions', 'status', 'allowedPersons', 'familyId', 'superAdmin', 'person'];
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && (request.auth.uid == uid || isSuperAdmin() || (isManager() && sameFamilyUser()));
+      // Lista: administrador geral ve todos; administrador/gerente so a propria familia (a consulta precisa filtrar por familyId).
+      allow list: if isSuperAdmin() || (isManager() && sameFamilyUser());
+      allow create: if isSuperAdmin()
+        || (isFamilyAdmin() && request.resource.data.get('familyId', '') == myFamily()
+            && !('superAdmin' in request.resource.data));
+      allow delete: if request.auth.uid != uid && (isSuperAdmin() || (isFamilyAdmin() && sameFamilyUser()));
+      allow update: if isSuperAdmin()
+        || (isFamilyAdmin() && sameFamilyUser() && request.auth.uid != uid
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['superAdmin', 'familyId']))
+        || (isManager() && sameFamilyUser() && request.auth.uid != uid
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'status', 'superAdmin', 'familyId']))
+        || (signedIn() && request.auth.uid == uid
+            && !request.resource.data.diff(resource.data).affectedKeys().hasAny(selfLocked()));
+    }
+
+    // Atalhos de login (usuario, CPF, e-mail) -> e-mail. O login precisa ler ANTES de entrar (um por vez, sem listar).
+    match /user_lookup/{id} {
       allow get: if true;
       allow list: if false;
-      allow write: if isAdmin();
+      allow create, update, delete: if isManager() || isSuperAdmin();
     }
 
-    // --- accounts: leitura liberada pra quem tem cadastro (a tela filtra por dono, porque o
-    //     Firestore recusa a lista inteira quando a regra depende do dono de cada documento);
-    //     escrita continua restrita por dono (owner/ownerKey) ---
-    match /accounts/{id} {
-      allow read: if isMember();
-      allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
-      allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
-      // O saldo guardado da conta (computedBalance) é recalculado por quem lança uma transação
-      // nela, mesmo quando a conta é de outra pessoa. Por esse caminho só esse campo pode mudar.
-      allow update: if isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['computedBalance']);
-    }
-
-    // --- cards: leitura liberada pra quem tem cadastro; escrita restrita por dono ---
-    match /cards/{id} {
-      allow read: if isMember();
-      allow create: if isAdmin() || donoSouEu(request.resource.data) || donoPermitidoGerente(request.resource.data);
-      allow update, delete: if isAdmin() || donoSouEu(resource.data) || donoPermitidoGerente(resource.data);
-    }
-
-    // --- transactions: leitura liberada pra quem tem cadastro (a tela filtra por pessoa);
-    //     escrita restrita por autor (userId), pessoa(s) ou gerente autorizado ---
-    match /transactions/{id} {
-      allow read: if isMember();
-      allow create: if isAdmin() || (
-        isSignedIn() && (
-          request.resource.data.userId == request.auth.uid ||
-          souUmaDasPessoas(request.resource.data) ||
-          pessoaPermitidaGerente(request.resource.data)
-        )
-      );
-      allow update, delete: if isAdmin() ||
-                            resource.data.userId == request.auth.uid ||
-                            souUmaDasPessoas(resource.data) ||
-                            pessoaPermitidaGerente(resource.data);
-    }
-
-    // --- subscriptions: leitura liberada pra quem tem cadastro; escrita restrita por
-    //     pessoa(s) ou gerente autorizado ---
-    match /subscriptions/{id} {
-      allow read: if isMember();
-      allow create: if isAdmin() || (isSignedIn() && (souUmaDasPessoas(request.resource.data) || pessoaPermitidaGerente(request.resource.data)));
-      allow update, delete: if isAdmin() || souUmaDasPessoas(resource.data) || pessoaPermitidaGerente(resource.data);
-    }
-
-    // --- paidInvoices: controle de faturas pagas ---
-    match /paidInvoices/{id} {
-      allow read, write: if isMember();
-    }
-
-    // --- persons: catálogo de pessoas vinculadas ---
+    // ---------------------------------------------------------------- compartilhados por enquanto
+    // Nomes de pessoas e configuracoes ainda sao globais; passam a ser por familia numa etapa seguinte.
     match /persons/{id} {
-      allow read: if isMember();
-      allow write: if isAdmin() || isGerente();
+      allow read: if active();
+      allow create, update, delete: if isManager();
     }
 
-    // --- settings: configurações globais do sistema e categorias ---
     match /settings/{id} {
-      allow read: if isMember();
-      allow write: if isAdmin() || isGerente();
+      allow read: if active();
+      allow create, update, delete: if isManager() || can('settings', 'edit') || can('transactions', 'edit');
     }
 
-    // --- _rate_limits: controle interno de tentativas por IP (somente Admin SDK) ---
-    match /_rate_limits/{id} {
-      allow read, write: if false;
-    }
-
-    // --- consentLogs: registros de aceite dos Termos e Política (somente Admin SDK) ---
-    match /consentLogs/{id} {
+    // Todo o resto fica fechado.
+    match /{document=**} {
       allow read, write: if false;
     }
   }
