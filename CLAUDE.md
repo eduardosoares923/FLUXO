@@ -34,7 +34,7 @@ Arquivos: firestore.rules, api/, src/context/AuthContext.tsx, src/pages/Login.ts
 - Só a Helena (esta sessão) edita esses arquivos, e só com o OK do Eduardo. O Claude Code vai pedir permissão a cada edição: isso é proposital.
 - Depois de editar, chame henrique-auditor passando SOMENTE o diff e o objetivo em uma frase, sem a conversa. Depois, priscila-testes.
 - Escada de revisão nas áreas sensíveis (Opus só no último caso):
-  1. Argon High (Gemini, leitura apenas) lê o diff e aponta problemas, enquanto durar a cota da semana. Depois, Flash.
+  1. Gemini 4 Argon (ou o modelo que o Eduardo escolher entre Argon, Neon e Hydrogen), só leitura, lê o diff e aponta problemas. Se o modelo ficar indisponível, parar e avisar o Eduardo.
   2. Henrique (henrique-auditor, modelo sonnet) confere o que o Argon apontou e roda o checklist dele. Este passo não é opcional.
   3. Opus, só no último caso: publicar ou alterar regras do Firestore, exclusão de conta ou de dados, login, migração, ou quando o Argon e o Sonnet discordarem. Chamar o henrique-auditor com o modelo opus (parâmetro model da chamada).
 
@@ -61,17 +61,40 @@ Arquivos: firestore.rules, api/, src/context/AuthContext.tsx, src/pages/Login.ts
 ## Segredos
 Nunca ler, mostrar, copiar ou enviar: .env (exceto .env.example), service account, chaves. Há bloqueio em .claude/settings.json e um hook. Se um bloqueio disparar, não tente outro caminho: avise o Eduardo.
 
-## Gemini (trabalho braçal)
-Chamar o Gemini pelo agy em modo headless, sem criar agente.
-- Uso automático permitido para leitura, resumo, texto e edição de código comum. As áreas sensíveis e os segredos já estão bloqueados nas regras do próprio agy; nunca tentar contornar. Commit e envio continuam só por pedido meu.
-- Depois de qualquer edição do Gemini: mostrar o git diff, rodar o build e só então seguir.
-- O Gemini erra duas vezes na mesma tarefa: parar e me perguntar (instrução mais exata, o Claude faz, ou adiar).
-- Pode: aplicar uma tela já especificada, escrever textos, resumir arquivos, revisar em leitura.
-- Flash Low para leitura e resumo. Argon High para revisão difícil enquanto durar a cota semanal, depois Flash.
+## Antigravity (repasse de trabalho braçal)
+Repassar pelo agy em modo headless (`agy -p "<tarefa>"`), sem criar agente.
+- Pode: aplicar uma tela já especificada, escrever textos, resumir e revisar arquivos, criar e editar arquivos comuns, rodar build e testes.
+
+Modelos
+- Usar SOMENTE Gemini 4 Argon, Gemini 4 Neon ou Gemini 4 Hydrogen.
+- Nunca usar Gemini 3.8 Flash, Gemini 4 Carbon (indisponível), GPT-OSS 120B nem os modelos Claude.
+- Na primeira vez, rodar a MESMA tarefa pequena e segura (só leitura) nos três, todos em medium (o nível que os três têm: gemini-4-argon-medium, gemini-4-neon-medium, gemini-4-hydrogen-medium), e mostrar lado a lado ao Eduardo. Enquanto ele não escolher, começar pelo Argon.
+- Se algum dos três sumir ou ficar "Unavailable": parar e avisar o Eduardo. Não trocar por outro modelo.
+
+Acesso liberado (dentro da pasta do projeto)
+- Ler, editar, criar arquivos, rodar build e testes, sem pedir confirmação a cada passo.
+- NÃO foi testado se o agy em modo headless (`agy -p`) roda build e testes. Até testar, rodar o build e os testes aqui.
+
+Continua PROIBIDO, mesmo com o acesso liberado
+- git push e qualquer envio ao GitHub.
+- git merge, rebase, reset ou apagar branch, sem pedido do Eduardo.
+- Apagar arquivos ou pastas fora do projeto.
+- Ler ou mostrar .env, serviceAccount*.json, chaves e senhas (e os demais arquivos da seção Segredos).
+- Mexer em dados reais no Console ou na produção, e rodar scripts contra o Firebase de produção.
+- Publicar regras do Firestore.
+- Usar "Preparar dados".
+- Usar --dangerously-skip-permissions.
+
+Tarefas sensíveis
+- Regras do Firestore, login, exclusão de conta, troca de sessão e api/: o Antigravity só LÊ e PROPÕE (descreve a mudança, sem gravar). Só edita quando o Eduardo pedir de forma explícita, para aquela tarefa. O OK vale só para aquela tarefa, não como permissão geral. O que ele editar passa pela revisão do Eduardo antes de valer.
+
+Conferência
+- Tudo que voltar do Antigravity é conferido pela Helena (esta sessão) antes de valer: mostrar o git diff e rodar o build.
+- Se ele fizer mudança maior do que foi pedido, desfazer e avisar o Eduardo.
 - Passar só os caminhos exatos dos arquivos da tarefa. Repomix só para leitura ampla, com lista de arquivos permitidos e nunca incluindo segredos.
-- agy headless não executa comandos. O build é rodado aqui. Nunca usar --dangerously-skip-permissions.
-- Nunca mandar ao Gemini, nem para leitura: .env, chaves, service account, keystore, dados reais de usuários.
-- O Gemini pode LER as áreas sensíveis, só para dar revisão (Argon High). Ele nunca EDITA essas áreas: quem edita é esta sessão, com o OK do Eduardo.
+- Nunca mandar ao Antigravity, nem para leitura: .env, chaves, service account, keystore, dados reais de usuários.
+- Os bloqueios do próprio agy (arquivo ~/.gemini/antigravity-cli/settings.json) valem junto com estas regras; nunca tentar contornar.
+- Errou duas vezes na mesma tarefa: parar e perguntar ao Eduardo (instrução mais exata, o Claude faz, ou adiar). Commit e envio continuam só por pedido do Eduardo.
 
 ## Outros arquivos
 - Textos legais: docs/prompt-juridico.md. Tudo é rascunho para o advogado.
