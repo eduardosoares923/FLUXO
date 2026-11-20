@@ -25,7 +25,12 @@
       "Bash(npx vercel *)",
       "Bash(firebase deploy *)",
       "Bash(npx firebase deploy *)",
-      "Bash(agy *--dangerously-skip-permissions*)"
+      "Bash(agy *-dangerously-skip-permissions*)",
+      "Bash(agy *-model*gemini-3.8*)",
+      "Bash(agy *-model*gemini-4-carbon*)",
+      "Bash(agy *-model*gpt-oss*)",
+      "Bash(agy *-model*claude*)",
+      "Bash(agy *git push*)"
     ],
     "ask": [
       "Bash(git push *)",
