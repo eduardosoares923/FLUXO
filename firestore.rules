@@ -215,7 +215,8 @@ service cloud.firestore {
         || (isFamilyAdmin() && request.resource.data.get('familyId', '') == myFamily()
             && !('superAdmin' in request.resource.data));
       allow delete: if request.auth.uid != uid && (isSuperAdmin() || (isFamilyAdmin() && sameFamilyUser()));
-      allow update: if isSuperAdmin()
+      // O administrador geral edita OUTRAS contas. No proprio cadastro vale so o ultimo ramo (campos travados em selfLocked).
+      allow update: if (isSuperAdmin() && request.auth.uid != uid)
         || (isFamilyAdmin() && sameFamilyUser() && request.auth.uid != uid
             && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['superAdmin', 'familyId']))
         || (isManager() && sameFamilyUser() && request.auth.uid != uid

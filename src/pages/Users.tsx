@@ -254,31 +254,40 @@ export function Users() {
     setSubmitting(true);
     try {
       if (editingUser?.id) {
-        await update(editingUser.id, {
+        // Na própria conta, as regras travam role, person e status: mandar só nome, usuário e e-mail.
+        const basicos = {
           name: name.trim(),
           username: username.trim().toLowerCase(),
           email: email.trim().toLowerCase(),
-          role,
-          person,
-          status,
-        });
+        };
+        await update(
+          editingUser.id,
+          editingUser.id === session?.id ? basicos : { ...basicos, role, person, status }
+        );
 
         if (password.trim()) {
           const fbUser = auth?.currentUser;
-          if (fbUser) {
-            const idToken = await fbUser.getIdToken();
-            await fetch('/api/manage-users', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${idToken}`,
-              },
-              body: JSON.stringify({
-                action: 'updatePassword',
-                uid: editingUser.id,
-                password: password.trim(),
-              }),
-            });
+          if (!fbUser) {
+            toast.error('Os dados foram salvos, mas a sessão expirou e a senha não foi trocada. Entre novamente.');
+            return;
+          }
+          const idToken = await fbUser.getIdToken();
+          const resp = await fetch('/api/manage-users', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${idToken}`,
+            },
+            body: JSON.stringify({
+              action: 'updatePassword',
+              uid: editingUser.id,
+              password: password.trim(),
+            }),
+          });
+          if (!resp.ok) {
+            const data = await resp.json().catch(() => null);
+            toast.error(data?.error || 'Os dados foram salvos, mas não foi possível trocar a senha.');
+            return;
           }
         }
 
@@ -1025,6 +1034,7 @@ export function Users() {
                     value={role}
                     onChange={(e) => setRole(e.target.value)}
                     ariaLabel="Cargo"
+                    disabled={editingUser?.id === session?.id}
                   >
                     <option value="usuario">Membro</option>
                     <option value="gerente">Gerente</option>
@@ -1040,6 +1050,7 @@ export function Users() {
                     value={person}
                     onChange={(e) => setPerson(e.target.value)}
                     ariaLabel="Pessoa vinculada"
+                    disabled={editingUser?.id === session?.id}
                   >
                     <option value="">Nenhuma</option>
                     {persons.map((p) => (
